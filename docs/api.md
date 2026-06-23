@@ -161,21 +161,139 @@ Token 缺失或无效时返回：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/news/categories` | 获取新闻分类。 |
-| GET | `/api/news` | 获取新闻列表。 |
-| GET | `/api/news/hot` | 获取新闻热榜。 |
-| GET | `/api/news/search` | 搜索新闻。 |
-| GET | `/api/news/{news_id}` | 获取新闻详情。 |
-| POST | `/api/news/{news_id}/browse` | 记录新闻浏览。 |
+> 当前新闻数据来自 `backend/app/mock/news.py`，不连接数据库。新闻列表和新闻详情允许未登录访问；只有携带有效 Mock Token 时，新闻详情中的 `is_liked`、`is_favorited` 才可能为 `true`。点赞、收藏、评论接口将在 A3 阶段实现。
+
+### GET `/api/news/categories`
+
+获取启用的新闻分类，并按分类排序值升序返回。
+
+### GET `/api/news`
+
+获取新闻列表，支持分类、关键词和分页查询。当前只返回 `status=1` 的新闻。
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `category` | string | 否 | 新闻分类编码或分类名称，例如 `technology`、`科技`。 |
+| `keyword` | string | 否 | 关键词，可匹配标题、摘要、正文、分类和标签。 |
+| `page` | integer | 否 | 页码，默认 `1`。 |
+| `page_size` | integer | 否 | 每页数量，默认 `10`。 |
+
+响应 `data` 包含 `list`、`total`、`page`、`page_size`。
+
+### GET `/api/news/hot`
+
+获取新闻热榜。当前根据浏览量、评论数和点赞数综合排序。
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | integer | 否 | 返回数量，默认 `10`。 |
+
+每条热榜数据包含 `id`、`title`、`category_name`、`source`、`view_count`、`comment_count`、`rank`。
+
+### GET `/api/news/search`
+
+搜索新闻，复用新闻列表的关键词匹配规则。空关键词返回空分页结果。
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `keyword` | string | 是 | 搜索关键词。 |
+| `page` | integer | 否 | 页码，默认 `1`。 |
+| `page_size` | integer | 否 | 每页数量，默认 `10`。 |
+
+### GET `/api/news/{news_id}`
+
+获取新闻详情，允许未登录访问。响应 `data` 除新闻完整字段外，还包含：
+
+| 字段 | 说明 |
+| --- | --- |
+| `content` | 新闻正文。 |
+| `related_news` | 同分类相关文章，当前最多 3 条。 |
+| `recommended_news` | 推荐阅读，当前最多 5 条。 |
+| `is_liked` | 当前用户是否已点赞；无有效 Token 时为 `false`。 |
+| `is_favorited` | 当前用户是否已收藏；无有效 Token 时为 `false`。 |
+
+新闻不存在时返回：
+
+```json
+{
+  "code": 404,
+  "message": "新闻不存在",
+  "data": null
+}
+```
+
+### POST `/api/news/{news_id}/browse`
+
+记录新闻浏览行为，允许未登录调用；当前阶段使用 Mock 数据并返回成功状态。
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "news_id": 1,
+    "recorded": true
+  }
+}
+```
 
 ### 新闻互动模块 `interaction`
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/api/news/{news_id}/like` | 点赞新闻。 |
-| POST | `/api/news/{news_id}/favorite` | 收藏新闻。 |
-| GET | `/api/news/{news_id}/comments` | 获取新闻评论。 |
-| POST | `/api/news/{news_id}/comments` | 发布新闻评论。 |
+> 当前互动数据来自 `backend/app/mock/news.py` 和 `backend/app/mock/comments.py`，不连接数据库。点赞、收藏、评论操作仅做内存级 Mock 更新，服务重启后更新会丢失。未登录访问互动写操作返回 `401`；新闻或评论不存在返回 `404`。后续接入数据库时接口路径保持不变，主要替换 `service.py` 的数据来源。
+
+### POST `/api/news/{news_id}/like`
+
+点赞新闻，需要登录。
+
+### DELETE `/api/news/{news_id}/like`
+
+取消点赞新闻，需要登录。
+
+### POST `/api/news/{news_id}/favorite`
+
+收藏新闻，需要登录。
+
+### DELETE `/api/news/{news_id}/favorite`
+
+取消收藏新闻，需要登录。
+
+### GET `/api/news/{news_id}/comments`
+
+获取新闻评论，允许未登录访问。响应按一级评论和 `replies` 回复列表组成树形结构；有有效 Token 时，每条评论可返回当前用户的 `is_liked` 状态，无 Token 或无效 Token 时为 `false`。
+
+### POST `/api/news/{news_id}/comments`
+
+发布新闻一级评论，需要登录。
+
+请求示例：
+
+```json
+{
+  "content": "评论内容"
+}
+```
+
+`content` 去除首尾空格后不能为空。
+
+### POST `/api/comments/{comment_id}/reply`
+
+回复评论，需要登录。
+
+请求示例：
+
+```json
+{
+  "content": "回复内容"
+}
+```
+
+`content` 去除首尾空格后不能为空。
+
+### POST `/api/comments/{comment_id}/like`
+
+点赞评论，需要登录。
 
 ### AI 生成模块 `ai`
 
