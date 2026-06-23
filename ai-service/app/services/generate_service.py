@@ -1,14 +1,323 @@
+import re
 from app.common.exceptions import AIServiceException
-from app.mock.sample_outputs import GENERATE_OUTPUT
-from app.schemas.generate import GenerateRequest, GenerateResponse
+from app.schemas.generate import GenerateRequest, GenerateResponse, NewsElement, ConsistencyCheck
+
+
+def _split_sentences(text: str) -> list[str]:
+    """按中文句号、问号、感叹号、分号等分割句子。"""
+    sentences = re.split(r'[。！？；\n]+', text.strip())
+    return [s.strip() for s in sentences if s.strip()]
+
+
+def _extract_keywords(text: str, max_keywords: int = 5) -> list[str]:
+    """从文本中提取关键词（简单实现：提取较长的词汇）。"""
+    words = re.findall(r'[一-鿿]{2,}', text)
+    keyword_freq = {}
+    for word in words:
+        keyword_freq[word] = keyword_freq.get(word, 0) + 1
+
+    sorted_keywords = sorted(keyword_freq.items(), key=lambda x: (-x[1], -len(x[0])))
+    return [word for word, _ in sorted_keywords[:max_keywords]]
+
+
+def _generate_dynamic_titles(
+    input_text: str,
+    title_count: int,
+    title_style: str
+) -> list[str]:
+    """根据输入文本动态生成标题。"""
+    sentences = _split_sentences(input_text)
+    keywords = _extract_keywords(input_text, max_keywords=3)
+
+    if not sentences:
+        return ["新闻标题"] * title_count
+
+    first_sentence = sentences[0]
+    main_topic = keywords[0] if keywords else first_sentence[:20]
+
+    titles = []
+
+    if title_style == "客观新闻型":
+        templates = [
+            f"{main_topic}取得重要进展",
+            f"{main_topic}相关新动态曝光",
+            f"{keywords[0] if keywords else '业界'}发布{keywords[1] if len(keywords) > 1 else '最新'}消息",
+            f"我国{main_topic}发展迎来新机遇",
+            f"{main_topic}成为关注焦点",
+        ]
+    elif title_style == "吸引点击型":
+        templates = [
+            f"震撼！{main_topic}竟然这样发展",
+            f"{main_topic}突然宣布重大决策",
+            f"万万没想到，{main_topic}居然...",
+            f"{keywords[0] if keywords else '这个'}领域爆出惊人新闻",
+            f"都惊呆了！{main_topic}最新动向曝光",
+        ]
+    else:  # 简洁概括型
+        templates = [
+            f"{main_topic}新进展",
+            f"{main_topic}重大突破",
+            f"{keywords[0] if keywords else '业界'}新动向",
+            f"{main_topic}发展新阶段",
+            f"{main_topic}最新消息",
+        ]
+
+    for i in range(title_count):
+        title = templates[i % len(templates)]
+        titles.append(title)
+
+    return titles
+
+
+def _generate_summary_short(
+    input_text: str,
+    summary_style: str,
+    summary_type: str
+) -> str:
+    """生成短摘要。"""
+    sentences = _split_sentences(input_text)
+
+    if not sentences:
+        return "文本过短，无法生成摘要"
+
+    if summary_type == "extract":
+        short_summary = sentences[0]
+        if len(sentences) > 1:
+            short_summary += sentences[1]
+    else:
+        keywords = _extract_keywords(input_text, max_keywords=3)
+        first_two_sentences = "".join(sentences[:2])
+        short_summary = f"本文主要介绍了{keywords[0] if keywords else '相关'}的相关内容，重点阐述了{first_two_sentences[:30]}等核心观点。"
+
+    if summary_style == "简明扼要":
+        if len(short_summary) > 60:
+            short_summary = short_summary[:60] + "..."
+    elif summary_style == "客观正式":
+        short_summary = f"在相关领域的发展过程中，{short_summary}"
+    elif summary_style == "通俗易懂":
+        short_summary = f"简单来说，{short_summary}"
+
+    return short_summary
+
+
+def _generate_summary_long(
+    input_text: str,
+    summary_style: str,
+    summary_type: str
+) -> str:
+    """生成长摘要。"""
+    sentences = _split_sentences(input_text)
+
+    if not sentences:
+        return "文本过短，无法生成长摘要"
+
+    if summary_type == "extract":
+        long_summary = "".join(sentences[:min(4, len(sentences))])
+    else:
+        keywords = _extract_keywords(input_text, max_keywords=4)
+        key_keywords = "、".join(keywords[:3]) if keywords else "相关内容"
+        first_part = "".join(sentences[:min(3, len(sentences))])
+        long_summary = f"本文详细介绍了{key_keywords}的最新发展。{first_part}这些进展在多个方面具有重要意义，有望在后续相关领域产生深远影响。"
+
+    if summary_style == "简明扼要":
+        if len(long_summary) > 150:
+            long_summary = long_summary[:150] + "..."
+    elif summary_style == "客观正式":
+        long_summary = f"综合相关信息来看，{long_summary}"
+    elif summary_style == "通俗易懂":
+        long_summary = f"说得更通俗一点，{long_summary}"
+
+    return long_summary
+
+
+def _generate_summary_points(input_text: str, summary_type: str) -> list[str]:
+    """生成摘要要点。"""
+    sentences = _split_sentences(input_text)
+
+    if not sentences:
+        return []
+
+    points = []
+
+    if summary_type == "extract":
+        for sentence in sentences[:3]:
+            if len(sentence) > 5:
+                points.append(sentence)
+    else:
+        keywords = _extract_keywords(input_text, max_keywords=5)
+        for i, keyword in enumerate(keywords[:3]):
+            if i < len(sentences):
+                point = f"相关内容涉及{keyword}方面的重要突破"
+                points.append(point)
+            else:
+                points.append(f"{keyword}是本文重点关注的对象")
+
+    return points[:3] if points else ["文本内容已记录"]
+
+
+def _extract_news_elements(input_text: str) -> NewsElement:
+    """从文本中提取新闻六要素。"""
+    sentences = _split_sentences(input_text)
+
+    who = ""
+    what = ""
+    when = ""
+    where = ""
+    why = ""
+    how = ""
+
+    if sentences:
+        first_sentence = sentences[0]
+
+        org_patterns = ["公司", "团队", "机构", "学校", "球队", "组织", "部队", "集团"]
+        for pattern in org_patterns:
+            if pattern in first_sentence:
+                idx = first_sentence.index(pattern)
+                who = first_sentence[:idx + len(pattern)]
+                break
+
+        if not who:
+            words = re.findall(r'[一-鿿]{2,}', first_sentence)
+            if words:
+                who = words[0]
+
+        what = first_sentence
+
+        time_patterns = ["2025", "2026", "今年", "去年", "日前", "近日", "昨日", "今日"]
+        for pattern in time_patterns:
+            if pattern in input_text:
+                time_idx = input_text.index(pattern)
+                time_end = min(time_idx + 20, len(input_text))
+                when_candidate = input_text[time_idx:time_end].split("。")[0]
+                when = when_candidate
+                break
+
+        place_patterns = ["北京", "上海", "深圳", "中国", "国", "地", "区", "市", "州"]
+        for pattern in place_patterns:
+            if pattern in input_text:
+                idx = input_text.index(pattern)
+                where = input_text[max(0, idx-2):idx+len(pattern)]
+                break
+
+        keywords = _extract_keywords(input_text, max_keywords=1)
+        if keywords and len(sentences) > 1:
+            why = f"为了推进{keywords[0]}的发展"
+
+        if len(sentences) > 2:
+            how = sentences[2][:30] if len(sentences[2]) > 30 else sentences[2]
+
+    who = who or "相关主体"
+    what = what or "相关事件"
+    when = when or "近期"
+    where = where or "相关地区"
+    why = why or "事件原因仍需结合上下文进一步判断"
+    how = how or "通过相关措施或行动推进"
+
+    return NewsElement(
+        who=who[:50],
+        what=what[:100],
+        when=when[:30],
+        where=where[:30],
+        why=why[:50],
+        how=how[:50]
+    )
+
+
+def _check_consistency(input_text: str) -> ConsistencyCheck:
+    """检查文本一致性和质量。"""
+    score = 90
+    risk_level = "low"
+    issues = []
+    suggestions = []
+
+    text_length = len(input_text)
+    if text_length < 50:
+        score -= 20
+        risk_level = "medium"
+        issues.append("输入正文较短，摘要依据有限")
+        suggestions.append("建议输入更多的新闻正文内容")
+    elif text_length < 100:
+        score -= 10
+        issues.append("输入正文长度偏短")
+        suggestions.append("可补充更多内容以提高摘要准确性")
+
+    conflict_patterns = [
+        ("上涨", "下跌"),
+        ("增加", "减少"),
+        ("上升", "下降"),
+        ("利好", "利空"),
+        ("成功", "失败"),
+    ]
+
+    for pattern1, pattern2 in conflict_patterns:
+        if pattern1 in input_text and pattern2 in input_text:
+            risk_level = "medium"
+            if score > 70:
+                score = 70
+            issues.append(f"文本中同时出现'{pattern1}'和'{pattern2}'，可能存在表述冲突")
+            suggestions.append("请检查原文是否表述清晰，避免歧义")
+
+    if not any(keyword in input_text for keyword in ["。", "！", "？"]):
+        issues.append("文本缺乏标准句式")
+        suggestions.append("建议使用完整的句式结构")
+
+    score = max(0, min(100, score))
+
+    return ConsistencyCheck(
+        score=score,
+        risk_level=risk_level,
+        issues=issues if issues else ["文本结构良好"],
+        suggestions=suggestions if suggestions else ["文本质量满足生成条件"]
+    )
 
 
 def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
-    """返回固定标题摘要 Mock 数据。"""
+    """根据输入文本动态生成标题、摘要、关键词、要素和一致性检查。"""
     if not request.input_text.strip():
         raise AIServiceException(code=400, message="输入文本不能为空")
 
     if not 1 <= request.title_count <= 5:
         raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
 
-    return GenerateResponse(**GENERATE_OUTPUT)
+    input_text = request.input_text.strip()
+
+    candidate_titles = _generate_dynamic_titles(
+        input_text,
+        request.title_count,
+        request.title_style
+    )
+
+    summary_short = ""
+    summary_long = ""
+
+    if request.summary_length in ("short", "both"):
+        summary_short = _generate_summary_short(
+            input_text,
+            request.summary_style,
+            request.summary_type
+        )
+
+    if request.summary_length in ("long", "both"):
+        summary_long = _generate_summary_long(
+            input_text,
+            request.summary_style,
+            request.summary_type
+        )
+
+    summary_points = _generate_summary_points(input_text, request.summary_type)
+
+    keywords = _extract_keywords(input_text, max_keywords=5)
+
+    elements = _extract_news_elements(input_text)
+
+    consistency = _check_consistency(input_text)
+
+    return GenerateResponse(
+        candidate_titles=candidate_titles,
+        summary_short=summary_short,
+        summary_long=summary_long,
+        summary_points=summary_points,
+        keywords=keywords,
+        elements=elements,
+        consistency=consistency
+    )

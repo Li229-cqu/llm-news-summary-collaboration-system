@@ -12,8 +12,27 @@ class GenerateRequest(BaseModel):
     summary_length: Literal["short", "long", "both"] = "short"
 
 
+class NewsElement(BaseModel):
+    who: str
+    what: str
+    when: str
+    where: str
+    why: str
+    how: str
+
+
+class ConsistencyCheck(BaseModel):
+    score: int
+    risk_level: Literal["low", "medium", "high"]
+    issues: list[str]
+    suggestions: list[str]
+
+
 class GenerateResponse(BaseModel):
     candidate_titles: list[str]
     summary_short: str
     summary_long: str
     summary_points: list[str]
+    keywords: list[str]
+    elements: NewsElement
+    consistency: ConsistencyCheck
