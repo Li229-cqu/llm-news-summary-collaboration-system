@@ -1,6 +1,22 @@
 <template>
   <aside class="news-detail-side-panel">
     <el-card class="news-detail-side-panel__card" shadow="never">
+      <div class="news-detail-side-panel__timeline">
+        <div class="news-detail-side-panel__title">事件脉络</div>
+        <p class="news-detail-side-panel__desc">
+          {{ timelineTopicId ? '查看当前新闻所属话题的时间线脉络' : '当前新闻暂无事件脉络' }}
+        </p>
+        <el-button
+          :type="timelineTopicId ? 'primary' : 'info'"
+          :disabled="!timelineTopicId"
+          @click="handleViewTimeline"
+        >
+          {{ timelineTopicId ? '查看本事件脉络' : '当前新闻暂无事件脉络' }}
+        </el-button>
+      </div>
+    </el-card>
+
+    <el-card class="news-detail-side-panel__card" shadow="never">
       <div class="news-detail-side-panel__ai">
         <div class="news-detail-side-panel__title">AI 工具入口</div>
         <p class="news-detail-side-panel__desc">点击可跳转到 AI 标题和摘要生成页</p>
@@ -22,15 +38,29 @@
 import { useRouter } from 'vue-router'
 import RelatedNewsList, { type RelatedNewsItem } from './RelatedNewsList.vue'
 
-defineProps<{
+const props = defineProps<{
   relatedNews: RelatedNewsItem[]
   recommendedNews: RelatedNewsItem[]
+  timelineTopicId?: number | null
+  timelineTopicName?: string
+}>()
+
+const emit = defineEmits<{
+  (event: 'viewTimeline'): void
 }>()
 
 const router = useRouter()
 
 function goToAiGenerate() {
   router.push('/ai/title-summary')
+}
+
+function handleViewTimeline() {
+  if (!props.timelineTopicId) {
+    return
+  }
+
+  emit('viewTimeline')
 }
 </script>
 
@@ -50,7 +80,8 @@ function goToAiGenerate() {
   gap: 14px;
 }
 
-.news-detail-side-panel__ai {
+.news-detail-side-panel__ai,
+.news-detail-side-panel__timeline {
   display: grid;
   gap: 10px;
 }

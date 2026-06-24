@@ -8,6 +8,7 @@ from app.routers.check import router as check_router
 from app.routers.extract import router as extract_router
 from app.routers.generate import router as generate_router
 from app.routers.health import router as health_router
+from app.routers.timeline import router as timeline_router
 
 app = FastAPI(
     title=f"{settings.project_name} AI 服务",
@@ -36,3 +37,4 @@ app.include_router(generate_router)
 app.include_router(extract_router)
 app.include_router(check_router)
 app.include_router(chat_router)
+app.include_router(timeline_router)

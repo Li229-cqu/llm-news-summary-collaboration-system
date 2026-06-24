@@ -126,6 +126,9 @@
                 <ArrowDown v-else-if="item.trend === 'down'" />
                 <Minus v-else />
               </el-icon>
+              <el-button class="timeline-link" type="primary" link @click.stop="openTimelineForHotSearch(item)">
+                查看事件脉络
+              </el-button>
             </div>
           </div>
         </el-card>
@@ -165,6 +168,12 @@
         </el-card>
       </div>
     </div>
+
+    <TimelineDrawer
+      v-model="timelineDrawerVisible"
+      :topic-id="selectedTopicId"
+      :topic-name="selectedTopicName"
+    />
 
     <el-dialog v-model="showPostModal" title="帖子详情" width="600px">
       <div v-if="selectedPost" class="post-detail">
@@ -234,6 +243,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import {
   Star,
   StarFilled,
@@ -258,6 +269,9 @@ import {
   type CommunityPost,
   type HotSearchItem,
 } from '@/api/community'
+import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
+import { useUserStore } from '@/stores/user'
+import TimelineDrawer from '@/components/timeline/TimelineDrawer.vue'
 
 const postForm = ref({
   title: '',
@@ -266,6 +280,9 @@ const postForm = ref({
 })
 const newTag = ref('')
 const submitting = ref(false)
+const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
 
 const posts = ref<CommunityPost[]>([])
 const loadingPosts = ref(false)
@@ -275,6 +292,11 @@ const postTotal = ref(0)
 
 const hotSearchList = ref<HotSearchItem[]>([])
 const loadingHotSearch = ref(false)
+const timelineTopics = ref<TimelineTopic[]>([])
+const loadingTimelineTopics = ref(false)
+const timelineDrawerVisible = ref(false)
+const selectedTopicId = ref<number | string | null>(null)
+const selectedTopicName = ref('')
 
 const aiQuestion = ref('')
 const aiMessages = ref<{ type: 'user' | 'ai'; content: string }[]>([])
@@ -349,8 +371,56 @@ async function loadHotSearch() {
   }
 }
 
+async function loadTimelineTopics() {
+  loadingTimelineTopics.value = true
+  try {
+    timelineTopics.value = await getTimelineTopics()
+  } catch (error) {
+    timelineTopics.value = []
+    ElMessage.error(error instanceof Error ? error.message : '获取事件脉络话题失败')
+  } finally {
+    loadingTimelineTopics.value = false
+  }
+}
+
 function handleSearch(keyword: string) {
   console.log('搜索:', keyword)
+}
+
+function findTimelineTopic(keyword: string) {
+  const lowerKeyword = keyword.trim().toLowerCase()
+
+  return (
+    timelineTopics.value.find((topic) => {
+      const topicName = topic.topic_name.toLowerCase()
+      return (
+        topicName.includes(lowerKeyword) ||
+        topic.keyword_list.some((item) => item.toLowerCase().includes(lowerKeyword))
+      )
+    }) ?? timelineTopics.value[0] ?? null
+  )
+}
+
+function openTimelineForHotSearch(item: HotSearchItem) {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录后查看事件脉络')
+    router.push({
+      path: '/login',
+      query: { redirect: route.fullPath },
+    })
+    return
+  }
+
+  const topic = findTimelineTopic(item.keyword)
+
+  if (!topic) {
+    ElMessage.warning('当前暂无可查看的事件脉络')
+    return
+  }
+
+  selectedTopicId.value = topic.topic_id
+  selectedTopicName.value = topic.topic_name
+  timelineDrawerVisible.value = true
 }
 
 function getRankClass(rank: number) {
@@ -415,8 +485,13 @@ function truncateContent(content: string, maxLength: number) {
 }
 
 onMounted(() => {
+  if (!userStore.userInfo) {
+    userStore.loadFromStorage()
+  }
+
   loadPosts()
   loadHotSearch()
+  loadTimelineTopics()
 })
 </script>
 
@@ -611,6 +686,10 @@ onMounted(() => {
 .keyword {
   flex: 1;
   font-size: 14px;
+}
+
+.timeline-link {
+  flex-shrink: 0;
 }
 
 .trend {

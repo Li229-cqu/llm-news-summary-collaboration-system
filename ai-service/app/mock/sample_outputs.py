@@ -57,3 +57,19 @@ CHAT_OUTPUT = {
         "这条新闻和当前热点有什么关系？",
     ],
 }
+
+TIMELINE_OUTPUT = {
+    "topic_id": 1,
+    "topic_name": "人工智能技术发展",
+    "timeline": [
+        {
+            "event_id": 1,
+            "event_time": "2026-06-20 10:00:00",
+            "event_title": "事件节点标题",
+            "event_summary": "事件节点摘要",
+            "source_news_id": 1,
+            "source_title": "原始新闻标题",
+            "source_name": "新闻来源",
+        }
+    ],
+}

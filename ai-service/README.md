@@ -40,6 +40,7 @@ app/
 | POST | `/ai/extract-elements` | 关键词和新闻要素抽取 Mock。 |
 | POST | `/ai/check-consistency` | 一致性质量校验 Mock。 |
 | POST | `/ai/chat` | AI 新闻助手问答 Mock。 |
+| POST | `/ai/generate-timeline` | 多源事件脉络时间线 Mock。 |
 
 ## 六、运行方式
 
@@ -65,6 +66,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 3. 当前不保存生成记录。
 4. 当前只返回 Mock 数据。
 5. 真实大模型接入放到后续阶段。
+6. Timeline 接口会基于传入的 `news_items` 按发布时间排序生成事件脉络。
 
 ## 九、与 backend 的关系
 
