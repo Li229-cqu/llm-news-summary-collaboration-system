@@ -1,0 +1,52 @@
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+.app-card {
+  overflow: hidden;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-card);
+}
+
+.placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.placeholder-card__title {
+  margin: 0 0 8px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.placeholder-card__description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
