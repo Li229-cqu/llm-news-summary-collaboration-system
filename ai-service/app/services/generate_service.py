@@ -325,7 +325,8 @@ def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
         summary_points=summary_points,
         keywords=keywords,
         elements=elements,
-        consistency=consistency
+        consistency=consistency,
+        source="mock"
     )
 
 

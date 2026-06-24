@@ -36,3 +36,4 @@ class GenerateResponse(BaseModel):
     keywords: list[str]
     elements: NewsElement
     consistency: ConsistencyCheck
+    source: Literal["mock", "llm"] = "mock"

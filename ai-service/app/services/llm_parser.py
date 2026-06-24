@@ -327,6 +327,7 @@ def parse_llm_response(content: str, title_count: int, summary_length: str) -> G
             keywords=keywords,
             elements=elements,
             consistency=consistency,
+            source="llm",
         )
 
         logger.info("LLM 返回成功解析并修复")
