@@ -57,10 +57,10 @@ const hasResult = () => {
     <!-- 结果展示 -->
     <div v-else class="result-content">
       <!-- 候选标题 -->
-      <div v-if="displayResult?.candidate_titles?.length > 0" class="result-section">
+      <div v-if="(displayResult?.candidate_titles?.length ?? 0) > 0" class="result-section">
         <h4 class="section-title">📌 候选标题</h4>
         <div class="title-list">
-          <div v-for="(title, index) in displayResult.candidate_titles" :key="index" class="title-item">
+          <div v-for="(title, index) in (displayResult?.candidate_titles ?? [])" :key="index" class="title-item">
             <div class="title-text">
               <span class="title-number">{{ index + 1 }}.</span>
               <span class="title-content">{{ title }}</span>
@@ -110,10 +110,10 @@ const hasResult = () => {
       </div>
 
       <!-- 摘要要点 -->
-      <div v-if="displayResult?.summary_points?.length > 0" class="result-section">
+      <div v-if="(displayResult?.summary_points?.length ?? 0) > 0" class="result-section">
         <h4 class="section-title">🎯 摘要要点</h4>
         <ul class="points-list">
-          <li v-for="(point, index) in displayResult.summary_points" :key="index" class="point-item">
+          <li v-for="(point, index) in (displayResult?.summary_points ?? [])" :key="index" class="point-item">
             {{ point }}
           </li>
         </ul>

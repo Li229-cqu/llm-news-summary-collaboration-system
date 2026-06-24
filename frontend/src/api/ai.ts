@@ -39,7 +39,10 @@ export interface AIGenerateResponse {
 
 /** 调用 AI 生成标题和摘要。 */
 export function generateTitleSummary(data: AIGenerateRequest) {
-  return request.post<AIGenerateResponse, AIGenerateRequest>('/api/ai/generate', data)
+  return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(
+    '/api/ai/generate',
+    data,
+  )
 }
 
 export interface AIGenerateRecordItem {

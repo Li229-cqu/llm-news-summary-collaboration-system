@@ -60,7 +60,7 @@ const handleResetParams = () => {
       <label class="param-label">标题数量</label>
       <el-radio-group
         :model-value="aiDraft.params.title_count"
-        @update:model-value="(val) => handleParamChange('title_count', val)"
+        @update:model-value="(val: unknown) => handleParamChange('title_count', val)"
         class="radio-group"
       >
         <el-radio
@@ -79,7 +79,7 @@ const handleResetParams = () => {
       <label class="param-label">摘要类型</label>
       <el-radio-group
         :model-value="aiDraft.params.summary_type"
-        @update:model-value="(val) => handleParamChange('summary_type', val)"
+        @update:model-value="(val: unknown) => handleParamChange('summary_type', val)"
         class="radio-group"
       >
         <el-radio
@@ -98,7 +98,7 @@ const handleResetParams = () => {
       <label class="param-label">标题风格</label>
       <el-select
         :model-value="aiDraft.params.title_style"
-        @update:model-value="(val) => handleParamChange('title_style', val)"
+        @update:model-value="(val: unknown) => handleParamChange('title_style', val)"
         class="param-select"
       >
         <el-option
@@ -115,7 +115,7 @@ const handleResetParams = () => {
       <label class="param-label">摘要风格</label>
       <el-select
         :model-value="aiDraft.params.summary_style"
-        @update:model-value="(val) => handleParamChange('summary_style', val)"
+        @update:model-value="(val: unknown) => handleParamChange('summary_style', val)"
         class="param-select"
       >
         <el-option
@@ -132,7 +132,7 @@ const handleResetParams = () => {
       <label class="param-label">摘要长度</label>
       <el-radio-group
         :model-value="aiDraft.params.summary_length"
-        @update:model-value="(val) => handleParamChange('summary_length', val)"
+        @update:model-value="(val: unknown) => handleParamChange('summary_length', val)"
         class="radio-group"
       >
         <el-radio

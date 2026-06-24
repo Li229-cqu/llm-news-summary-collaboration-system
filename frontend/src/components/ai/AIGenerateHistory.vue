@@ -189,8 +189,8 @@ onMounted(() => {
       <div v-if="selectedRecord" class="detail-content">
         <div class="detail-header">
           <h3>{{ selectedRecord.source_title }}</h3>
-          <el-tag :type="getRiskLevelType(selectedRecord.consistency.risk_level)">
-            {{ selectedRecord.consistency.risk_level === 'low' ? '低风险' : selectedRecord.consistency.risk_level === 'medium' ? '中风险' : '高风险' }}
+          <el-tag :type="getRiskLevelType(selectedRecord.result.consistency.risk_level)">
+            {{ selectedRecord.result.consistency.risk_level === 'low' ? '低风险' : selectedRecord.result.consistency.risk_level === 'medium' ? '中风险' : '高风险' }}
           </el-tag>
         </div>
 
