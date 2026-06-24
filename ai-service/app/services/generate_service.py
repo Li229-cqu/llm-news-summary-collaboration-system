@@ -1,6 +1,14 @@
 import re
+import logging
+
 from app.common.exceptions import AIServiceException
+from app.core.config import settings
 from app.schemas.generate import GenerateRequest, GenerateResponse, NewsElement, ConsistencyCheck
+from app.services.llm_client import call_llm
+from app.services.prompt_builder import build_messages
+from app.services.llm_parser import parse_llm_response
+
+logger = logging.getLogger(__name__)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -271,14 +279,12 @@ def _check_consistency(input_text: str) -> ConsistencyCheck:
     )
 
 
-def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
-    """根据输入文本动态生成标题、摘要、关键词、要素和一致性检查。"""
-    if not request.input_text.strip():
-        raise AIServiceException(code=400, message="输入文本不能为空")
+def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
+    """
+    生成动态 mock 响应。
 
-    if not 1 <= request.title_count <= 5:
-        raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
-
+    保留所有原有的 mock 生成逻辑，作为 fallback 或 LLM_ENABLED=false 时的默认实现。
+    """
     input_text = request.input_text.strip()
 
     candidate_titles = _generate_dynamic_titles(
@@ -321,3 +327,65 @@ def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
         elements=elements,
         consistency=consistency
     )
+
+
+def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
+    """
+    生成标题和摘要的主函数。
+
+    流程：
+    1. 输入验证
+    2. 如果 LLM_ENABLED=false，直接使用 mock
+    3. 如果 LLM_ENABLED=true：
+       - 构造 prompt
+       - 调用智谱 GLM
+       - 解析返回结果
+       - 失败则 fallback 到 mock
+    4. 返回 GenerateResponse
+    """
+    # 输入验证
+    if not request.input_text.strip():
+        raise AIServiceException(code=400, message="输入文本不能为空")
+
+    if not 1 <= request.title_count <= 5:
+        raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
+
+    # 如果 LLM 未启用，直接使用 mock
+    if not settings.llm_enabled:
+        logger.info("LLM 未启用，使用动态 mock 生成响应")
+        return generate_mock_response(request)
+
+    # LLM 启用，尝试调用模型
+    logger.info(f"LLM 已启用，准备调用智谱 GLM: model={settings.llm_model}")
+
+    try:
+        # 构造消息
+        messages = build_messages(request)
+
+        # 调用 LLM
+        llm_response = call_llm(messages)
+
+        # 解析返回结果
+        response = parse_llm_response(
+            llm_response,
+            title_count=request.title_count,
+            summary_length=request.summary_length
+        )
+
+        if response is not None:
+            logger.info("智谱 GLM 调用成功，返回有效响应")
+            return response
+
+        # 解析失败，fallback
+        logger.warning("智谱 GLM 返回内容无法解析，fallback 到 mock")
+        return generate_mock_response(request)
+
+    except ValueError as e:
+        # 配置错误、API Key 未配置等
+        logger.warning(f"智谱 LLM 参数错误，fallback 到 mock: {str(e)}")
+        return generate_mock_response(request)
+
+    except Exception as e:
+        # 网络错误、API 错误、超时等
+        logger.warning(f"智谱 LLM 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
+        return generate_mock_response(request)

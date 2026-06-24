@@ -14,11 +14,19 @@ AI_SERVICE_UNAVAILABLE_MESSAGE = "AI 服务暂时不可用，请稍后重试"
 
 
 async def generate_title_summary(request: AIGenerateRequest) -> AIGenerateResponse:
-    """调用 ai-service 的固定 Mock 标题摘要接口。"""
+    """调用 ai-service 的标题摘要接口。
+
+    支持两种模式：
+    1. Mock 模式（LLM_ENABLED=false）：快速返回，<100ms
+    2. LLM 模式（LLM_ENABLED=true）：调用智谱 GLM-4-Flash，2-5 秒
+
+    因此设置 timeout 为 60 秒，确保 LLM 调用可以完成。
+    """
     endpoint = f"{settings.ai_service_url.rstrip('/')}/ai/generate-title-summary"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # timeout=60.0 秒，支持 LLM 调用（智谱通常 2-5 秒）
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(endpoint, json=request.model_dump())
             response.raise_for_status()
             result = response.json()

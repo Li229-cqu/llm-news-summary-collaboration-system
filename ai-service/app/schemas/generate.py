@@ -9,7 +9,7 @@ class GenerateRequest(BaseModel):
     summary_type: Literal["extract", "generate"] = "generate"
     summary_style: str = "简明扼要"
     title_style: str = "客观新闻型"
-    summary_length: Literal["short", "long", "both"] = "short"
+    summary_length: Literal["short", "long", "both"] = "both"
 
 
 class NewsElement(BaseModel):

@@ -19,11 +19,16 @@ class Settings(BaseModel):
     backend_url: str = os.getenv("BACKEND_URL", "http://localhost:8000")
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-    # 以下字段仅为后续大模型接入预留，当前阶段不发起真实模型调用。
-    llm_api_key: str = os.getenv("LLM_API_KEY", "your_api_key")
-    llm_api_base_url: str = os.getenv("LLM_API_BASE_URL", "https://example.com")
-    llm_model_name: str = os.getenv("LLM_MODEL_NAME", "mock-model")
-    ai_mode: str = os.getenv("AI_MODE", "mock")
+    # LLM 配置（阶段 9.1 新增，当前阶段仅配置准备，不发起真实调用）
+    llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() == "true"
+    llm_provider: str = os.getenv("LLM_PROVIDER", "zhipu")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
+    llm_model: str = os.getenv("LLM_MODEL", "glm-4-flash")
+    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "30"))
+    llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.3"))
+    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    llm_thinking_type: str = os.getenv("LLM_THINKING_TYPE", "disabled")
 
     @property
     def allowed_origins(self) -> list[str]:

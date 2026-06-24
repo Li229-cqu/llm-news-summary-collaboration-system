@@ -37,7 +37,18 @@ const handleGenerate = async () => {
     aiDraft.setResult(result)
     ElMessage.success('标题和摘要生成成功')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'AI 服务暂时不可用，请稍后重试'
+    let errorMessage = 'AI 服务暂时不可用，请稍后重试'
+
+    if (error instanceof Error) {
+      const msg = error.message || ''
+      // 特殊处理 timeout 错误
+      if (msg.includes('timeout') || msg.includes('60000ms')) {
+        errorMessage = 'AI 生成耗时较长，请稍后重试或缩短新闻正文'
+      } else {
+        errorMessage = msg
+      }
+    }
+
     aiDraft.setError(errorMessage)
     ElMessage.error(errorMessage)
   } finally {
