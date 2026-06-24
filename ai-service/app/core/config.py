@@ -18,6 +18,7 @@ class Settings(BaseModel):
     ai_service_port: int = int(os.getenv("AI_SERVICE_PORT", "8001"))
     backend_url: str = os.getenv("BACKEND_URL", "http://localhost:8000")
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    ai_mode: str = os.getenv("AI_MODE", "mock")
 
     # LLM 配置（阶段 9.1 新增，当前阶段仅配置准备，不发起真实调用）
     llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() == "true"
