@@ -50,7 +50,7 @@ export interface NewsCardItem {
   summary: string
   category_name: string
   source: string
-  author: string
+  editor: string
   publish_time: string
   view_count: number
   like_count: number

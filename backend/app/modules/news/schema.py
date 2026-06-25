@@ -31,7 +31,7 @@ class NewsItem(BaseModel):
     category_name: str = "未分类"
     topic_id: Optional[int] = None
     source: str
-    author: str
+    editor: str = ""
     publish_time: str
     view_count: int
     like_count: int

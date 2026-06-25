@@ -104,7 +104,7 @@ class ParsedNewsItem:
     category_id: int
     topic_id: int | None
     source: str
-    author: str
+    editor: str
     publish_time: str
     view_count: int
     like_count: int
@@ -520,6 +520,52 @@ def fetch_article_content(url: str, source_name: str) -> str:
     return extract_article_content(fetch_html(url, source_name), url)
 
 
+def extract_editor(html_text: str) -> str:
+    """从网页 HTML 中提取编辑信息。支持格式：【编辑:名字】或 编辑: 名字 等。"""
+    if not html_text:
+        logger.debug("editor: HTML为空，跳过编辑提取")
+        return ""
+
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+
+        # 方法1: 查找 adEditor 类的div（中国新闻网结构）
+        editor_div = soup.find("div", class_="adEditor")
+        if editor_div:
+            span = editor_div.find("span")
+            if span:
+                text = span.get_text(strip=True)
+                # 提取 【编辑:名字】 中的名字
+                if "【编辑:" in text and "】" in text:
+                    editor_name = text.split("【编辑:")[1].split("】")[0].strip()
+                    logger.info(f"editor: 从adEditor找到编辑={editor_name}")
+                    return editor_name
+
+        # 方法2: 搜索包含"编辑"关键词的文本
+        for elem in soup.find_all(["span", "div", "p"]):
+            text = elem.get_text(strip=True)
+            if "编辑" in text and ("【" in text or ":" in text or "：" in text):
+                # 尝试提取编辑名字
+                if "【编辑:" in text:
+                    try:
+                        editor_name = text.split("【编辑:")[1].split("】")[0].strip()
+                        return editor_name
+                    except IndexError:
+                        pass
+                elif "编辑:" in text or "编辑：" in text:
+                    try:
+                        sep = "编辑:" if "编辑:" in text else "编辑："
+                        editor_name = text.split(sep)[1].split("|")[0].split("】")[0].strip()
+                        if editor_name and len(editor_name) <= 20:  # 合理的名字长度
+                            return editor_name
+                    except IndexError:
+                        pass
+    except Exception:  # noqa: BLE001
+        pass
+
+    return ""
+
+
 def extract_cover_image(entry: Any, html_text: str, source_url: str) -> str:
     media_content = getattr(entry, "media_content", None) or []
     for media in media_content:
@@ -588,7 +634,7 @@ def parse_item(
     summary = truncate_text(summary_clean or title, 200)
     link = normalize_url(getattr(entry, "link", "") or "", feed_source.get("url", ""))
     html_text = fetch_html(link, feed_source["source_name"]) if link and fetch_content else ""
-    author = clean_html(getattr(entry, "author", "")).strip() or "???"
+    editor = extract_editor(html_text) or clean_html(getattr(entry, "author", "")).strip() or ""
 
     publish_time_value = (
         getattr(entry, "published", None)
@@ -611,7 +657,7 @@ def parse_item(
         category_id=category_id,
         topic_id=topic_id,
         source=feed_source["source_name"],
-        author=author,
+        editor=editor,
         publish_time=publish_time,
         view_count=0,
         like_count=0,
@@ -669,7 +715,7 @@ def insert_news(connection: pymysql.connections.Connection, item: ParsedNewsItem
         "category_id",
         "topic_id",
         "source",
-        "author",
+        "editor",
         "publish_time",
         "view_count",
         "like_count",
@@ -688,7 +734,7 @@ def insert_news(connection: pymysql.connections.Connection, item: ParsedNewsItem
         item.category_id,
         item.topic_id,
         item.source,
-        item.author,
+        item.editor,
         item.publish_time,
         item.view_count,
         item.like_count,
@@ -722,7 +768,7 @@ def update_news(
         "`category_id` = %s",
         "`topic_id` = %s",
         "`source` = %s",
-        "`author` = %s",
+        "`editor` = %s",
         "`publish_time` = %s",
         "`status` = %s",
         "`tags` = %s",
@@ -736,7 +782,7 @@ def update_news(
         item.category_id,
         item.topic_id,
         item.source,
-        item.author,
+        item.editor,
         item.publish_time,
         item.status,
         json.dumps(item.tags, ensure_ascii=False),
