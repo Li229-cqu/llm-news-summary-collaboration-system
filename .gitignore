@@ -39,7 +39,11 @@ logs/
 # Uploads
 uploads/
 
-# Database backups
-*.sql
+# Database backups (but include schema and seed files)
+backup/**/*.sql
 *.sqlite3
 backup/
+
+# Allow database schema and seed files
+!database/schema.sql
+!database/seed.sql
