@@ -72,6 +72,7 @@ export interface LikeResponse {
 export interface PostListParams {
   page?: number
   page_size?: number
+  keyword?: string
 }
 
 export interface CommentListParams {

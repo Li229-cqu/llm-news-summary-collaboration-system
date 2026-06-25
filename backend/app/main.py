@@ -11,6 +11,7 @@ from app.modules.community.router import router as community_router
 from app.modules.interaction.router import router as interaction_router
 from app.modules.news.router import router as news_router
 from app.modules.profile.router import router as profile_router
+from app.modules.timeline.router import router as timeline_router
 from app.modules.user.router import router as user_router
 
 app = FastAPI(
@@ -53,6 +54,7 @@ app.include_router(user_router)
 app.include_router(news_router)
 app.include_router(interaction_router)
 app.include_router(ai_router)
+app.include_router(timeline_router)
 app.include_router(community_router)
 app.include_router(profile_router)
 app.include_router(admin_router)

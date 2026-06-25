@@ -1,97 +1,131 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
-  User,
-  Clock,
-  Star,
-  MagicStick,
-  Grid,
-  Files,
-  PriceTag,
   ArrowRight,
+  ChatDotRound,
+  Clock,
+  Files,
+  Grid,
+  MagicStick,
+  Star,
+  User,
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import {
-  type ProfileOverview,
-  type BrowseHistoryItem,
-  type FavoriteItem,
   type AIRecordItem,
-  getProfileOverview,
-  getBrowseHistory,
-  getFavorites,
+  type BrowseHistoryItem,
+  type CommentRecordItem,
+  type FavoriteItem,
+  type ProfileOverview,
   getAIRecords,
+  getBrowseHistory,
+  getComments,
+  getFavorites,
+  getProfileOverview,
 } from '@/api/profile'
 import { useUserStore } from '@/stores/user'
 
+const router = useRouter()
 const userStore = useUserStore()
 
 const activeTab = ref('overview')
+const loadingTab = ref('')
+
 const profileOverview = ref<ProfileOverview | null>(null)
 const browseHistory = ref<BrowseHistoryItem[]>([])
 const favorites = ref<FavoriteItem[]>([])
+const comments = ref<CommentRecordItem[]>([])
 const aiRecords = ref<AIRecordItem[]>([])
-const loading = ref(false)
 
 const tabs = [
   { key: 'overview', label: '概览', icon: Grid },
   { key: 'history', label: '浏览历史', icon: Clock },
-  { key: 'favorites', label: '收藏', icon: Star },
+  { key: 'favorites', label: '收藏记录', icon: Star },
+  { key: 'comments', label: '评论记录', icon: ChatDotRound },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick },
 ]
 
+function goToNewsDetail(newsId: number) {
+  router.push(`/news/${newsId}`)
+}
+
 async function loadOverview() {
-  loading.value = true
+  loadingTab.value = 'overview'
   try {
     profileOverview.value = await getProfileOverview()
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('加载个人中心概览失败，请稍后重试')
   } finally {
-    loading.value = false
+    loadingTab.value = ''
   }
 }
 
 async function loadBrowseHistory() {
-  loading.value = true
+  loadingTab.value = 'history'
   try {
     const result = await getBrowseHistory(1, 20)
     browseHistory.value = result.list
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('加载浏览历史失败，请稍后重试')
   } finally {
-    loading.value = false
+    loadingTab.value = ''
   }
 }
 
 async function loadFavorites() {
-  loading.value = true
+  loadingTab.value = 'favorites'
   try {
     const result = await getFavorites(1, 20)
     favorites.value = result.list
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('加载收藏记录失败，请稍后重试')
   } finally {
-    loading.value = false
+    loadingTab.value = ''
+  }
+}
+
+async function loadComments() {
+  loadingTab.value = 'comments'
+  try {
+    const result = await getComments(1, 20)
+    comments.value = result.list
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('加载评论记录失败，请稍后重试')
+  } finally {
+    loadingTab.value = ''
   }
 }
 
 async function loadAIRecords() {
-  loading.value = true
+  loadingTab.value = 'ai-records'
   try {
     const result = await getAIRecords(1, 20)
     aiRecords.value = result.list
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('加载 AI 生成记录失败，请稍后重试')
   } finally {
-    loading.value = false
+    loadingTab.value = ''
   }
 }
 
 function handleTabChange(key: string) {
   activeTab.value = key
-  switch (key) {
-    case 'overview':
-      loadOverview()
-      break
-    case 'history':
-      loadBrowseHistory()
-      break
-    case 'favorites':
-      loadFavorites()
-      break
-    case 'ai-records':
-      loadAIRecords()
-      break
+  if (key === 'overview') {
+    loadOverview()
+  } else if (key === 'history') {
+    loadBrowseHistory()
+  } else if (key === 'favorites') {
+    loadFavorites()
+  } else if (key === 'comments') {
+    loadComments()
+  } else if (key === 'ai-records') {
+    loadAIRecords()
   }
 }
 
@@ -110,13 +144,19 @@ onMounted(() => {
           </el-avatar>
         </div>
         <div class="user-details">
-          <h1 class="user-name">{{ userStore.userInfo?.nickname }}</h1>
+          <h1 class="user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
           <p class="user-role">
             <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'">
-              {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
+              {{
+                userStore.isAdmin
+                  ? '管理员'
+                  : userStore.isEditor
+                    ? '审核/编辑'
+                    : '普通用户'
+              }}
             </el-tag>
           </p>
-          <p class="user-meta">ID: {{ userStore.userInfo?.id }}</p>
+          <p class="user-meta">ID: {{ userStore.userInfo?.id || '-' }}</p>
         </div>
       </div>
     </el-card>
@@ -125,10 +165,10 @@ onMounted(() => {
       <div class="stats-grid">
         <div class="stat-item">
           <div class="stat-icon history-icon">
-            <History :size="24" />
+            <Clock :size="24" />
           </div>
           <div class="stat-content">
-            <span class="stat-value">{{ profileOverview?.browse_count || 0 }}</span>
+            <span class="stat-value">{{ profileOverview?.browse_count ?? 0 }}</span>
             <span class="stat-label">浏览记录</span>
           </div>
         </div>
@@ -137,8 +177,8 @@ onMounted(() => {
             <Star :size="24" />
           </div>
           <div class="stat-content">
-            <span class="stat-value">{{ profileOverview?.favorite_count || 0 }}</span>
-            <span class="stat-label">收藏</span>
+            <span class="stat-value">{{ profileOverview?.favorite_count ?? 0 }}</span>
+            <span class="stat-label">收藏记录</span>
           </div>
         </div>
         <div class="stat-item">
@@ -146,16 +186,16 @@ onMounted(() => {
             <Files :size="24" />
           </div>
           <div class="stat-content">
-            <span class="stat-value">{{ profileOverview?.comment_count || 0 }}</span>
-            <span class="stat-label">评论</span>
+            <span class="stat-value">{{ profileOverview?.comment_count ?? 0 }}</span>
+            <span class="stat-label">评论记录</span>
           </div>
         </div>
         <div class="stat-item">
           <div class="stat-icon ai-icon">
-            <Sparkles :size="24" />
+            <MagicStick :size="24" />
           </div>
           <div class="stat-content">
-            <span class="stat-value">{{ profileOverview?.ai_generate_count || 0 }}</span>
+            <span class="stat-value">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
             <span class="stat-label">AI 生成</span>
           </div>
         </div>
@@ -163,123 +203,173 @@ onMounted(() => {
     </el-card>
 
     <el-card class="content-card" shadow="never">
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="profile-tabs">
-        <el-tab-pane
-          v-for="tab in tabs"
-          :key="tab.key"
-          :label="tab.label"
-          :name="tab.key"
-        >
+      <el-tabs v-model="activeTab" class="profile-tabs" @tab-change="handleTabChange">
+        <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key">
           <template #label>
             <component :is="tab.icon" :size="18" class="tab-icon" />
             <span>{{ tab.label }}</span>
           </template>
 
-          <div v-if="loading" class="loading-container">
-            <el-spinner />
+          <div v-if="loadingTab === tab.key" class="loading-container">
+            <el-skeleton :rows="6" animated />
           </div>
 
-          <template v-else-if="activeTab === 'overview'">
+          <template v-else-if="tab.key === 'overview'">
             <div class="overview-content">
-              <p class="overview-desc">欢迎来到个人中心，这里展示您的互动记录和数据统计。</p>
+              <p class="overview-desc">
+                欢迎来到个人中心，这里展示你的浏览、收藏、评论和 AI 生成记录。
+              </p>
               <div class="quick-actions">
-                <el-button @click="handleTabChange('history')" type="primary" plain>
+                <el-button type="primary" plain @click="handleTabChange('history')">
                   查看浏览历史
                 </el-button>
-                <el-button @click="handleTabChange('favorites')" type="primary" plain>
-                  查看收藏
+                <el-button type="primary" plain @click="handleTabChange('favorites')">
+                  查看收藏记录
                 </el-button>
-                <el-button @click="handleTabChange('ai-records')" type="primary" plain>
+                <el-button type="primary" plain @click="handleTabChange('comments')">
+                  查看评论记录
+                </el-button>
+                <el-button type="primary" plain @click="handleTabChange('ai-records')">
                   查看 AI 记录
                 </el-button>
               </div>
             </div>
           </template>
 
-          <template v-else-if="activeTab === 'history'">
+          <template v-else-if="tab.key === 'history'">
             <div v-if="browseHistory.length === 0" class="empty-state">
-              <History :size="48" class="empty-icon" />
+              <Clock :size="48" class="empty-icon" />
               <p>暂无浏览历史</p>
             </div>
-            <div v-else class="list-container">
-              <el-timeline mode="left">
-                <el-timeline-item
-                  v-for="item in browseHistory"
-                  :key="item.news_id"
-                  :timestamp="item.browse_time"
-                  placement="bottom"
-                >
-                  <div class="timeline-content">
-                    <el-tag>{{ item.category_name }}</el-tag>
-                    <span class="timeline-title">{{ item.title }}</span>
-                  </div>
-                </el-timeline-item>
-              </el-timeline>
-            </div>
-          </template>
-
-          <template v-else-if="activeTab === 'favorites'">
-            <div v-if="favorites.length === 0" class="empty-state">
-              <Star :size="48" class="empty-icon" />
-              <p>暂无收藏内容</p>
-            </div>
-            <div v-else class="favorites-list">
+            <div v-else class="record-list">
               <el-card
-                v-for="item in favorites"
-                :key="item.news_id"
-                class="favorite-item"
+                v-for="item in browseHistory"
+                :key="`${item.news_id}-${item.browse_time}`"
+                class="record-card"
                 shadow="hover"
               >
-                <div class="favorite-header">
+                <div class="record-header">
                   <el-tag size="small">{{ item.category_name }}</el-tag>
-                  <span class="favorite-source">{{ item.source }}</span>
+                  <span class="record-source">{{ item.title }}</span>
                 </div>
-                <h3 class="favorite-title">{{ item.title }}</h3>
-                <p class="favorite-summary">{{ item.summary }}</p>
-                <div class="favorite-footer">
+                <div class="record-footer">
                   <Clock :size="14" />
-                  <span>{{ item.publish_time }}</span>
-                  <ArrowRight :size="18" class="chevron-icon" />
+                  <span>{{ item.browse_time }}</span>
+                  <el-button type="primary" link class="record-link" @click="goToNewsDetail(item.news_id)">
+                    查看原文
+                    <ArrowRight :size="14" />
+                  </el-button>
                 </div>
               </el-card>
             </div>
           </template>
 
-          <template v-else-if="activeTab === 'ai-records'">
-            <div v-if="aiRecords.length === 0" class="empty-state">
-              <Sparkles :size="48" class="empty-icon" />
-              <p>暂无 AI 生成记录</p>
+          <template v-else-if="tab.key === 'favorites'">
+            <div v-if="favorites.length === 0" class="empty-state">
+              <Star :size="48" class="empty-icon" />
+              <p>暂无收藏记录</p>
             </div>
-            <div v-else class="ai-records-list">
+            <div v-else class="record-list">
               <el-card
-                v-for="item in aiRecords"
-                :key="item.id"
-                class="ai-record-item"
+                v-for="item in favorites"
+                :key="item.news_id"
+                class="record-card"
                 shadow="hover"
               >
                 <div class="record-header">
-                  <span class="record-id">记录 #{{ item.id }}</span>
-                  <span v-if="item.create_time" class="record-time">{{ item.create_time }}</span>
+                  <el-tag size="small">{{ item.category_name }}</el-tag>
+                  <span class="record-source">{{ item.source }}</span>
                 </div>
-                <div class="record-input">
-                  <PriceTag size="small" class="input-tag">输入文本</PriceTag>
+                <h3 class="record-title" @click="goToNewsDetail(item.news_id)">
+                  {{ item.title }}
+                </h3>
+                <p class="record-summary">{{ item.summary }}</p>
+                <div class="record-footer">
+                  <Clock :size="14" />
+                  <span>{{ item.publish_time }}</span>
+                  <el-button type="primary" link class="record-link" @click="goToNewsDetail(item.news_id)">
+                    查看详情
+                    <ArrowRight :size="14" />
+                  </el-button>
+                </div>
+              </el-card>
+            </div>
+          </template>
+
+          <template v-else-if="tab.key === 'comments'">
+            <div v-if="comments.length === 0" class="empty-state">
+              <ChatDotRound :size="48" class="empty-icon" />
+              <p>暂无评论记录</p>
+            </div>
+            <div v-else class="record-list">
+              <el-card
+                v-for="item in comments"
+                :key="item.comment_id"
+                class="record-card"
+                shadow="hover"
+              >
+                <div class="record-header">
+                  <el-tag size="small">{{ item.category_name }}</el-tag>
+                  <span class="record-source">{{ item.news_title }}</span>
+                </div>
+                <p class="comment-content">{{ item.content }}</p>
+                <div class="record-footer">
+                  <Clock :size="14" />
+                  <span>{{ item.create_time }}</span>
+                  <span class="comment-like">点赞 {{ item.like_count }}</span>
+                  <el-button type="primary" link class="record-link" @click="goToNewsDetail(item.news_id)">
+                    查看原文
+                    <ArrowRight :size="14" />
+                  </el-button>
+                </div>
+              </el-card>
+            </div>
+          </template>
+
+          <template v-else-if="tab.key === 'ai-records'">
+            <div v-if="aiRecords.length === 0" class="empty-state">
+              <MagicStick :size="48" class="empty-icon" />
+              <p>暂无 AI 生成记录</p>
+            </div>
+            <div v-else class="record-list">
+              <el-card
+                v-for="item in aiRecords"
+                :key="item.id"
+                class="record-card"
+                shadow="hover"
+              >
+                <div class="record-header">
+                  <div class="record-header-main">
+                    <el-tag size="small">AI 记录</el-tag>
+                    <span class="record-ai-title">{{ item.source_title || `记录 #${item.id}` }}</span>
+                  </div>
+                  <el-tag
+                    :type="item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'"
+                    size="small"
+                  >
+                    {{ item.risk_level === 'high' ? '高风险' : item.risk_level === 'medium' ? '中风险' : '低风险' }}
+                  </el-tag>
+                </div>
+                <div class="ai-input">
+                  <span class="section-label">输入文本</span>
                   <p>{{ item.input_text }}</p>
                 </div>
-                <div class="record-titles">
-                  <PriceTag size="small" class="titles-tag">候选标题</PriceTag>
-                  <div class="titles-list">
-                    <span
-                      v-for="(title, index) in item.candidate_titles"
-                      :key="index"
-                      class="title-item"
-                    >
+                <div class="ai-titles">
+                  <span class="section-label">候选标题</span>
+                  <div class="title-tags">
+                    <el-tag v-for="(title, index) in item.candidate_titles" :key="index" size="small">
                       {{ title }}
-                    </span>
+                    </el-tag>
                   </div>
                 </div>
-                <div class="record-summary">
-                  <PriceTag size="small" class="summary-tag">生成摘要</PriceTag>
+                <div class="ai-summary">
+                  <span class="section-label">生成摘要</span>
                   <p>{{ item.summary_short }}</p>
+                </div>
+                <div class="record-footer">
+                  <Clock :size="14" />
+                  <span>{{ item.create_time || '暂无时间' }}</span>
+                  <span class="record-source">{{ item.source === 'news' ? '新闻导入' : '手动输入' }}</span>
                 </div>
               </el-card>
             </div>
@@ -292,12 +382,13 @@ onMounted(() => {
 
 <style scoped>
 .page-container {
-  padding: 24px;
-  max-width: 800px;
+  max-width: 980px;
   margin: 0 auto;
+  padding: 24px;
 }
 
-.user-info-card {
+.user-info-card,
+.stats-card {
   margin-bottom: 24px;
 }
 
@@ -307,12 +398,8 @@ onMounted(() => {
   gap: 24px;
 }
 
-.avatar-wrapper {
-  flex-shrink: 0;
-}
-
 .user-details {
-  flex: 1;
+  min-width: 0;
 }
 
 .user-name {
@@ -321,33 +408,28 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.user-role {
+.user-role,
+.user-meta {
   margin: 0 0 8px;
 }
 
 .user-meta {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-.stats-card {
-  margin-bottom: 24px;
+  color: var(--el-text-color-secondary);
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
 .stat-item {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 12px;
   padding: 16px;
-  background: var(--color-bg-page);
-  border-radius: 8px;
+  border-radius: 12px;
+  background: var(--el-bg-color-page);
 }
 
 .stat-icon {
@@ -357,7 +439,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .history-icon {
@@ -366,231 +448,195 @@ onMounted(() => {
 }
 
 .star-icon {
-  background: #fef7e0;
+  background: #fdf6ec;
   color: #e6a23c;
 }
 
 .comment-icon {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: #ecf5ff;
+  color: #409eff;
 }
 
 .ai-icon {
-  background: #f9f0ff;
-  color: #722ed1;
+  background: #f4f1ff;
+  color: #8b5cf6;
 }
 
 .stat-content {
-  text-align: center;
+  min-width: 0;
 }
 
 .stat-value {
   display: block;
   font-size: 24px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--el-text-color-primary);
 }
 
 .stat-label {
   display: block;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: var(--el-text-color-secondary);
 }
 
 .content-card {
-  min-height: 400px;
-}
-
-.profile-tabs {
-  min-height: 350px;
+  min-height: 420px;
 }
 
 .tab-icon {
-  margin-right: 8px;
+  margin-right: 6px;
 }
 
 .loading-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
+  padding: 24px 0;
 }
 
 .overview-content {
-  padding: 40px 24px;
+  padding: 24px 8px 8px;
   text-align: center;
 }
 
 .overview-desc {
-  color: var(--color-text-secondary);
-  margin-bottom: 24px;
+  margin: 0 0 20px;
+  color: var(--el-text-color-secondary);
 }
 
 .quick-actions {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 12px;
 }
 
 .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
-  color: var(--color-text-secondary);
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--el-text-color-secondary);
 }
 
 .empty-icon {
-  margin-bottom: 16px;
-  color: var(--color-text-placeholder);
+  margin-bottom: 12px;
+  color: var(--el-text-color-placeholder);
 }
 
-.list-container {
-  padding: 16px;
-}
-
-.timeline-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.timeline-title {
-  flex: 1;
-  font-size: 14px;
-  color: var(--color-text-primary);
-}
-
-.favorites-list {
+.record-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 8px 0 0;
 }
 
-.favorite-item {
-  cursor: pointer;
-}
-
-.favorite-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.favorite-source {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.favorite-title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.favorite-summary {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.favorite-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.chevron-icon {
-  margin-left: auto;
-  color: var(--color-text-placeholder);
-}
-
-.ai-records-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.ai-record-item {
-  padding: 16px;
+.record-card {
+  cursor: default;
 }
 
 .record-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.record-id {
-  font-weight: 500;
-  color: var(--color-text-primary);
+.record-header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.record-time {
+.record-source {
+  color: var(--el-text-color-secondary);
   font-size: 13px;
-  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.record-input,
-.record-titles,
-.record-summary {
+.record-ai-title,
+.record-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.record-title {
+  margin: 0 0 8px;
+  cursor: pointer;
+}
+
+.record-title:hover {
+  color: var(--el-color-primary);
+}
+
+.record-summary,
+.comment-content,
+.ai-input p,
+.ai-summary p {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.7;
+}
+
+.record-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.record-link {
+  margin-left: auto;
+}
+
+.comment-like {
+  color: var(--el-text-color-secondary);
+}
+
+.section-label {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.ai-input,
+.ai-titles,
+.ai-summary {
   margin-bottom: 12px;
 }
 
-.record-input:last-child,
-.record-titles:last-child,
-.record-summary:last-child {
-  margin-bottom: 0;
-}
-
-.input-tag,
-.titles-tag,
-.summary-tag {
-  margin-bottom: 8px;
-}
-
-.record-input p,
-.record-summary p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-text-primary);
-}
-
-.titles-list {
+.title-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.title-item {
-  padding: 4px 12px;
-  background: var(--color-bg-page);
-  border-radius: 4px;
-  font-size: 13px;
-  color: var(--color-text-primary);
-}
-
 @media (max-width: 768px) {
+  .page-container {
+    padding: 16px;
+  }
+
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .user-info {
     flex-direction: column;
-    text-align: center;
+    align-items: flex-start;
   }
 
-  .quick-actions {
+  .record-header,
+  .record-footer {
+    align-items: flex-start;
     flex-direction: column;
+  }
+
+  .record-link {
+    margin-left: 0;
   }
 }
 </style>

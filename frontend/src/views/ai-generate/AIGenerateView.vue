@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AIInputPanel from '@/components/ai/AIInputPanel.vue'
 import AIParamPanel from '@/components/ai/AIParamPanel.vue'
@@ -8,6 +10,52 @@ import { useAIDraftStore } from '@/stores/aiDraft'
 import { generateTitleSummary } from '@/api/ai'
 
 const aiDraft = useAIDraftStore()
+const route = useRoute()
+
+function loadNewsDraftFromSession() {
+  const rawDraft = sessionStorage.getItem('ai_draft_from_news')
+
+  if (!rawDraft) {
+    return
+  }
+
+  try {
+    const draft = JSON.parse(rawDraft) as {
+      source?: string
+      news_id?: number | string
+      title?: string
+      summary?: string
+      content?: string
+    }
+
+    if (draft.source !== 'news' || !draft.content?.trim()) {
+      return
+    }
+
+    aiDraft.setFromNews({
+      id: draft.news_id ?? '',
+      title: draft.title ?? '',
+      content: draft.content,
+    })
+  } catch {
+    // 无效草稿数据直接忽略，保持页面可用
+  }
+}
+
+function syncDraftFromNewsRoute() {
+  if (String(route.query.source ?? '') !== 'news') {
+    return
+  }
+
+  const routeNewsId = String(route.query.newsId ?? '').trim()
+  const currentNewsId = String(aiDraft.sourceNewsId ?? '').trim()
+
+  if (routeNewsId && currentNewsId === routeNewsId && aiDraft.inputText.trim()) {
+    return
+  }
+
+  loadNewsDraftFromSession()
+}
 
 const handleGenerate = async () => {
   // 输入验证
@@ -32,6 +80,9 @@ const handleGenerate = async () => {
       summary_style: aiDraft.params.summary_style,
       title_style: aiDraft.params.title_style,
       summary_length: aiDraft.params.summary_length,
+      source: aiDraft.sourceNewsId ? 'news' : 'manual',
+      source_news_id: aiDraft.sourceNewsId,
+      source_title: aiDraft.sourceTitle,
     })
 
     aiDraft.setResult(result)
@@ -55,6 +106,17 @@ const handleGenerate = async () => {
     aiDraft.setLoading(false)
   }
 }
+
+onMounted(() => {
+  syncDraftFromNewsRoute()
+})
+
+watch(
+  () => [route.query.source, route.query.newsId],
+  () => {
+    syncDraftFromNewsRoute()
+  },
+)
 </script>
 
 <template>

@@ -71,9 +71,21 @@
       </section>
 
       <aside class="news-detail-aside">
-        <NewsDetailSidePanel :related-news="relatedNews" :recommended-news="recommendedNews" />
+        <NewsDetailSidePanel
+          :related-news="relatedNews"
+          :recommended-news="recommendedNews"
+          :timeline-topic-id="timelineTopicId"
+          :timeline-topic-name="timelineTopicName"
+          @view-timeline="handleViewTimeline"
+        />
       </aside>
     </div>
+
+    <TimelineDrawer
+      v-model="timelineDrawerVisible"
+      :topic-id="selectedTopicId"
+      :topic-name="selectedTopicName"
+    />
   </main>
 </template>
 
@@ -98,6 +110,7 @@ import { useAIDraftStore } from '@/stores/aiDraft'
 import NewsMeta from '@/components/news/NewsMeta.vue'
 import NewsDetailContent from '@/components/news/NewsDetailContent.vue'
 import NewsDetailSidePanel from '@/components/news/NewsDetailSidePanel.vue'
+import TimelineDrawer from '@/components/timeline/TimelineDrawer.vue'
 import LikeButton from '@/components/interaction/LikeButton.vue'
 import FavoriteButton from '@/components/interaction/FavoriteButton.vue'
 import ShareButton from '@/components/interaction/ShareButton.vue'
@@ -111,7 +124,9 @@ const router = useRouter()
 const userStore = useUserStore()
 const aiDraft = useAIDraftStore()
 
-const newsDetail = ref<NewsDetail | null>(null)
+type NewsDetailWithTopic = NewsDetail & { topic_id?: number | null }
+
+const newsDetail = ref<NewsDetailWithTopic | null>(null)
 const comments = ref<CommentItem[]>([])
 const loading = ref(false)
 const loadingComments = ref(false)
@@ -120,10 +135,17 @@ const actionLoading = ref<ActionType>('')
 const error = ref('')
 const commentTotal = ref(0)
 const replyingId = ref<number | null>(null)
+const timelineDrawerVisible = ref(false)
+const selectedTopicId = ref<number | string | null>(null)
+const selectedTopicName = ref('')
 const newsId = computed(() => String(route.params.id ?? '').trim())
 
 const relatedNews = computed<NewsItem[]>(() => newsDetail.value?.related_news ?? [])
 const recommendedNews = computed<NewsItem[]>(() => newsDetail.value?.recommended_news ?? [])
+const timelineTopicId = computed(() => newsDetail.value?.topic_id ?? null)
+const timelineTopicName = computed(
+  () => (newsDetail.value as (NewsDetailWithTopic & { topic_name?: string }) | null)?.topic_name || newsDetail.value?.category_name || '',
+)
 
 async function loadNewsDetail() {
   if (!newsId.value) {
@@ -137,7 +159,7 @@ async function loadNewsDetail() {
 
   try {
     const result = await getNewsDetail(newsId.value)
-    newsDetail.value = result
+    newsDetail.value = result as NewsDetailWithTopic
 
     try {
       await recordBrowse(newsId.value)
@@ -192,6 +214,23 @@ function goToLogin() {
       redirect: route.fullPath,
     },
   })
+}
+
+function handleViewTimeline() {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录后查看事件脉络')
+    goToLogin()
+    return
+  }
+
+  if (!timelineTopicId.value) {
+    ElMessage.warning('当前新闻暂无事件脉络')
+    return
+  }
+
+  selectedTopicId.value = timelineTopicId.value
+  selectedTopicName.value = timelineTopicName.value
+  timelineDrawerVisible.value = true
 }
 
 function requireLogin() {

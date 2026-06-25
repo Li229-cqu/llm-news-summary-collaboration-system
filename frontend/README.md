@@ -133,3 +133,42 @@ http://localhost:5173
 
 后续将继续完善 AI 生成页、社区模块、个人中心模块和后台模块，并逐步补齐更完整的业务功能。
 
+
+## 个人中心模块补充说明
+
+- 当前个人中心已支持浏览历史、收藏记录、评论记录和 AI 生成记录展示。
+- 个人中心数据来源于 backend 接口，数据库优先，mock 兜底。
+- 评论记录已与后端 `/api/profile/comments` 对齐。
+
+## AI 生成记录补充说明
+
+- 当前 `POST /api/ai/generate` 会在生成成功后同步写入 `ai_generate_record` 表。
+- `GET /api/ai/records` 和个人中心 AI 生成记录会优先读取数据库，数据库不可用时回退 mock。
+- 从新闻详情页导入的 AI 生成场景会携带 `source=news`、`source_news_id` 和 `source_title`，方便在个人中心区分来源。
+
+## Timeline 模块补充说明
+
+- 首页、社区和新闻详情页均可打开 Timeline 抽屉。
+- Timeline 数据来自 backend 的 `/api/timeline/*` 接口，不直接调用 ai-service。
+- 当前 Timeline 已支持数据库优先读取，数据库异常时仍可回退 mock。
+
+## 社区模块补充说明
+
+- 当前社区页面已支持数据库优先读取帖子、评论和热搜话题。
+- 点赞、收藏、评论、回复、拉黑等操作会优先写入后端数据库，失败时回退 mock。
+- 社区页面仍然只调用 backend，不直接连接数据库。
+## DB12 真实新闻展示说明
+
+- 首页新闻列表已支持展示数据库新闻的 `cover_image`。
+- 有封面图的新闻显示图文卡片；没有封面图或图片加载失败时，使用无图卡片样式，不会显示破图。
+- 左侧新闻分类会通过 `/home?category_id=xxx` 联动首页列表，请求后端 `/api/news` 重新筛选数据。
+- 新闻详情页支持展示封面图；如果 `cover_image` 为空，则不显示图片区域。
+- Timeline 入口依赖新闻的 `topic_id`，真实爬取新闻未完成话题归类时可能不会展示事件脉络入口。
+## DB12.5 首页真实数据展示与订阅管理
+
+- 首页左侧新闻分类栏现在通过 `GET /api/news/categories` 从 backend 读取数据库分类。
+- 点击分类会跳转 `/home?category_id=xxx`，首页调用 `GET /api/news` 并携带 `category_id` 重新加载真实新闻。
+- 首页右侧新闻热榜 Top10 调用 `GET /api/news/hot`，按浏览、点赞、收藏、评论综合热度排序。
+- 无封面新闻采用纯文本卡片，不再显示大块“暂无封面”占位。
+- 左侧“订阅管理”会调用 `GET /api/profile/subscriptions` 和 `POST /api/profile/subscriptions`，需要登录后使用。
+- 当前前端仍只调用 backend，不直接连接数据库，也不直接调用 ai-service。

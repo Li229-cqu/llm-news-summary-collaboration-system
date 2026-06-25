@@ -8,10 +8,11 @@
               <p class="hero-card__eyebrow">今日推荐</p>
               <h1>基于大语言模型的智能新闻摘要与协同互动系统</h1>
               <p class="hero-card__description">
-                聚合优质新闻，为你精选今日要闻，帮助快速浏览重点内容，并进入后续摘要生成流程。
+                聚合优质新闻，为你精选今日要闻，快速浏览重点内容，并进入后续摘要生成流程。
               </p>
               <el-button type="primary" size="large" @click="goToAiGenerate">了解更多</el-button>
             </div>
+
             <div class="hero-card__visual" aria-hidden="true">
               <div class="hero-card__orb hero-card__orb--large"></div>
               <div class="hero-card__orb hero-card__orb--small"></div>
@@ -29,7 +30,9 @@
               <h2>精选新闻</h2>
               <p>实时更新的精选内容，点击即可查看详情</p>
             </div>
-            <el-button text type="primary" :disabled="!hasMoreNews" @click="handleLoadMore">查看更多</el-button>
+            <el-button text type="primary" :disabled="!hasMoreNews" @click="handleLoadMore">
+              查看更多
+            </el-button>
           </div>
 
           <NewsList :list="newsList" :loading="loadingNews" empty-text="暂无新闻数据" />
@@ -47,39 +50,87 @@
           <NewsHotList :list="hotNewsList" :loading="loadingHot" @refresh="loadHotNews" />
         </el-card>
 
+        <el-card class="aside-card" shadow="never">
+          <div class="timeline-entry">
+            <div class="timeline-entry__header">
+              <h3>热点事件脉络</h3>
+              <span>从热门话题中查看事件发展过程</span>
+            </div>
+
+            <el-skeleton v-if="loadingTimelineTopics" animated :rows="4" />
+            <el-empty v-else-if="!timelineTopics.length" description="暂无事件脉络话题" />
+            <div v-else class="timeline-entry__list">
+              <div v-for="topic in timelineTopics" :key="topic.topic_id" class="timeline-entry__item">
+                <div class="timeline-entry__item-main">
+                  <div class="timeline-entry__item-title">{{ topic.topic_name }}</div>
+                  <div class="timeline-entry__item-meta">
+                    <span>热度 {{ topic.heat_score }}</span>
+                    <span>{{ topic.news_count }} 篇新闻</span>
+                  </div>
+                </div>
+                <el-button type="primary" link @click="openTimeline(topic)">查看脉络</el-button>
+              </div>
+            </div>
+          </div>
+        </el-card>
+
         <NewsRecommendPanel :recent-items="recentNews" />
       </aside>
     </div>
+
+    <TimelineDrawer
+      v-model="timelineDrawerVisible"
+      :topic-id="selectedTopicId"
+      :topic-name="selectedTopicName"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getHotNews, getNewsList, type HotNewsItem, type NewsItem } from '@/api/news'
+import {
+  getHotNews,
+  getNewsList,
+  type HotNewsItem,
+  type NewsItem,
+} from '@/api/news'
+import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
+import { useUserStore } from '@/stores/user'
 import NewsList from '@/components/news/NewsList.vue'
 import NewsHotList from '@/components/news/NewsHotList.vue'
 import NewsRecommendPanel from '@/components/news/NewsRecommendPanel.vue'
+import TimelineDrawer from '@/components/timeline/TimelineDrawer.vue'
 
 const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
 
 const newsList = ref<NewsItem[]>([])
 const hotNewsList = ref<HotNewsItem[]>([])
+const timelineTopics = ref<TimelineTopic[]>([])
 const loadingNews = ref(false)
 const loadingHot = ref(false)
+const loadingTimelineTopics = ref(false)
 const page = ref(1)
 const pageSize = ref(6)
 const total = ref(0)
 
 const recentNews = computed(() => newsList.value.slice(0, 3))
 const hasMoreNews = computed(() => total.value === 0 || newsList.value.length < total.value)
+const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
+
+const timelineDrawerVisible = ref(false)
+const selectedTopicId = ref<number | string | null>(null)
+const selectedTopicName = ref('')
 
 async function loadNews() {
   loadingNews.value = true
 
   try {
     const result = await getNewsList({
+      category_id: activeCategoryId.value || undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -110,6 +161,20 @@ async function loadHotNews() {
   }
 }
 
+async function loadTimelineTopics() {
+  loadingTimelineTopics.value = true
+
+  try {
+    const result = await getTimelineTopics()
+    timelineTopics.value = result.slice(0, 5)
+  } catch (error) {
+    timelineTopics.value = []
+    ElMessage.error(error instanceof Error ? error.message : '获取事件脉络话题失败')
+  } finally {
+    loadingTimelineTopics.value = false
+  }
+}
+
 async function handleLoadMore() {
   if (!hasMoreNews.value) {
     return
@@ -120,6 +185,7 @@ async function handleLoadMore() {
 
   try {
     const result = await getNewsList({
+      category_id: activeCategoryId.value || undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -140,9 +206,36 @@ function goToAiGenerate() {
   router.push('/ai/title-summary')
 }
 
+function openTimeline(topic: TimelineTopic) {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录后查看事件脉络')
+    router.push({
+      path: '/login',
+      query: { redirect: route.fullPath },
+    })
+    return
+  }
+
+  selectedTopicId.value = topic.topic_id
+  selectedTopicName.value = topic.topic_name
+  timelineDrawerVisible.value = true
+}
+
 onMounted(async () => {
-  await Promise.all([loadNews(), loadHotNews()])
+  if (!userStore.userInfo) {
+    userStore.loadFromStorage()
+  }
+
+  await Promise.all([loadNews(), loadHotNews(), loadTimelineTopics()])
 })
+
+watch(
+  () => route.query.category_id,
+  () => {
+    page.value = 1
+    loadNews()
+  },
+)
 </script>
 
 <style scoped>
@@ -176,7 +269,7 @@ onMounted(async () => {
 .hero-card,
 .featured-section,
 .aside-card {
-  border-color: var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-card);
   background: var(--color-bg-card);
 }
@@ -229,7 +322,11 @@ onMounted(async () => {
   flex: 0 0 260px;
   overflow: hidden;
   border-radius: 22px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card)), var(--color-primary-soft));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card)),
+    var(--color-primary-soft)
+  );
 }
 
 .hero-card__orb {
@@ -285,6 +382,7 @@ onMounted(async () => {
 }
 
 .section-header h2,
+.timeline-entry__header h3,
 .home-aside :deep(.news-hot-list__header h3),
 .home-aside :deep(.news-recommend-panel__title),
 .home-aside :deep(.news-recommend-panel__section-title) {
@@ -296,7 +394,8 @@ onMounted(async () => {
   font-size: 20px;
 }
 
-.section-header p {
+.section-header p,
+.timeline-entry__header span {
   margin: 6px 0 0;
   color: var(--color-text-secondary);
   font-size: 13px;
@@ -306,6 +405,50 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   margin-top: 16px;
+}
+
+.timeline-entry {
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-entry__list {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-entry__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg);
+}
+
+.timeline-entry__item-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.timeline-entry__item-title {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-entry__item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .home-aside :deep(.el-card__body) {
@@ -332,6 +475,10 @@ onMounted(async () => {
   .hero-card__visual {
     width: 100%;
     flex: none;
+  }
+
+  .timeline-entry__item {
+    flex-direction: column;
   }
 }
 </style>

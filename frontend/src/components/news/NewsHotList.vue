@@ -3,7 +3,7 @@
     <div class="news-hot-list__header">
       <div>
         <h3>新闻热榜 Top10</h3>
-        <span>实时关注热门内容</span>
+        <span>根据浏览、点赞、收藏和评论综合排序</span>
       </div>
       <el-button link type="primary" @click="handleRefresh">换一换</el-button>
     </div>
@@ -23,7 +23,9 @@
           <div class="news-hot-list__title">{{ item.title }}</div>
           <div class="news-hot-list__meta">
             <span>{{ item.category_name }}</span>
-            <span>浏览 {{ item.view_count }}</span>
+            <span>热度 {{ item.heat_score ?? item.view_count }}</span>
+            <span>阅读 {{ item.view_count }}</span>
+            <span>评论 {{ item.comment_count }}</span>
           </div>
         </div>
       </li>
@@ -38,12 +40,18 @@ export interface HotNewsItem {
   id: number
   title: string
   category_name: string
+  source: string
   view_count: number
   comment_count: number
+  like_count?: number
+  favorite_count?: number
+  cover_image?: string
+  publish_time?: string
+  heat_score?: number
   rank: number
 }
 
-const props = defineProps<{
+defineProps<{
   list: HotNewsItem[]
   loading?: boolean
 }>()

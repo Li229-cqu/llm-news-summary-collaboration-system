@@ -10,7 +10,7 @@ AI 标题摘要生成模块保留动态 Mock 与 GLM-4-Flash 两种模式。LLM 
 
 ## 二、项目定位
 
-系统围绕“新闻浏览 — 新闻详情互动 — AI 生成 — 社区交流 — 个人记录管理”的闭环展开，结合新闻内容消费、智能生成能力和用户协同互动，为用户提供连贯的新闻阅读与交流体验。
+系统围绕“新闻浏览 - 新闻详情互动 - AI 生成 - 社区交流 - 个人记录管理”的闭环展开，结合新闻内容消费、智能生成能力和用户协同互动，为用户提供连贯的新闻阅读与交流体验。
 
 ## 三、技术栈规划
 
@@ -146,11 +146,6 @@ FLUSH PRIVILEGES;
 exit;
 ```
 
-说明：
-
-- `llm_news_user / 123456` 是本项目本地开发数据库账号。
-- 该账号连接的是你本机的 MySQL 服务，不是额外安装的新数据库软件。
-
 ### 8.2 导入表结构和基础数据
 
 PowerShell 中不要直接使用 `<`，请使用 `cmd /c` 包装：
@@ -183,8 +178,6 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\005_create_user_category_subscription.sql"
 ```
 
-如果以后新增新的 migration 文件，请继续按编号顺序执行。
-
 ### 8.4 配置 backend/.env
 
 在 `backend/.env` 中配置：
@@ -212,17 +205,6 @@ AI_SERVICE_URL=http://127.0.0.1:8001
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system -e ""SELECT COUNT(*) AS user_count FROM user; SELECT COUNT(*) AS news_count FROM news; SELECT COUNT(*) AS category_count FROM news_category; SELECT COUNT(*) AS topic_count FROM news_topic;"""
 ```
 
-也可以进入 MySQL 后执行：
-
-```sql
-SELECT COUNT(*) FROM user;
-SELECT COUNT(*) FROM news_category;
-SELECT COUNT(*) FROM news_topic;
-SELECT COUNT(*) FROM news;
-SELECT COUNT(*) FROM ai_generate_record;
-SELECT COUNT(*) FROM event_timeline;
-```
-
 ## 九、三端启动方式
 
 日常启动项目时，需要打开三个 PowerShell 窗口分别启动。不要把 backend、ai-service、frontend 写成一个连续命令，因为 `uvicorn` 和 `npm run dev` 会占用当前终端。
@@ -245,11 +227,6 @@ cd backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-访问：
-
-- 后端健康检查：<http://127.0.0.1:8000/api/health>
-- 后端 Swagger：<http://127.0.0.1:8000/docs>
-
 ### 窗口 2：启动 ai-service
 
 第一次启动：
@@ -269,11 +246,6 @@ cd ai-service
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-访问：
-
-- AI 服务健康检查：<http://127.0.0.1:8001/ai/health>
-- AI 服务 Swagger：<http://127.0.0.1:8001/docs>
-
 ### 窗口 3：启动 frontend
 
 第一次启动：
@@ -291,9 +263,13 @@ cd frontend
 npm.cmd run dev
 ```
 
-访问：
+访问地址：
 
-- 前端页面：<http://localhost:5173>
+- frontend：<http://localhost:5173>
+- backend：<http://127.0.0.1:8000>
+- backend Swagger：<http://127.0.0.1:8000/docs>
+- ai-service：<http://127.0.0.1:8001>
+- ai-service Swagger：<http://127.0.0.1:8001/docs>
 
 ## 十、操作过一次之后的常规流程
 

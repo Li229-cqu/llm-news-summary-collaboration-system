@@ -26,6 +26,8 @@ export interface NewsItem {
   favorite_count: number
   status: number
   tags: string[]
+  topic_id?: number | null
+  source_url?: string
 }
 
 export interface NewsDetail extends NewsItem {
@@ -38,6 +40,7 @@ export interface NewsDetail extends NewsItem {
 
 export interface NewsListParams {
   category?: string
+  category_id?: number | string
   keyword?: string
   page?: number
   page_size?: number
@@ -57,6 +60,11 @@ export interface HotNewsItem {
   source: string
   view_count: number
   comment_count: number
+  like_count?: number
+  favorite_count?: number
+  cover_image?: string
+  publish_time?: string
+  heat_score?: number
   rank: number
 }
 

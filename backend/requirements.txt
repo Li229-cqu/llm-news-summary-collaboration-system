@@ -3,3 +3,7 @@ uvicorn
 pydantic
 python-dotenv
 httpx
+feedparser
+pymysql
+beautifulsoup4
+python-dateutil

@@ -1,10 +1,19 @@
 <template>
-  <article class="news-card" role="button" tabindex="0" @click="handleClick" @keyup.enter="handleClick">
-    <div class="news-card__cover">
-      <img v-if="news.cover_image" class="news-card__image" :src="news.cover_image" :alt="news.title" />
-      <div v-else class="news-card__placeholder">
-        <span>暂无封面</span>
-      </div>
+  <article
+    class="news-card"
+    :class="{ 'news-card--text-only': !hasImage }"
+    role="button"
+    tabindex="0"
+    @click="handleClick"
+    @keyup.enter="handleClick"
+  >
+    <div v-if="hasImage" class="news-card__cover">
+      <img
+        class="news-card__image"
+        :src="news.cover_image"
+        :alt="news.title"
+        @error="imageFailed = true"
+      />
     </div>
 
     <div class="news-card__content">
@@ -33,6 +42,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+
 export interface NewsCardItem {
   id: number
   title: string
@@ -55,6 +66,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'click', news: NewsCardItem): void
 }>()
+
+const imageFailed = ref(false)
+const hasImage = computed(() => Boolean(props.news.cover_image && !imageFailed.value))
+
+watch(
+  () => props.news.cover_image,
+  () => {
+    imageFailed.value = false
+  },
+)
 
 function handleClick() {
   emit('click', props.news)
@@ -79,6 +100,11 @@ function handleClick() {
     border-color 0.18s ease;
 }
 
+.news-card--text-only {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
 .news-card:hover,
 .news-card:focus-visible {
   border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
@@ -98,17 +124,6 @@ function handleClick() {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.news-card__placeholder {
-  display: grid;
-  place-items: center;
-  min-height: 150px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-card)), var(--color-bg));
 }
 
 .news-card__content {
@@ -145,6 +160,10 @@ function handleClick() {
   line-height: 1.72;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.news-card--text-only .news-card__summary {
+  -webkit-line-clamp: 3;
 }
 
 .news-card__tags {

@@ -1,9 +1,11 @@
-"""新闻模块的请求与响应数据模型。
+"""新闻模块请求与响应模型。
 
-当前模型用于基于 Mock 数据的接口开发，后续接入数据库时可保持接口字段不变。
+当前模型兼容 mock 数据与数据库返回，后续只需切换 service 层数据源。
 """
 
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,9 +26,10 @@ class NewsItem(BaseModel):
     id: int
     title: str
     summary: str
-    cover_image: str
+    cover_image: str = ""
     category_id: int
-    category_name: str
+    category_name: str = "未分类"
+    topic_id: Optional[int] = None
     source: str
     author: str
     publish_time: str
@@ -35,15 +38,16 @@ class NewsItem(BaseModel):
     comment_count: int
     favorite_count: int
     status: int
-    tags: List[str]
+    tags: list[str] = Field(default_factory=list)
+    source_url: str = ""
 
 
 class NewsDetail(NewsItem):
-    """新闻详情，包含关联与推荐新闻以及当前用户互动状态。"""
+    """新闻详情。"""
 
     content: str
-    related_news: List[NewsItem] = Field(default_factory=list)
-    recommended_news: List[NewsItem] = Field(default_factory=list)
+    related_news: list[NewsItem] = Field(default_factory=list)
+    recommended_news: list[NewsItem] = Field(default_factory=list)
     is_liked: bool = False
     is_favorited: bool = False
 
@@ -52,15 +56,16 @@ class NewsListQuery(BaseModel):
     """新闻列表查询参数。"""
 
     category: Optional[str] = None
+    category_id: Optional[int] = None
     keyword: Optional[str] = None
     page: int = 1
     page_size: int = 10
 
 
 class NewsListResponse(BaseModel):
-    """新闻列表分页响应数据。"""
+    """新闻分页响应。"""
 
-    list: List[NewsItem] = Field(default_factory=list)
+    list: list[NewsItem] = Field(default_factory=list)
     total: int
     page: int
     page_size: int
@@ -75,6 +80,11 @@ class HotNewsItem(BaseModel):
     source: str
     view_count: int
     comment_count: int
+    like_count: int = 0
+    favorite_count: int = 0
+    cover_image: str = ""
+    publish_time: str = ""
+    heat_score: int = 0
     rank: int
 
 

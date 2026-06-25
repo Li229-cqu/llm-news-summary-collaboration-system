@@ -9,6 +9,9 @@ export interface AIGenerateRequest {
   summary_style?: string
   title_style?: string
   summary_length?: 'short' | 'long' | 'both'
+  source?: 'manual' | 'news'
+  source_news_id?: number | string | null
+  source_title?: string
 }
 
 export interface NewsElement {
