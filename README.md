@@ -2,13 +2,15 @@
 
 ## 一、项目简介
 
-基于大语言模型的智能新闻摘要与协同互动系统是一个面向新闻浏览、AI 标题摘要生成和社区互动的前后端分离系统。
+《基于大语言模型的智能新闻摘要与协同互动系统》是一个面向新闻浏览、AI 标题摘要生成、社区互动和个人中心管理的前后端分离系统。
 
-系统规划包含首页新闻浏览、新闻详情、AI 标题摘要生成、社区互动、个人中心和管理后台等模块，现已完成 **AI 标题摘要生成模块全功能实现**（包括动态 Mock 和智谱 GLM-4-Flash 真实 LLM 调用），后续将继续完善其他模块。
+当前系统已完成前后端基础框架、AI 服务、数据库接入、新闻浏览、新闻互动、AI 生成、个人中心、Timeline、社区互动和权限控制等核心功能。系统采用“数据库优先 + mock 兜底”的策略：MySQL 正常时优先读写数据库，数据库异常或演示数据不足时回退 mock，保证课程项目演示不断流。
+
+AI 标题摘要生成模块保留动态 Mock 与 GLM-4-Flash 两种模式。LLM 调用失败时会自动 fallback 到 Mock，便于本地开发和课堂演示。
 
 ## 二、项目定位
 
-系统围绕”新闻浏览—新闻详情互动—AI 生成—社区交流—个人记录管理”的闭环展开，结合新闻内容消费、智能生成能力和用户协同互动，为用户提供连贯的新闻阅读与交流体验。
+系统围绕“新闻浏览 — 新闻详情互动 — AI 生成 — 社区交流 — 个人记录管理”的闭环展开，结合新闻内容消费、智能生成能力和用户协同互动，为用户提供连贯的新闻阅读与交流体验。
 
 ## 三、技术栈规划
 
@@ -28,72 +30,83 @@
 - FastAPI
 - Pydantic
 - Uvicorn
-- 后续接入 MySQL
+- MySQL 8.0
+- PyMySQL
+- python-dotenv
+- 数据库优先 + mock 兜底
 
 ### AI 服务
 
 - FastAPI
-- **当前支持**：动态 Mock（快速演示）+ 智谱 GLM-4-Flash（真实 AI）
-- 可配置切换两种模式，LLM 调用失败时自动 fallback 到 Mock
+- 动态 Mock
+- GLM-4-Flash
+- LLM 调用失败 fallback 到 Mock
 
-### 部署
+### 部署规划
 
-- 后续使用 Nginx
-- 后续可使用 Docker / Docker Compose
+- Nginx
+- Docker / Docker Compose
 
 ## 四、目录结构
 
 ```text
 llm-news-summary-collaboration-system/
-├── frontend/     # 前端项目
-├── backend/      # 后端业务服务
-├── ai-service/   # AI 模型调用服务（支持 Mock + LLM）
-├── docs/         # 项目文档（包含开发阶段说明）
-├── deploy/       # 部署配置
-├── scripts/      # 开发脚本
-└── README.md     # 项目说明
+├── frontend/       # 前端项目
+├── backend/        # 后端业务服务
+├── ai-service/     # AI 能力服务，支持 Mock + LLM
+├── database/       # 数据库 schema、seed、migrations
+├── scripts/        # RSS 新闻爬虫和工具脚本
+├── docs/           # 项目文档
+├── deploy/         # 部署配置
+└── README.md       # 项目说明
 ```
 
 | 目录 | 说明 |
 | --- | --- |
-| `frontend` | 前端项目，负责用户界面和前端交互。 |
-| `backend` | 后端业务服务，提供 API 转发和业务逻辑。 |
-| `ai-service` | AI 模型调用服务，支持 Mock 和智谱 GLM-4-Flash 两种模式。 |
-| `docs` | 项目文档，包含需求、设计、接口和各阶段完成说明。 |
-| `deploy` | 部署配置，后续存放 Nginx、Docker 等文件。 |
-| `scripts` | 开发脚本，包含测试和工具脚本。 |
+| `frontend` | 前端项目，负责用户界面和前端交互 |
+| `backend` | 后端业务服务，提供 API 和业务逻辑 |
+| `ai-service` | AI 能力服务，支持 Mock 和 GLM-4-Flash |
+| `database` | 数据库建表、种子数据和迁移脚本 |
+| `scripts` | RSS 新闻爬虫和工具脚本 |
+| `docs` | 项目文档，包含接口、开发计划和数据说明 |
+| `deploy` | 部署配置，后续可存放 Nginx、Docker 等文件 |
 
 ## 五、开发阶段
 
 | 阶段 | 说明 | 状态 |
 | --- | --- | --- |
-| 第 0 阶段 | 项目总骨架搭建 | ✅ 已完成 |
-| 第 1 阶段 | 前端基础框架搭建 | ✅ 已完成 |
-| 第 2 阶段 | 后端 FastAPI 基础框架搭建 | ✅ 已完成 |
-| 第 3 阶段 | AI 服务框架搭建 | ✅ 已完成 |
-| 第 4 阶段 | 用户与权限 Mock 搭建 | ✅ 已完成 |
-| **第 5 阶段** | **AI 标题摘要生成模块** | **✅ 已完成** |
-| 第 6 阶段 | 数据库接入与联调 | 待开始 |
+| 第 0 阶段 | 项目总骨架搭建 | 已完成 |
+| 第 1 阶段 | 前端基础框架搭建 | 已完成 |
+| 第 2 阶段 | 后端 FastAPI 基础框架搭建 | 已完成 |
+| 第 3 阶段 | AI 服务框架搭建 | 已完成 |
+| 第 4 阶段 | 用户与权限 mock 搭建 | 已完成 |
+| 第 5 阶段 | 核心模块并行开发 | 已完成 |
+| 第 6 阶段 | 数据库接入与联调 | 已完成 |
 
-## 六、当前阶段说明
+数据库化阶段补充：
 
-### ✅ 第 0-5 阶段已完成
+- DB4：新闻模块数据库化，已完成。
+- DB5：新闻互动与个人中心数据库化，已完成。
+- DB7：AI 生成记录落库，已完成。
+- DB8：Timeline 数据库化，已完成。
+- DB9：社区模块数据库化，已完成。
+- DB10：登录鉴权优先读取 `user` 表，已完成。
+- DB11：全项目数据库化联调验收，已完成。
+- DB12：真实新闻展示与爬虫质量修复，已完成。
+- DB12.5：首页真实数据展示、侧边栏分类、热榜和订阅管理修复，已完成。
 
-**基础框架**：项目具备完整的目录骨架、Vue 3 前端框架、FastAPI 后端框架和独立 AI 服务框架。
+## 六、当前数据库化联调状态
 
-**AI 标题摘要生成模块**（第 5 阶段，最新完成）：
-- ✅ **前端 UI**：完整的输入、参数、结果、历史管理界面
-- ✅ **Mock 模式**：动态生成标题、摘要、关键词、要素、一致性检查（快速返回，<100ms）
-- ✅ **LLM 模式**：接入智谱 GLM-4-Flash，真实 AI 生成（2-5s）
-- ✅ **Fallback 机制**：LLM 失败自动降级到 Mock，用户无感知
-- ✅ **超时处理**：分层超时配置（前端 60s、后端 60s、ai-service LLM 45s）
-- ✅ **新闻详情页集成**：一键导入正文，无缝跳转
-- ✅ **生成历史管理**：查看、复用、删除历史记录
-- ✅ **错误处理**：友好的超时提示和错误降级
+- 新闻模块：数据库优先，mock 兜底。
+- 新闻互动：数据库优先，mock 兜底。
+- 个人中心：数据库优先，mock 兜底。
+- AI 生成记录：生成成功后写入 `ai_generate_record`。
+- Timeline：数据库优先，mock 兜底。
+- 社区模块：数据库优先，mock 兜底。
+- 登录鉴权：优先读取 `user` 表，同时兼容 `mock-token-user`、`mock-token-editor`、`mock-token-admin`。
+- RSS 爬虫：支持 `source_url` 去重、正文解析、封面图提取、`crawl_log` 日志和旧新闻归档。
 
-**用户权限系统**（第 4 阶段）：Mock 登录、用户状态管理、路由守卫、角色权限控制。
-
-### 🔐 测试账号
+## 七、测试账号
 
 | 角色 | 用户名 | 密码 |
 | --- | --- | --- |
@@ -101,231 +114,360 @@ llm-news-summary-collaboration-system/
 | 审核编辑 | `editor` | `123456` |
 | 管理员 | `admin` | `123456` |
 
-## 七、快速开始
+## 八、第一次完整操作流程
 
-### 7.1 前端启动
+### 8.1 创建数据库和项目账号
 
-```bash
-cd frontend
-npm install
-npm run dev
+先进入 MySQL：
+
+```powershell
+mysql -u root -p
 ```
 
-访问 [http://localhost:5173](http://localhost:5173)
+说明：
 
-### 7.2 后端启动
+- root 密码使用你自己本机 MySQL 的 root 密码。
+- README 不记录 MySQL root 密码。
 
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+进入 MySQL 后执行：
+
+```sql
+CREATE DATABASE IF NOT EXISTS llm_news_system
+DEFAULT CHARACTER SET utf8mb4
+DEFAULT COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'llm_news_user'@'localhost'
+IDENTIFIED BY '123456';
+
+GRANT ALL PRIVILEGES ON llm_news_system.* TO 'llm_news_user'@'localhost';
+
+FLUSH PRIVILEGES;
+
+exit;
 ```
 
-启动后可访问：
-- 健康检查：[http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
-- Swagger 文档：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+说明：
 
-### 7.3 AI 服务启动（重要 ⭐）
+- `llm_news_user / 123456` 是本项目本地开发数据库账号。
+- 该账号连接的是你本机的 MySQL 服务，不是额外安装的新数据库软件。
 
-```bash
-cd ai-service
+### 8.2 导入表结构和基础数据
 
-# 第 1 步：安装依赖
-pip install -r requirements.txt
+PowerShell 中不要直接使用 `<`，请使用 `cmd /c` 包装：
 
-# 第 2 步：配置 .env 文件
-cp .env.example .env
-
-# 第 3 步：编辑 .env（可选）
-# 如果要使用真实 LLM（智谱 GLM-4-Flash）：
-#   1. 注册 https://open.bigmodel.cn/
-#   2. 创建 API Key
-#   3. 编辑 ai-service/.env：
-#      LLM_ENABLED=true
-#      LLM_API_KEY=sk-你的实际APIKey
-# 
-# 如果只想快速测试，保持默认配置：
-#   LLM_ENABLED=false （使用动态 Mock）
-
-# 第 4 步：启动 AI 服务
-uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\seed.sql"
 ```
 
-### 7.4 访问应用
+输入项目数据库密码：
 
-启动所有三个服务后，访问：
-
-- **前端主页**：[http://localhost:5173](http://localhost:5173)
-- **AI 生成页**：[http://localhost:5173/ai/title-summary](http://localhost:5173/ai/title-summary)
-- **后端 API**：[http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **AI 服务**：[http://127.0.0.1:8001](http://127.0.0.1:8001)
-
----
-
-## 八、AI 标题摘要生成模块说明
-
-### 功能概览
-
-在 `/ai/title-summary` 页面，用户可以：
-1. 手动输入或从新闻详情页导入正文
-2. 选择参数：标题数、摘要风格、摘要类型等
-3. 点击生成，获得：
-   - 多个候选标题
-   - 短/长摘要
-   - 摘要要点
-   - 关键词
-   - 新闻六要素（Who/What/When/Where/Why/How）
-   - 一致性评分和改进建议
-4. 查看和复用生成历史
-
-### 工作模式
-
-#### 模式 1：动态 Mock（推荐快速测试）
-
-```bash
-# .env 配置
-LLM_ENABLED=false
-
-# 特点
-✅ 快速返回（<100ms）
-✅ 无需配置 API Key
-✅ 基于规则生成，效果演示
-✅ 自动降级目标
-
-# 用途
-演示完整功能、快速原型验证、在线演示
+```text
+123456
 ```
 
-#### 模式 2：真实 LLM（智谱 GLM-4-Flash）
+注意：
 
-```bash
-# .env 配置
-LLM_ENABLED=true
-LLM_API_KEY=sk-你的实际APIKey
+- `seed.sql` 主要用于第一次初始化基础数据。
+- 不建议在已有业务数据上随意反复执行 `seed.sql`。
+- 如果确实需要重置数据库，建议先备份，再重新执行 `schema.sql`、`seed.sql` 和 migrations。
 
-# 特点
-✅ 真实 AI 生成（2-5秒）
-✅ 更智能的标题和摘要
-✅ 真实的关键词和要素提取
-✅ 失败自动 fallback 到 Mock
+### 8.3 按顺序执行 migrations
 
-# 要求
-1. 拥有智谱 API Key（https://open.bigmodel.cn/）
-2. 网络连接正常
-3. 愿意等待 2-5 秒响应时间
+请以 `database/migrations/` 目录中实际存在的文件为准，按编号顺序执行。例如：
 
-# 用途
-生产环境、真实应用、智能体验
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\001_add_news_source_url_and_crawl_log.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\002_add_ai_generate_record_source_fields.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\003_add_community_post_tags.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\005_create_user_category_subscription.sql"
 ```
 
-### 配置详解
+如果以后新增新的 migration 文件，请继续按编号顺序执行。
 
-**ai-service/.env 关键配置**：
+### 8.4 配置 backend/.env
+
+在 `backend/.env` 中配置：
 
 ```env
-# 启用/禁用 LLM
-LLM_ENABLED=false      # false: Mock 模式, true: LLM 模式
-
-# 智谱 API 配置（仅 LLM_ENABLED=true 时需要）
-LLM_API_KEY=sk-你的APIKey          # 从 https://open.bigmodel.cn/ 获取
-LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/  # 官方 API 地址
-LLM_MODEL=glm-4-flash              # 使用的模型
-
-# 超时和性能配置
-LLM_TIMEOUT=45                     # LLM 调用超时时间（秒）
-LLM_TEMPERATURE=0.3                # 生成温度（0=确定性，1=随机性）
-LLM_MAX_TOKENS=2048                # 最大输出 Token 数
-
-# 其他配置
-LLM_THINKING_TYPE=disabled         # 思维链类型
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=llm_news_system
+DB_USER=llm_news_user
+DB_PASSWORD=123456
+AI_SERVICE_URL=http://127.0.0.1:8001
 ```
 
-**前端超时配置（自动，无需修改）**：
-- AI 生成接口：60 秒
-- 其他接口：10 秒
+注意：
 
-**后端超时配置（自动，无需修改）**：
-- AI 转发：60 秒
-- 其他接口：30 秒
+- `backend/.env` 不要提交到 Git。
+- 不要在 README 或代码中写 MySQL root 密码。
+- 如果组员本地数据库账号密码不同，需要自行修改 `backend/.env`。
 
-### 如何获取智谱 API Key
+### 8.5 验证数据库
 
-1. 访问 [https://open.bigmodel.cn/](https://open.bigmodel.cn/)
-2. 注册账号
-3. 创建 API Key
-4. 复制 Key 值到 `ai-service/.env`：`LLM_API_KEY=sk-...`
+推荐使用下面这条 PowerShell 可运行命令：
 
-### 故障排查
-
-| 问题 | 原因 | 解决方案 |
-| --- | --- | --- |
-| “timeout of 10000ms exceeded” | 前端超时 | 检查 ai-service 是否启动且网络正常 |
-| “AI 服务暂时不可用” | LLM 调用失败 | 检查 API Key 或网络，fallback 到 Mock 应该有效 |
-| 生成速度慢（>10s） | 网络延迟或 LLM 繁忙 | 属正常现象，可尝试缩短输入文本 |
-| 返回 Mock 而不是 LLM | LLM 调用失败自动 fallback | 检查 API Key 和网络，或使用 LLM_ENABLED=false 模式 |
-
----
-
-## 九、项目文档
-
-详细的开发文档位于 `docs/` 目录：
-
-- `README.md` - 项目概述
-- `api.md` - 接口文档
-- `development_plan.md` - 开发计划
-- `development_standard.md` - 开发规范
-- `ai_module_guide.md` - AI 模块使用指南
-- `stage_9_3_summary.md` - 阶段 9.3 完成说明（LLM 接入）
-- `stage_9_4_timeout_fix.md` - 阶段 9.4 完成说明（超时修复）
-- `stage_9_4_quick_reference.md` - 快速参考卡片
-
-## 十、特别说明
-
-### ⚠️ .env 文件处理
-
-**重要**：`ai-service/.env` 包含敏感信息（API Key），**不会被提交到 Git**。
-
-使用此项目时：
-1. 自动生成的 `.env.example` 包含配置模板
-2. 克隆项目后，复制 `.env.example` 为 `.env`
-3. 编辑 `.env`，填入你的 API Key（可选，默认使用 Mock）
-4. `.env` 已在 `.gitignore` 中，不会被提交
-
-### 🔄 工作流程
-
-```
-克隆项目
-    ↓
-cp ai-service/.env.example ai-service/.env
-    ↓
-编辑 ai-service/.env（可选）
-    ↓
-启动前端、后端、ai-service
-    ↓
-访问 http://localhost:5173
-    ↓
-测试 AI 生成功能
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system -e ""SELECT COUNT(*) AS user_count FROM user; SELECT COUNT(*) AS news_count FROM news; SELECT COUNT(*) AS category_count FROM news_category; SELECT COUNT(*) AS topic_count FROM news_topic;"""
 ```
 
----
+也可以进入 MySQL 后执行：
 
-## 十一、后续计划
+```sql
+SELECT COUNT(*) FROM user;
+SELECT COUNT(*) FROM news_category;
+SELECT COUNT(*) FROM news_topic;
+SELECT COUNT(*) FROM news;
+SELECT COUNT(*) FROM ai_generate_record;
+SELECT COUNT(*) FROM event_timeline;
+```
 
-- 第 6 阶段：数据库接入与历史持久化
-- 第 7 阶段：社区互动模块
-- 第 8 阶段：用户中心和内容管理
-- 支持更多 LLM 服务商（OpenAI、文心一言等）
-- 生成结果缓存优化
-- 用户反馈和评分系统
+## 九、三端启动方式
 
----
+日常启动项目时，需要打开三个 PowerShell 窗口分别启动。不要把 backend、ai-service、frontend 写成一个连续命令，因为 `uvicorn` 和 `npm run dev` 会占用当前终端。
 
-## 十二、许可证
+### 窗口 1：启动 backend
+
+第一次启动：
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+第二次及以后启动：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+访问：
+
+- 后端健康检查：<http://127.0.0.1:8000/api/health>
+- 后端 Swagger：<http://127.0.0.1:8000/docs>
+
+### 窗口 2：启动 ai-service
+
+第一次启动：
+
+```powershell
+cd ai-service
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+第二次及以后启动：
+
+```powershell
+cd ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+访问：
+
+- AI 服务健康检查：<http://127.0.0.1:8001/ai/health>
+- AI 服务 Swagger：<http://127.0.0.1:8001/docs>
+
+### 窗口 3：启动 frontend
+
+第一次启动：
+
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+第二次及以后启动：
+
+```powershell
+cd frontend
+npm.cmd run dev
+```
+
+访问：
+
+- 前端页面：<http://localhost:5173>
+
+## 十、操作过一次之后的常规流程
+
+如果数据库、虚拟环境和依赖都已经配置过，日常启动通常只需要三个窗口：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+```powershell
+cd ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+```powershell
+cd frontend
+npm.cmd run dev
+```
+
+一般不需要每天重复执行 `schema.sql` 或 `seed.sql`。
+
+## 十一、AI 标题摘要生成模块说明
+
+在 `/ai/title-summary` 页面，用户可以：
+
+1. 手动输入或从新闻详情页导入正文。
+2. 选择标题数量、标题风格、摘要类型、摘要风格和摘要长度。
+3. 点击生成，获得候选标题、短摘要、长摘要、要点摘要、关键词、新闻要素和一致性校验结果。
+4. 查看并复用生成历史。
+
+AI 服务支持两种工作模式：
+
+- Mock 模式：快速返回，适合本地演示。
+- LLM 模式：接入 GLM-4-Flash，适合真实生成体验。
+
+AI 生成成功后，backend 会将生成记录保存到 `ai_generate_record` 表，个人中心可以查看生成历史。如果 ai-service 未启动，backend 会返回友好的 503 错误，不会导致 backend 崩溃。
+
+## 十二、RSS 新闻爬虫说明
+
+当前爬虫脚本：
+
+```text
+scripts/crawlers/rss_news_crawler.py
+```
+
+支持能力：
+
+1. RSS 新闻解析。
+2. `source_url` 去重。
+3. 原文页正文解析。
+4. 封面图 `cover_image` 提取。
+5. `crawl_log` 爬取日志。
+6. `--cleanup-days` 归档旧新闻。
+7. `--update-existing-content` 补全已有新闻正文和封面图。
+
+预览，不写入数据库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run --max-items 3 --fetch-content
+```
+
+正式入库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
+```
+
+补全已有新闻正文和封面图：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 20 --fetch-content --update-existing-content
+```
+
+归档 30 天前旧新闻：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content --cleanup-days 30
+```
+
+说明：
+
+- 当前只保存图片 URL，不下载图片文件。
+- 正文解析失败时使用 RSS 摘要兜底。
+- 不建议高频无限爬取。
+- 建议每 15 分钟执行一次，每次每源 5 到 10 条。
+
+## 十三、项目文档
+
+详细文档位于 `docs/` 目录：
+
+- `docs/api.md`：接口文档。
+- `docs/development_plan.md`：开发计划。
+- `docs/development_standard.md`：开发规范。
+- `docs/mock_data_news.md`：新闻模块 mock 数据说明。
+- `docs/ai_module_guide.md`：AI 模块使用指南。
+
+## 十四、常见问题
+
+### 1. 打开 http://127.0.0.1:8000/ 是 404
+
+这是正常的。请访问：
+
+- <http://127.0.0.1:8000/api/health>
+- <http://127.0.0.1:8000/docs>
+
+### 2. AI 服务暂时不可用
+
+通常表示 ai-service 未启动，或 LLM 调用失败。请启动：
+
+```powershell
+cd ai-service
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+### 3. 页面仍显示 mock 数据
+
+可能原因：
+
+1. MySQL 未启动。
+2. `backend/.env` 配置错误。
+3. 对应数据库表为空。
+4. backend 触发 mock fallback。
+
+可检查：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system -e ""SELECT COUNT(*) FROM news; SELECT COUNT(*) FROM community_post; SELECT COUNT(*) FROM news_category;"""
+```
+
+### 4. PowerShell 中 MySQL 导入失败
+
+PowerShell 里不要直接执行：
+
+```powershell
+mysql -u llm_news_user -p llm_news_system < database\schema.sql
+```
+
+请使用：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
+```
+
+## 十五、提交前检查
+
+```powershell
+git status
+```
+
+不要提交：
+
+- `backend/.env`
+- `ai-service/.env`
+- `node_modules`
+- `dist`
+- `.vite-temp`
+- `__pycache__`
+- `*.pyc`
+- 真实 API Key
+- MySQL root 密码
+
+检查冲突标记：
+
+```powershell
+Select-String -Path .\* -Pattern "<<<<<<<","=======",">>>>>>>" -Recurse
+```
+
+如需检查旧项目名称，请在本地将下面命令中的占位词替换为要检查的旧名称：
+
+```powershell
+Select-String -Path .\* -Pattern "旧项目名称关键词" -Recurse
+```
+
+## 十六、许可证
 
 项目采用 MIT 许可证。详见 LICENSE 文件。
-
----
-
-**祝你使用愉快！** 🚀
-
-有任何问题或建议，欢迎提交 Issue。
