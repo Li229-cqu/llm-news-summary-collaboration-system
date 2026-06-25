@@ -43,3 +43,7 @@ uploads/
 *.sql
 *.sqlite3
 backup/
+
+# Keep project database scripts under version control
+!database/
+!database/**/*.sql
