@@ -345,7 +345,10 @@ async function loadPosts(page = 1) {
   loadingPosts.value = true
   try {
     const result = await getPostList({ page, page_size: pageSize.value })
-    posts.value = result.list.map((p) => ({ ...p, liked: false }))
+    posts.value = result.list.map((p) => ({
+      ...p,
+      liked: Boolean(p.liked ?? (p as { is_liked?: boolean }).is_liked ?? false),
+    }))
     postTotal.value = result.total
   } finally {
     loadingPosts.value = false

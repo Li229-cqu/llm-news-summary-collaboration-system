@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -119,6 +119,7 @@ const total = ref(0)
 
 const recentNews = computed(() => newsList.value.slice(0, 3))
 const hasMoreNews = computed(() => total.value === 0 || newsList.value.length < total.value)
+const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
 
 const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
@@ -129,6 +130,7 @@ async function loadNews() {
 
   try {
     const result = await getNewsList({
+      category_id: activeCategoryId.value || undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -183,6 +185,7 @@ async function handleLoadMore() {
 
   try {
     const result = await getNewsList({
+      category_id: activeCategoryId.value || undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -225,6 +228,14 @@ onMounted(async () => {
 
   await Promise.all([loadNews(), loadHotNews(), loadTimelineTopics()])
 })
+
+watch(
+  () => route.query.category_id,
+  () => {
+    page.value = 1
+    loadNews()
+  },
+)
 </script>
 
 <style scoped>

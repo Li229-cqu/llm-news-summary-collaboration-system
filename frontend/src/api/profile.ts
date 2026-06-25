@@ -24,13 +24,40 @@ export interface FavoriteItem {
   publish_time: string
 }
 
+export interface CommentRecordItem {
+  comment_id: number
+  news_id: number
+  news_title: string
+  category_name: string
+  content: string
+  like_count: number
+  status: number
+  create_time: string
+}
+
 export interface AIRecordItem {
   id: number
+  source: string
+  source_news_id?: number | string | null
+  source_title: string
   input_text: string
   candidate_titles: string[]
   summary_short: string
   summary_long?: string
+  risk_level?: string
   create_time?: string
+}
+
+export interface SubscriptionCategory {
+  id: number
+  name: string
+  code: string
+  subscribed: boolean
+}
+
+export interface SubscriptionResponse {
+  subscribed_category_ids: number[]
+  categories: SubscriptionCategory[]
 }
 
 export interface PaginationResponse<T> {
@@ -62,11 +89,30 @@ export async function getFavorites(
   })
 }
 
+export async function getComments(
+  page: number = 1,
+  pageSize: number = 10
+): Promise<PaginationResponse<CommentRecordItem>> {
+  return request.get('/api/profile/comments', {
+    params: { page, page_size: pageSize },
+  })
+}
+
 export async function getAIRecords(
   page: number = 1,
   pageSize: number = 10
 ): Promise<PaginationResponse<AIRecordItem>> {
   return request.get('/api/profile/ai-records', {
     params: { page, page_size: pageSize },
+  })
+}
+
+export async function getSubscriptions(): Promise<SubscriptionResponse> {
+  return request.get('/api/profile/subscriptions')
+}
+
+export async function updateSubscriptions(categoryIds: number[]): Promise<SubscriptionResponse> {
+  return request.post('/api/profile/subscriptions', {
+    category_ids: categoryIds,
   })
 }

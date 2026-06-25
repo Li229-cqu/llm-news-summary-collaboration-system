@@ -80,6 +80,9 @@ const handleGenerate = async () => {
       summary_style: aiDraft.params.summary_style,
       title_style: aiDraft.params.title_style,
       summary_length: aiDraft.params.summary_length,
+      source: aiDraft.sourceNewsId ? 'news' : 'manual',
+      source_news_id: aiDraft.sourceNewsId,
+      source_title: aiDraft.sourceTitle,
     })
 
     aiDraft.setResult(result)

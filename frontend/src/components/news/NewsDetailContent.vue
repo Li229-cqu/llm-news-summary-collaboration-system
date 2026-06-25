@@ -9,6 +9,14 @@
 
     <h1 class="news-detail-content__title">{{ news.title }}</h1>
 
+    <img
+      v-if="news.cover_image && !imageFailed"
+      class="news-detail-content__cover"
+      :src="news.cover_image"
+      :alt="news.title"
+      @error="imageFailed = true"
+    />
+
     <div class="news-detail-content__body">
       <p v-for="(paragraph, index) in paragraphs" :key="index">
         {{ paragraph }}
@@ -18,17 +26,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 export interface NewsDetailContentItem {
   title: string
   summary: string
   content: string
+  cover_image?: string
 }
 
 const props = defineProps<{
   news: NewsDetailContentItem
 }>()
+
+const imageFailed = ref(false)
+
+watch(
+  () => props.news.cover_image,
+  () => {
+    imageFailed.value = false
+  },
+)
 
 const paragraphs = computed(() =>
   props.news.content
@@ -73,6 +91,14 @@ const paragraphs = computed(() =>
   color: var(--color-text-primary);
   font-size: 30px;
   line-height: 1.35;
+}
+
+.news-detail-content__cover {
+  width: 100%;
+  max-height: 420px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--color-bg);
 }
 
 .news-detail-content__body {

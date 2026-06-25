@@ -1,46 +1,114 @@
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from app.common.exceptions import AppException
+from app.db.database import execute_one
 from app.mock.users import MOCK_USERS
 from app.modules.auth.schema import LoginRequest, LoginResponse, UserInfo
 
+TOKEN_USERNAME_MAP = {
+    "mock-token-user": "user",
+    "mock-token-editor": "editor",
+    "mock-token-admin": "admin",
+}
+
 
 def _to_user_info(user: dict[str, Any]) -> UserInfo:
-    """将 Mock 用户数据转换为不含密码和 Token 的用户信息。"""
+    """Convert a db/mock user row into API user info."""
     return UserInfo(
-        id=user["id"],
-        username=user["username"],
-        nickname=user["nickname"],
-        role=user["role"],
-        avatar=user["avatar"],
-        status=user["status"],
+        id=int(user["id"]),
+        username=str(user["username"]),
+        nickname=str(user["nickname"]),
+        role=str(user["role"]),
+        avatar=str(user.get("avatar") or ""),
+        status=int(user.get("status", 1)),
     )
 
 
-def login_mock_user(request: LoginRequest) -> LoginResponse:
-    """验证固定 Mock 账号并返回固定 Token。"""
+def _get_token_for_role(role: str) -> str:
+    return {
+        "user": "mock-token-user",
+        "editor": "mock-token-editor",
+        "admin": "mock-token-admin",
+    }.get(role, "mock-token-user")
+
+
+def _get_db_user_by_username(username: str) -> dict[str, Any] | None:
+    return execute_one(
+        """
+        SELECT id, username, password, nickname, avatar, role, status
+        FROM user
+        WHERE username = %s AND status = 1
+        LIMIT 1
+        """,
+        (username,),
+    )
+
+
+def _get_mock_user_by_username(username: str, password: str | None = None) -> dict[str, Any] | None:
     for user in MOCK_USERS:
-        if user["username"] == request.username and user["password"] == request.password:
-            return LoginResponse(token=user["token"], user=_to_user_info(user))
+        if user["username"] != username:
+            continue
+        if password is not None and user["password"] != password:
+            continue
+        return user
+    return None
+
+
+def _get_mock_user_by_token(token: str) -> dict[str, Any] | None:
+    for user in MOCK_USERS:
+        if user["token"] == token:
+            return user
+    return None
+
+
+def login_mock_user(request: LoginRequest) -> LoginResponse:
+    """Prefer the database user table and fallback to mock users when needed."""
+    try:
+        db_user = _get_db_user_by_username(request.username)
+    except Exception:
+        db_user = None
+
+    if db_user is not None:
+        if db_user["password"] != request.password:
+            raise AppException(code=401, message="账号或密码错误")
+        return LoginResponse(
+            token=_get_token_for_role(str(db_user["role"])),
+            user=_to_user_info(db_user),
+        )
+
+    mock_user = _get_mock_user_by_username(request.username, request.password)
+    if mock_user is not None:
+        return LoginResponse(token=mock_user["token"], user=_to_user_info(mock_user))
 
     raise AppException(code=401, message="账号或密码错误")
 
 
 def logout_mock_user() -> None:
-    """Mock 阶段不保存登录状态，退出接口仅保留统一入口。"""
+    """Mock logout keeps the API shape only."""
     return None
 
 
 def get_mock_user_by_token(token: str) -> Optional[UserInfo]:
-    """按固定 Mock Token 查询用户；后续可替换为 JWT 解析和用户表查询。"""
-    for user in MOCK_USERS:
-        if user["token"] == token:
-            return _to_user_info(user)
+    """Resolve a user by mock token, preferring the database user table."""
+    username = TOKEN_USERNAME_MAP.get(token)
+    if username is not None:
+        try:
+            db_user = _get_db_user_by_username(username)
+        except Exception:
+            db_user = None
+        if db_user is not None:
+            return _to_user_info(db_user)
+
+    mock_user = _get_mock_user_by_token(token)
+    if mock_user is not None:
+        return _to_user_info(mock_user)
     return None
 
 
 def get_current_mock_user(authorization: Optional[str]) -> UserInfo:
-    """根据 Bearer Token 查询固定 Mock 用户。"""
+    """Resolve the current user from a Bearer token."""
     if not authorization or not authorization.startswith("Bearer "):
         raise AppException(code=401, message="未登录或登录状态已失效")
 
@@ -50,3 +118,4 @@ def get_current_mock_user(authorization: Optional[str]) -> UserInfo:
         return user
 
     raise AppException(code=401, message="未登录或登录状态已失效")
+

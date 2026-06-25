@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +15,9 @@ class AIGenerateRequest(BaseModel):
     summary_style: str = "简明扼要"
     title_style: str = "客观新闻型"
     summary_length: Literal["short", "long", "both"] = "both"
+    source: Literal["manual", "news"] = "manual"
+    source_news_id: Optional[int | str] = None
+    source_title: str = ""
 
 
 class NewsElement(BaseModel):
