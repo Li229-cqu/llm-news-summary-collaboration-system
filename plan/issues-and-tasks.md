@@ -239,6 +239,91 @@ Timeline 调用 AI 服务耗时超过 10 秒，前端没有任何进度提示，
 
 ---
 
+#### 新功能4：个性化推荐系统
+
+**问题描述**
+
+首页热榜对所有用户相同，没有基于个人阅读习惯的推荐，无法提升用户粘性。
+
+**实现思路**
+
+1. 新 API：`GET /api/profile/recommendations?limit=10`
+2. 推荐算法：基于用户的浏览历史、收藏、点赞生成个性化新闻列表
+   ```
+   推荐分数 = (话题热度 * 用户相关度 * 新闻时新性)
+   话题热度：该话题下所有新闻的互动总和
+   用户相关度：用户在该话题下的浏览/收藏/点赞次数
+   时新性：发布时间距今的天数（指数衰减）
+   ```
+3. 排序后取 Top N，返回给前端
+4. 可选：缓存热门推荐结果（Redis），1 小时刷新一次
+
+**数据来源**：
+- `browse_history` → 用户关注话题
+- `favorite` → 用户偏好
+- `user_like` → 用户倾向
+
+**完成标准**：推荐 API 返回 10 条符合用户偏好的新闻；首页推荐区正常展示
+
+**涉及文件**
+
+- `backend/app/modules/profile/router.py`（新增推荐端点）
+- `backend/app/modules/profile/service.py`（推荐算法）
+- `frontend/src/components/profile/RecommendationPanel.vue`（推荐展示组件）
+
+---
+
+#### 新功能5：用户阅读脉络可视化
+
+**问题描述**
+
+用户想了解自己的阅读轨迹和关注话题的演变，但只能逐条查看历史记录。
+
+**实现思路**
+
+**A. 后端数据组织**（核心）：
+1. 话题关联计算：统计用户在短时间内（24 小时内）同时浏览的话题对
+   ```sql
+   SELECT n1.topic_id, n2.topic_id, COUNT(*) as co_browse_count
+   FROM browse_history bh1, browse_history bh2, news n1, news n2
+   WHERE bh1.user_id = bh2.user_id = ?
+     AND bh1.news_id = n1.id AND bh2.news_id = n2.id
+     AND ABS(TIMESTAMPDIFF(HOUR, bh1.browse_time, bh2.browse_time)) < 24
+     AND n1.topic_id != n2.topic_id
+   GROUP BY n1.topic_id, n2.topic_id
+   ```
+2. 话题热力数据：用户在各话题下的浏览/收藏次数
+3. 时间轴数据：按日期聚合用户浏览各话题的频率
+
+**B. 前端可视化**（3 种视图）：
+1. **力导向图**：用 D3.js / ECharts Graph 展示话题关系网
+   - 节点：用户浏览的话题（大小 = 浏览深度）
+   - 边：话题关联（粗细 = 同时浏览频率）
+   - 颜色：按分类区分
+2. **时间轴视图**：按阅读时间展示话题演变过程
+3. **热力图**：用户在各话题下的活跃度矩阵
+
+**C. 导出功能**：
+- 生成"我的阅读年报" PDF
+  - 包含：关键话题、阅读时间、热门分类、关注演变
+  - 样式：仿网易云年终报告
+
+**完成标准**：
+- 可视化脉络图正常显示，节点/边数据准确
+- 前端支持 3 种视图切换
+- PDF 导出正常生成
+
+**涉及文件**
+
+- `backend/app/modules/profile/router.py`（新增脉络和导出端点）
+- `backend/app/modules/profile/service.py`（话题关联计算）
+- `frontend/src/components/profile/ReadingTrajectory.vue`（力导向图）
+- `frontend/src/components/profile/ReadingTimeline.vue`（时间轴）
+- `frontend/src/components/profile/ReadingHeatmap.vue`（热力图）
+- `frontend/src/utils/export-pdf.ts`（PDF 导出工具）
+
+---
+
 ### 🔐 安全性问题（待功能完成后统一处理）
 
 > 以下问题在内网开发和演示阶段风险可控，等核心功能全部开发完毕后，统一由一人负责实施。
@@ -384,6 +469,96 @@ database/migrations/007_enhance_event_timeline.sql
 
 ---
 
+### 👤 任务E — 个性化推荐系统
+
+**负责问题**：新功能4（个性化推荐）
+
+**开发顺序**：独立开发，无依赖
+
+**主要改动范围**：
+
+```
+backend/app/modules/profile/router.py（新增推荐端点）
+backend/app/modules/profile/service.py（推荐算法）
+frontend/src/components/profile/RecommendationPanel.vue
+```
+
+**完成标准**：推荐 API 返回符合用户偏好的新闻列表；首页推荐区展示推荐新闻；算法正确计算用户相关度。
+
+**⚠️ 可并发性**：**可完全并发**，与任务 A-D 无依赖关系。
+
+---
+
+### 👤 任务F — 用户阅读脉络可视化
+
+**负责问题**：新功能5（阅读脉络可视化）
+
+**开发分工**（5 个人）：
+1. **F1 - 后端数据组织**（1 人）
+   - 话题关联计算
+   - 时间轴数据组织
+   - 涉及文件：`backend/app/modules/profile/service.py` + `router.py`
+
+2. **F2 - 前端力导向图**（1 人）
+   - D3.js / ECharts Graph 实现
+   - 涉及文件：`frontend/src/components/profile/ReadingTrajectory.vue`
+
+3. **F3 - 前端时间轴视图**（1 人）
+   - 按日期聚合展示
+   - 涉及文件：`frontend/src/components/profile/ReadingTimeline.vue`
+
+4. **F4 - 前端热力图**（1 人）
+   - 话题活跃度矩阵
+   - 涉及文件：`frontend/src/components/profile/ReadingHeatmap.vue`
+
+5. **F5 - 导出功能**（1 人）
+   - PDF 年报生成
+   - 涉及文件：`frontend/src/utils/export-pdf.ts` + 导出路由
+
+**开发顺序（关键路径）**：
+
+```
+第 1 阶段：F1 后端数据组织（必须最先）
+  └─ 计算话题关联、时间轴数据、热力数据
+  └─ 提供 3 个 API 端点：
+     - GET /api/profile/reading-trajectory（脉络图数据）
+     - GET /api/profile/reading-timeline（时间轴数据）
+     - GET /api/profile/reading-heatmap（热力数据）
+
+第 2 阶段（与 F1 并发）：F2、F3、F4 前端可视化
+  ├─ F2 力导向图：消费 trajectory API
+  ├─ F3 时间轴：消费 timeline API
+  └─ F4 热力图：消费 heatmap API
+  └─ 可用 mock 数据开发，等 F1 API 就绪后集成
+
+第 3 阶段（等 F1 完成后）：F5 导出功能
+  └─ 调用 F1 提供的 API 获取数据
+  └─ 用 jspdf + html2canvas 生成 PDF 年报
+```
+
+**并发矩阵**：
+
+| 阶段 | F1 | F2 | F3 | F4 | F5 | 说明 |
+|------|----|----|----|----|----|----|
+| **第1阶段** | ✅ | 💤 | 💤 | 💤 | 💤 | F1 必须先做 |
+| **第2阶段** | ✅ | ✅ | ✅ | ✅ | 💤 | F2/F3/F4 并发，用 mock 数据 |
+| **第3阶段** | ✅ | ✅ | ✅ | ✅ | ✅ | F5 等 F1 API 就绪 |
+
+**临界路径**：F1 → F5（其他可并发）
+
+**完成标准**：
+- 脉络图节点/边数据准确
+- 时间轴正确展示话题演变
+- 热力图反映用户活跃度
+- PDF 导出包含完整数据和美观样式
+
+**⚠️ 可并发性**：
+- ✅ F2、F3、F4 **可完全并发**（等 F1 API）
+- ❌ F5 **必须等 F1 完成**（需要数据 API）
+- ✅ 与任务 A-E **基本不冲突**（只涉及 profile 模块）
+
+---
+
 ### 🔐 安全专项（功能全部完成后统一处理）
 
 **负责问题**：安全问题1、安全问题2、安全问题3
@@ -400,6 +575,7 @@ database/migrations/007_enhance_event_timeline.sql
 |---------|---------|---------|
 | `backend/app/main.py` | C（挂载 StaticFiles）、D（可能调整） | 改动区域不同，可并发；合并时各自保留代码 |
 | `backend/app/modules/community/service.py` | B（AI 助手 + 总结）、C（可能涉及） | B 先完成，C 不涉及此文件 |
+| `backend/app/modules/profile/service.py` | E（推荐算法）、F1（脉络计算） | 可并发，两者独立实现各自算法 |
 | `database/migrations/` | C（008）、D（007） | 执行顺序：007 → 008，编号确保序号不冲突 |
 
 ### 📋 推荐整体节奏
@@ -410,17 +586,46 @@ database/migrations/007_enhance_event_timeline.sql
   B: AI Mock 质量改进（去标题党）
   C: 爬虫图片本地化
   D: Timeline 进度反馈
+  E: 个性化推荐系统
+  F1: 阅读脉络后端数据组织（同步开始）
 
 第2轮（第1轮完成后）：
   A: 管理后台改真实 SQL（依赖连接池稳定）
   B: 社区 AI 助手 + 评论总结
   C: 社区评论富媒体（依赖 uploads 挂载）
   D: Timeline 结构升级 + AI 提示词改造
+  F2/F3/F4 (并发): 阅读脉络前端可视化（F2力导向图、F3时间轴、F4热力图）
+
+第3轮（F1 完成后）：
+  F5: 阅读脉络 PDF 导出
 
 安全专项（所有功能完成后）：
   一人负责: 密码加密 + JWT + Token 存储
 ```
 
+### 👥 人员配置建议
+
+**总 6 个任务，分配给 8-9 人（建议）**：
+
+```
+A: 1 人（数据库）
+B: 1 人（AI 能力）
+C: 1 人（爬虫+富媒体）
+D: 1 人（Timeline）
+E: 1 人（推荐算法）
+F: 5 人分工
+  ├─ F1: 1 人（后端数据）
+  ├─ F2: 1 人（力导向图）
+  ├─ F3: 1 人（时间轴）
+  ├─ F4: 1 人（热力图）
+  └─ F5: 1 人（PDF导出）
+```
+
+**关键约束**：
+1. **F1 必须最先完成**（其他前端人员可用 mock 数据并行开发）
+2. **F5 必须等 F1**（但 F2/F3/F4 可同时进行）
+3. **E 完全独立**（与其他任务无依赖）
+
 ---
 
-**累计待做功能**：6 个问题 + 3 个新功能，分为 4 个任务，两轮并发开发。预估 2-3 周完成全部功能。
+**累计待做功能**：6 个问题 + 5 个新功能，分为 6 个任务（其中 F 分为 5 个人），三轮并发开发。预估 3-4 周完成全部功能。
