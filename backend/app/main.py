@@ -1,9 +1,15 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.common.exceptions import AppException, register_exception_handlers
 from app.common.response import success_response
 from app.core.config import settings
+from app.db.database import check_db_connection
+
+logger = logging.getLogger(__name__)
+_db_connected: bool = False
 from app.modules.admin.router import router as admin_router
 from app.modules.ai.router import router as ai_router
 from app.modules.auth.router import router as auth_router
@@ -31,6 +37,23 @@ app.add_middleware(
 register_exception_handlers(app)
 
 
+@app.on_event("startup")
+async def startup_check() -> None:
+    global _db_connected
+    _db_connected = check_db_connection()
+    if _db_connected:
+        logger.info("数据库连接正常，系统使用真实数据库运行。")
+    else:
+        logger.warning(
+            "\n"
+            "╔══════════════════════════════════════════════════════╗\n"
+            "║  ⚠️  数据库连接失败                                   ║\n"
+            "║  系统将使用 Mock 数据运行，请检查 .env 配置           ║\n"
+            "║  DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME ║\n"
+            "╚══════════════════════════════════════════════════════╝"
+        )
+
+
 @app.get(f"{settings.api_prefix}/health", tags=["系统"])
 async def health_check():
     """返回后端服务健康状态。"""
@@ -39,6 +62,7 @@ async def health_check():
             "status": "ok",
             "service": "backend",
             "project": settings.project_name,
+            "db_status": "connected" if _db_connected else "mock_mode",
         }
     )
 

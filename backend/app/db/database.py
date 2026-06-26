@@ -57,6 +57,20 @@ def execute_update(sql: str, params: Any | None = None) -> int:
         connection.close()
 
 
+def check_db_connection() -> bool:
+    """执行 SELECT 1 检测数据库是否可达，返回 True/False。"""
+    try:
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        finally:
+            conn.close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def execute_insert(sql: str, params: Any | None = None) -> int:
     """执行插入语句并返回自增ID。"""
     connection = get_connection()
