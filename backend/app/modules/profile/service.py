@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+import re
+from collections import Counter
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Union
 
-from app.common.utils import format_datetime, normalize_text, paginate
+from app.common.utils import format_datetime as utils_format_datetime, normalize_text, paginate
 from app.db.database import execute_one, execute_query, execute_update
 from app.mock.ai_records import MOCK_AI_RECORDS
 from app.mock.comments import MOCK_NEWS_COMMENTS
@@ -24,6 +26,22 @@ from app.modules.profile.schema import (
     FavoriteItem,
     ProfileOverview,
     ProfileTestData,
+    ReadingHeatmapCell,
+    ReadingHeatmapResponse,
+    ReadingHeatmapSummary,
+    ReadingRecentNews,
+    ReadingTimelineCategoryItem,
+    ReadingTimelineDateItem,
+    ReadingTimelineNewsItem,
+    ReadingTimelineResponse,
+    ReadingTimelineSummary,
+    ReadingTimelineTopicItem,
+    ReadingTopCategory,
+    ReadingTopTopic,
+    ReadingTrajectoryEdge,
+    ReadingTrajectoryNode,
+    ReadingTrajectoryResponse,
+    ReadingTrajectorySummary,
     SubscriptionCategory,
     SubscriptionResponse,
     SubscriptionUpdateRequest,
@@ -63,6 +81,589 @@ def _parse_json_field(value: Any, default: Any = None) -> Any:
     return value
 
 
+def parse_tags(value: Any) -> list[str]:
+    """安全解析 tags 字段，始终返回 list[str]。"""
+
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [normalize_text(item) for item in value if normalize_text(item)]
+    if isinstance(value, tuple):
+        return [normalize_text(item) for item in list(value) if normalize_text(item)]
+    if isinstance(value, dict):
+        parsed_items = [normalize_text(item) for item in value.keys()]
+        return [item for item in parsed_items if item]
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if isinstance(parsed, list):
+            return [normalize_text(item) for item in parsed if normalize_text(item)]
+        if isinstance(parsed, dict):
+            parsed_items = [normalize_text(item) for item in parsed.keys()]
+            return [item for item in parsed_items if item]
+
+        if "," in stripped:
+            return [part for part in (normalize_text(item) for item in stripped.split(",")) if part]
+        return [normalize_text(stripped)] if normalize_text(stripped) else []
+
+    normalized = normalize_text(value)
+    return [normalized] if normalized else []
+
+
+def format_datetime(value: Any) -> str:
+    """统一把数据库里的时间值转成字符串。"""
+
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        return value
+    try:
+        return utils_format_datetime(value)
+    except Exception:  # noqa: BLE001
+        return normalize_text(value)
+
+
+def normalize_topic_name(record: Dict[str, Any]) -> str:
+    """为阅读脉络兜底生成话题名称。"""
+
+    topic_name = normalize_text(record.get("topic_name"))
+    if topic_name:
+        return topic_name
+
+    tags = parse_tags(record.get("tags"))
+    if tags:
+        return tags[0]
+
+    category_name = normalize_text(record.get("category_name"))
+    if category_name:
+        return category_name
+
+    return "未分类话题"
+
+
+def clamp_reading_params(days: int = 30, limit: int = 200) -> tuple[int, int]:
+    """限制阅读脉络查询参数范围，避免一次性查询过多。"""
+
+    try:
+        days_value = int(days)
+    except (TypeError, ValueError):
+        days_value = 30
+
+    try:
+        limit_value = int(limit)
+    except (TypeError, ValueError):
+        limit_value = 200
+
+    days_value = max(1, min(days_value, 365))
+    limit_value = max(10, min(limit_value, 500))
+    return days_value, limit_value
+
+
+def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> list[dict]:
+    """查询并整理用户最近的阅读记录。"""
+
+    if not user_id:
+        return []
+
+    safe_days, safe_limit = clamp_reading_params(days=days, limit=limit)
+    try:
+        rows = execute_query(
+            """
+            SELECT
+                bh.id AS history_id,
+                bh.user_id,
+                bh.news_id,
+                bh.browse_time,
+
+                n.title,
+                n.summary,
+                n.category_id,
+                n.topic_id,
+                n.source,
+                n.publish_time,
+                n.tags,
+                n.view_count,
+                n.like_count,
+                n.comment_count,
+                n.favorite_count,
+
+                COALESCE(nc.name, '未分类') AS category_name,
+                COALESCE(nc.code, '') AS category_code,
+
+                COALESCE(nt.topic_name, '') AS topic_name,
+                COALESCE(nt.summary, '') AS topic_summary
+            FROM browse_history bh
+            JOIN news n ON n.id = bh.news_id
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            LEFT JOIN news_topic nt ON nt.id = n.topic_id
+            WHERE bh.user_id = %s
+              AND bh.browse_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+            ORDER BY bh.browse_time DESC, bh.id DESC
+            LIMIT %s
+            """,
+            [int(user_id), safe_days, safe_limit],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("读取用户阅读记录失败，返回空列表：%s", exc)
+        return []
+
+    if not rows:
+        return []
+
+    reading_records: list[dict] = []
+    for row in rows:
+        item = {
+            "history_id": int(row.get("history_id") or 0),
+            "user_id": int(row.get("user_id") or 0),
+            "news_id": int(row.get("news_id") or 0),
+            "title": normalize_text(row.get("title")),
+            "summary": normalize_text(row.get("summary")),
+            "category_id": row.get("category_id"),
+            "category_name": normalize_text(row.get("category_name")) or "未分类",
+            "category_code": normalize_text(row.get("category_code")),
+            "topic_id": row.get("topic_id"),
+            "topic_name": normalize_topic_name(
+                {
+                    "topic_name": row.get("topic_name"),
+                    "tags": row.get("tags"),
+                    "category_name": row.get("category_name"),
+                }
+            ),
+            "topic_summary": normalize_text(row.get("topic_summary")),
+            "source": normalize_text(row.get("source")),
+            "publish_time": format_datetime(row.get("publish_time")),
+            "browse_time": format_datetime(row.get("browse_time")),
+            "tags": parse_tags(row.get("tags")),
+            "view_count": int(row.get("view_count") or 0),
+            "like_count": int(row.get("like_count") or 0),
+            "comment_count": int(row.get("comment_count") or 0),
+            "favorite_count": int(row.get("favorite_count") or 0),
+        }
+        reading_records.append(item)
+
+    return reading_records
+
+
+def _safe_topic_slug(topic_name: str) -> str:
+    normalized = normalize_text(topic_name)
+    if not normalized:
+        return "unknown"
+    slug = re.sub(r"[^\w\u4e00-\u9fff]+", "_", normalized, flags=re.UNICODE)
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug or "unknown"
+
+
+def get_reading_trajectory(user_id: int, days: int = 30, limit: int = 200) -> dict:
+    """构建阅读脉络图所需的数据结构。"""
+
+    safe_days, safe_limit = clamp_reading_params(days=days, limit=limit)
+    records = get_user_reading_records(user_id, days=safe_days, limit=safe_limit)
+
+    if not records:
+        return ReadingTrajectoryResponse(
+            summary=ReadingTrajectorySummary(
+                total_reads=0,
+                unique_news_count=0,
+                category_count=0,
+                topic_count=0,
+                top_category="",
+                top_topic="",
+                date_range=f"最近{safe_days}天",
+            )
+        ).dict()
+
+    category_counter: Counter[tuple[Any, str]] = Counter()
+    topic_counter: Counter[tuple[Any, str]] = Counter()
+    news_counter: Counter[int] = Counter()
+    category_news_map: dict[tuple[Any, str], set[tuple[Any, str]]] = {}
+    topic_news_map: dict[str, set[int]] = {}
+    category_nodes: dict[str, ReadingTrajectoryNode] = {}
+    topic_nodes: dict[str, ReadingTrajectoryNode] = {}
+    news_nodes: dict[str, ReadingTrajectoryNode] = {}
+    category_topic_edges: Counter[tuple[str, str]] = Counter()
+    topic_news_edges: Counter[tuple[str, str]] = Counter()
+    sequence_edges: Counter[tuple[str, str]] = Counter()
+    recent_news_items: list[ReadingRecentNews] = []
+    seen_recent_news: set[int] = set()
+    previous_news_node_id: Optional[str] = None
+
+    for record in records:
+        category_id = record.get("category_id")
+        category_name = normalize_text(record.get("category_name")) or "未分类"
+        category_key = (category_id, category_name)
+        category_counter[category_key] += 1
+        category_news_map.setdefault(category_key, set()).add((record.get("news_id"), normalize_text(record.get("title"))))
+
+        category_node_id = f"category_{category_id}" if category_id not in (None, "", 0) else "category_unknown"
+        if category_node_id not in category_nodes:
+            category_nodes[category_node_id] = ReadingTrajectoryNode(
+                id=category_node_id,
+                name=category_name,
+                type="category",
+                category_id=int(category_id) if category_id not in (None, "", 0) else None,
+                category_name=category_name,
+            )
+        category_nodes[category_node_id].read_count += 1
+        category_nodes[category_node_id].value += 1
+
+        topic_id = record.get("topic_id")
+        topic_name = normalize_topic_name(record)
+        topic_node_id = (
+            f"topic_{topic_id}"
+            if topic_id not in (None, "", 0)
+            else f"topic_virtual_{_safe_topic_slug(topic_name)}"
+        )
+        topic_counter[(topic_id, topic_name)] += 1
+        topic_news_map.setdefault(topic_node_id, set()).add(int(record.get("news_id") or 0))
+        if topic_node_id not in topic_nodes:
+            topic_nodes[topic_node_id] = ReadingTrajectoryNode(
+                id=topic_node_id,
+                name=topic_name,
+                type="topic",
+                topic_id=int(topic_id) if topic_id not in (None, "", 0) else None,
+                topic_name=topic_name,
+            )
+        topic_nodes[topic_node_id].read_count += 1
+        topic_nodes[topic_node_id].value += 1
+
+        news_id = int(record.get("news_id") or 0)
+        news_node_id = f"news_{news_id}"
+        news_counter[news_id] += 1
+        if news_node_id not in news_nodes:
+            news_nodes[news_node_id] = ReadingTrajectoryNode(
+                id=news_node_id,
+                name=normalize_text(record.get("title")),
+                type="news",
+                news_id=news_id,
+                category_id=int(category_id) if category_id not in (None, "", 0) else None,
+                topic_id=int(topic_id) if topic_id not in (None, "", 0) else None,
+                category_name=category_name,
+                topic_name=topic_name,
+                browse_time=format_datetime(record.get("browse_time")),
+            )
+        else:
+            current_time = format_datetime(record.get("browse_time"))
+            if current_time > news_nodes[news_node_id].browse_time:
+                news_nodes[news_node_id].browse_time = current_time
+
+        news_nodes[news_node_id].read_count += 1
+        news_nodes[news_node_id].value += 1
+
+        category_topic_edges[(category_node_id, topic_node_id)] += 1
+        topic_news_edges[(topic_node_id, news_node_id)] += 1
+
+        if previous_news_node_id and previous_news_node_id != news_node_id:
+            sequence_edges[(previous_news_node_id, news_node_id)] += 1
+        previous_news_node_id = news_node_id
+
+        if news_id not in seen_recent_news:
+            seen_recent_news.add(news_id)
+            recent_news_items.append(
+                ReadingRecentNews(
+                    news_id=news_id,
+                    title=normalize_text(record.get("title")),
+                    category_name=category_name,
+                    topic_name=topic_name,
+                    browse_time=format_datetime(record.get("browse_time")),
+                )
+            )
+
+    summary = ReadingTrajectorySummary(
+        total_reads=len(records),
+        unique_news_count=len({int(record.get("news_id") or 0) for record in records if record.get("news_id")}),
+        category_count=len(category_counter),
+        topic_count=len(topic_counter),
+        top_category=max(category_counter.items(), key=lambda item: (item[1], str(item[0][1])))[0][1]
+        if category_counter
+        else "",
+        top_topic=max(topic_counter.items(), key=lambda item: (item[1], str(item[0][1])))[0][1]
+        if topic_counter
+        else "",
+        date_range=f"最近{safe_days}天",
+    )
+
+    top_categories = [
+        ReadingTopCategory(
+            category_id=int(category_id) if category_id not in (None, "", 0) else None,
+            category_name=category_name,
+            read_count=count,
+        )
+        for (category_id, category_name), count in sorted(
+            category_counter.items(), key=lambda item: (-item[1], str(item[0][1]))
+        )[:5]
+    ]
+
+    top_topics = [
+        ReadingTopTopic(
+            topic_id=int(topic_id) if topic_id not in (None, "", 0) else None,
+            topic_name=topic_name,
+            read_count=count,
+        )
+        for (topic_id, topic_name), count in sorted(
+            topic_counter.items(), key=lambda item: (-item[1], str(item[0][1]))
+        )[:5]
+    ]
+
+    nodes = list(category_nodes.values()) + list(topic_nodes.values()) + list(news_nodes.values())
+    edges = [
+        ReadingTrajectoryEdge(source=source, target=target, value=value, type="category_topic")
+        for (source, target), value in category_topic_edges.items()
+    ]
+    edges.extend(
+        ReadingTrajectoryEdge(source=source, target=target, value=value, type="topic_news")
+        for (source, target), value in topic_news_edges.items()
+    )
+    edges.extend(
+        ReadingTrajectoryEdge(source=source, target=target, value=value, type="sequence")
+        for (source, target), value in sequence_edges.items()
+    )
+
+    recent_news = recent_news_items[:10]
+
+    return ReadingTrajectoryResponse(
+        summary=summary,
+        nodes=nodes,
+        edges=edges,
+        top_categories=top_categories,
+        top_topics=top_topics,
+        recent_news=recent_news,
+    ).dict()
+
+
+
+
+def get_reading_timeline(user_id: int, days: int = 30, group_by: str = "day") -> dict:
+    """构建阅读时间线所需的数据结构。"""
+
+    safe_days, safe_limit = clamp_reading_params(days=days, limit=500)
+    if normalize_text(group_by).lower() != "day":
+        group_by = "day"
+
+    records = get_user_reading_records(user_id, days=safe_days, limit=safe_limit)
+    if not records:
+        return ReadingTimelineResponse(
+            summary=ReadingTimelineSummary(
+                total_days=0,
+                total_reads=0,
+                most_active_date="",
+                most_active_category="",
+            ),
+            items=[],
+        ).dict()
+
+    grouped_records: dict[str, list[dict]] = {}
+    date_counter: Counter[str] = Counter()
+    category_counter: Counter[tuple[Any, str]] = Counter()
+
+    for record in records:
+        browse_time = normalize_text(record.get("browse_time"))
+        read_date = browse_time[:10] if len(browse_time) >= 10 else browse_time
+        if not read_date:
+            continue
+
+        grouped_records.setdefault(read_date, []).append(record)
+        date_counter[read_date] += 1
+
+        category_id = record.get("category_id")
+        category_name = normalize_text(record.get("category_name")) or "未分类"
+        category_counter[(category_id, category_name)] += 1
+
+    if not grouped_records:
+        return ReadingTimelineResponse(
+            summary=ReadingTimelineSummary(
+                total_days=0,
+                total_reads=0,
+                most_active_date="",
+                most_active_category="",
+            ),
+            items=[],
+        ).dict()
+
+    items: list[ReadingTimelineDateItem] = []
+    for read_date in sorted(grouped_records.keys(), reverse=True):
+        day_records = grouped_records[read_date]
+        day_category_counter: Counter[tuple[Any, str]] = Counter()
+        day_topic_counter: Counter[tuple[Any, str]] = Counter()
+        day_news_items: list[ReadingTimelineNewsItem] = []
+
+        for record in day_records:
+            category_id = record.get("category_id")
+            category_name = normalize_text(record.get("category_name")) or "未分类"
+            day_category_counter[(category_id, category_name)] += 1
+
+            topic_id = record.get("topic_id")
+            topic_name = normalize_topic_name(record)
+            day_topic_counter[(topic_id, topic_name)] += 1
+
+            day_news_items.append(
+                ReadingTimelineNewsItem(
+                    news_id=int(record.get("news_id") or 0),
+                    title=normalize_text(record.get("title")),
+                    category_name=category_name,
+                    topic_name=topic_name,
+                    browse_time=normalize_text(record.get("browse_time")),
+                )
+            )
+
+        categories = [
+            ReadingTimelineCategoryItem(
+                category_id=int(category_id) if category_id not in (None, "", 0) else None,
+                category_name=category_name if category_name else "未分类",
+                read_count=count,
+            )
+            for (category_id, category_name), count in sorted(
+                day_category_counter.items(), key=lambda item: (-item[1], str(item[0][1]))
+            )
+        ]
+
+        topics = [
+            ReadingTimelineTopicItem(
+                topic_id=int(topic_id) if topic_id not in (None, "", 0) else None,
+                topic_name=topic_name,
+                read_count=count,
+            )
+            for (topic_id, topic_name), count in sorted(
+                day_topic_counter.items(), key=lambda item: (-item[1], str(item[0][1]))
+            )
+        ]
+
+        items.append(
+            ReadingTimelineDateItem(
+                date=read_date,
+                total_reads=len(day_records),
+                categories=categories,
+                topics=topics,
+                news=day_news_items,
+            )
+        )
+
+    most_active_date = max(date_counter.items(), key=lambda item: (item[1], item[0]))[0]
+    most_active_category = (
+        sorted(category_counter.items(), key=lambda item: (-item[1], str(item[0][1])))[0][0][1]
+        if category_counter
+        else ""
+    )
+
+    summary = ReadingTimelineSummary(
+        total_days=len(grouped_records),
+        total_reads=len(records),
+        most_active_date=most_active_date,
+        most_active_category=most_active_category,
+    )
+
+    return ReadingTimelineResponse(summary=summary, items=items).dict()
+
+
+def get_reading_heatmap(user_id: int, days: int = 30, dimension: str = "category") -> dict:
+    """构建阅读热力图所需的数据结构。"""
+
+    safe_days, _ = clamp_reading_params(days=days, limit=500)
+    if normalize_text(dimension).lower() != "category":
+        dimension = "category"
+
+    records = get_user_reading_records(user_id, days=safe_days, limit=500)
+    if not records:
+        return ReadingHeatmapResponse(
+            x_axis=[],
+            y_axis=[],
+            cells=[],
+            summary=ReadingHeatmapSummary(
+                max_value=0,
+                most_active_category="",
+                most_active_date="",
+            ),
+        ).dict()
+
+    date_counter: dict[str, Counter[str]] = {}
+    category_counter: Counter[str] = Counter()
+    all_dates: set[str] = set()
+    all_categories: set[str] = set()
+
+    for record in records:
+        browse_time = normalize_text(record.get("browse_time"))
+        read_date = browse_time[:10] if len(browse_time) >= 10 else browse_time
+        if not read_date:
+            continue
+
+        category_name = normalize_text(record.get("category_name")) or "未分类"
+        all_dates.add(read_date)
+        all_categories.add(category_name)
+        category_counter[category_name] += 1
+        date_counter.setdefault(read_date, Counter())[category_name] += 1
+
+    if not all_dates or not all_categories:
+        return ReadingHeatmapResponse(
+            x_axis=[],
+            y_axis=[],
+            cells=[],
+            summary=ReadingHeatmapSummary(
+                max_value=0,
+                most_active_category="",
+                most_active_date="",
+            ),
+        ).dict()
+
+    x_axis = sorted(all_dates)
+    y_axis = [
+        item[0]
+        for item in sorted(category_counter.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    cells: list[ReadingHeatmapCell] = []
+    max_value = 0
+    for read_date in x_axis:
+        category_map = date_counter.get(read_date, Counter())
+        for category_name in y_axis:
+            value = int(category_map.get(category_name, 0))
+            if value <= 0:
+                continue
+            max_value = max(max_value, value)
+            cells.append(
+                ReadingHeatmapCell(
+                    x=read_date,
+                    y=category_name,
+                    value=value,
+                    news_count=value,
+                )
+            )
+
+    most_active_date = ""
+    most_active_category = ""
+    if cells:
+        date_totals = Counter()
+        for cell in cells:
+            date_totals[cell.x] += cell.value
+        most_active_date = max(date_totals.items(), key=lambda item: (item[1], item[0]))[0]
+        most_active_category = (
+            sorted(category_counter.items(), key=lambda item: (-item[1], item[0]))[0][0]
+            if category_counter
+            else ""
+        )
+
+    return ReadingHeatmapResponse(
+        x_axis=x_axis,
+        y_axis=y_axis,
+        cells=cells,
+        summary=ReadingHeatmapSummary(
+            max_value=max_value,
+            most_active_category=most_active_category,
+            most_active_date=most_active_date,
+        ),
+    ).dict()
 
 
 def _mock_profile_overview(current_user: Optional[Any] = None) -> ProfileOverview:
