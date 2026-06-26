@@ -27,7 +27,10 @@ export interface NewsItem {
   status: number
   tags: string[]
   topic_id?: number | null
+  topic_name?: string
   source_url?: string
+  recommendation_score?: number
+  recommendation_reason?: string
 }
 
 export interface NewsDetail extends NewsItem {

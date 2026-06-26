@@ -18,6 +18,7 @@ from app.modules.profile.service import (
     get_comments,
     get_favorites,
     get_profile_overview,
+    get_recommendations,
     get_subscriptions,
     update_subscriptions,
 )
@@ -99,4 +100,14 @@ async def update_user_subscriptions(
 ) -> ApiResponse[SubscriptionResponse]:
     """更新当前用户新闻分类订阅。"""
     data = update_subscriptions(current_user, request)
+    return success_response(data)
+
+
+@router.get("/recommendations", response_model=ApiResponse[dict])
+async def get_user_recommendations(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[dict]:
+    """获取用户个性化推荐新闻。基于用户浏览、点赞、收藏行为生成推荐。"""
+    data = get_recommendations(current_user, limit=limit)
     return success_response(data)

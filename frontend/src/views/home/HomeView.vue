@@ -27,8 +27,8 @@
         <el-card class="featured-section" shadow="never">
           <div class="section-header">
             <div>
-              <h2>精选新闻</h2>
-              <p>实时更新的精选内容，点击即可查看详情</p>
+              <h2>{{ activeCategoryId ? '精选新闻' : '为你推荐' }}</h2>
+              <p>{{ activeCategoryId ? '实时更新的精选内容，点击即可查看详情' : '基于你的浏览、收藏、点赞推荐' }}</p>
             </div>
             <el-button text type="primary" :disabled="!hasMoreNews" @click="handleLoadMore">
               查看更多
@@ -96,6 +96,7 @@ import {
   type HotNewsItem,
   type NewsItem,
 } from '@/api/news'
+import { getRecommendations } from '@/api/profile'
 import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 import { useUserStore } from '@/stores/user'
 import NewsList from '@/components/news/NewsList.vue'
@@ -129,16 +130,53 @@ async function loadNews() {
   loadingNews.value = true
 
   try {
-    const result = await getNewsList({
-      category_id: activeCategoryId.value || undefined,
-      page: page.value,
-      page_size: pageSize.value,
-    })
+    // 如果没有 category_id，表示用户点击了左侧"推荐"，调用个性化推荐接口
+    if (!activeCategoryId.value) {
+      // 推荐：调用个性化推荐接口
+      if (!userStore.isLoggedIn) {
+        // 未登录时回退到最新新闻
+        const result = await getNewsList({
+          page: page.value,
+          page_size: pageSize.value,
+        })
+        newsList.value = result.list
+        total.value = result.total
+        page.value = result.page
+        pageSize.value = result.page_size
+      } else {
+        // 已登录，调用推荐接口
+        try {
+          const result = await getRecommendations(pageSize.value)
+          newsList.value = result.list
+          total.value = result.total
+          page.value = 1
+        } catch (recommendError) {
+          // 推荐接口失败，回退到最新新闻
+          console.error('推荐接口失败，已切换为最新新闻:', recommendError)
+          ElMessage.info('个性化推荐暂时不可用，已为你展示最新新闻')
+          const result = await getNewsList({
+            page: page.value,
+            page_size: pageSize.value,
+          })
+          newsList.value = result.list
+          total.value = result.total
+          page.value = result.page
+          pageSize.value = result.page_size
+        }
+      }
+    } else {
+      // 其他分类：调用普通新闻接口
+      const result = await getNewsList({
+        category_id: activeCategoryId.value,
+        page: page.value,
+        page_size: pageSize.value,
+      })
 
-    newsList.value = result.list
-    total.value = result.total
-    page.value = result.page
-    pageSize.value = result.page_size
+      newsList.value = result.list
+      total.value = result.total
+      page.value = result.page
+      pageSize.value = result.page_size
+    }
   } catch (error) {
     newsList.value = []
     total.value = 0

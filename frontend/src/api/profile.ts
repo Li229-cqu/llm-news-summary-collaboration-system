@@ -1,4 +1,5 @@
 import request from '@/api/http'
+import type { NewsItem } from '@/api/news'
 
 export interface ProfileOverview {
   user_id: number
@@ -114,5 +115,13 @@ export async function getSubscriptions(): Promise<SubscriptionResponse> {
 export async function updateSubscriptions(categoryIds: number[]): Promise<SubscriptionResponse> {
   return request.post('/api/profile/subscriptions', {
     category_ids: categoryIds,
+  })
+}
+
+export async function getRecommendations(
+  limit: number = 10
+): Promise<PaginationResponse<NewsItem>> {
+  return request.get('/api/profile/recommendations', {
+    params: { limit },
   })
 }

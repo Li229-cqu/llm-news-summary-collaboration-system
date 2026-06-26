@@ -23,13 +23,16 @@ export interface NewsListItem {
   summary: string
   category_name: string
   source: string
-  author: string
+  editor?: string
+  author?: string
   publish_time: string
   view_count: number
   like_count: number
   comment_count: number
   cover_image?: string
   tags?: string[]
+  recommendation_reason?: string
+  recommendation_score?: number
 }
 
 defineProps<{

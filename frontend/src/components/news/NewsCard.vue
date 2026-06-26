@@ -25,6 +25,10 @@
       <h3 class="news-card__title">{{ news.title }}</h3>
       <p class="news-card__summary">{{ news.summary }}</p>
 
+      <div v-if="news.recommendation_reason" class="news-card__reason">
+        {{ news.recommendation_reason }}
+      </div>
+
       <div v-if="news.tags?.length" class="news-card__tags">
         <el-tag v-for="tag in news.tags" :key="tag" size="small" effect="light">
           {{ tag }}
@@ -50,13 +54,16 @@ export interface NewsCardItem {
   summary: string
   category_name: string
   source: string
-  editor: string
+  editor?: string
+  author?: string
   publish_time: string
   view_count: number
   like_count: number
   comment_count: number
   cover_image?: string
   tags?: string[]
+  recommendation_reason?: string
+  recommendation_score?: number
 }
 
 const props = defineProps<{
@@ -164,6 +171,16 @@ function handleClick() {
 
 .news-card--text-only .news-card__summary {
   -webkit-line-clamp: 3;
+}
+
+.news-card__reason {
+  padding: 4px 8px;
+  margin-top: 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+  color: var(--color-primary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .news-card__tags {
