@@ -149,3 +149,10 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - 新增 `user_category_subscription` 表，用于保存用户新闻分类订阅。
 - 新增 `GET /api/profile/subscriptions` 和 `POST /api/profile/subscriptions`，均需要登录。
 - 数据库不可用时继续保留 mock fallback，确保课程演示不被数据库异常阻断。
+## A3 验收补充说明
+
+- 后端数据库访问层已接入 `DBUtils.PooledDB` 连接池，`get_connection()` 从连接池获取连接，`close()` 时归还连接池。
+- `admin` 模块的 dashboard、用户列表、待审核帖子列表已改为数据库优先，数据库异常时保留 mock fallback。
+- 管理后台接口需要 `admin` 或 `editor` 权限，`/api/admin/users` 仅 `admin` 可访问。
+- 用户列表不会返回 `password` 字段。
+- 管理后台待审核帖子接口实际路径为 `/api/admin/pending-posts`。

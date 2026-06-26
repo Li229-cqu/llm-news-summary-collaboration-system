@@ -1,15 +1,30 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+import logging
+import threading
+from typing import Any
 
 import pymysql
+from dbutils.pooled_db import PooledDB
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 
-def get_connection() -> pymysql.connections.Connection:
-    """创建 MySQL 连接。"""
-    return pymysql.connect(
+_pool_lock = threading.Lock()
+_connection_pool: PooledDB | None = None
+_pool_init_error: Exception | None = None
+
+
+def _build_connection_pool() -> PooledDB:
+    """Create the shared MySQL connection pool."""
+    return PooledDB(
+        creator=pymysql,
+        mincached=1,
+        maxcached=5,
+        maxconnections=10,
+        blocking=True,
+        ping=1,
         host=settings.db_host,
         port=settings.db_port,
         database=settings.db_name,
@@ -21,12 +36,56 @@ def get_connection() -> pymysql.connections.Connection:
     )
 
 
+def _get_connection_pool() -> PooledDB:
+    """Lazily initialize the connection pool and surface initialization errors."""
+    global _connection_pool, _pool_init_error
+
+    if _connection_pool is not None:
+        return _connection_pool
+
+    if _pool_init_error is not None:
+        raise RuntimeError("数据库连接池初始化失败，请检查数据库配置") from _pool_init_error
+
+    with _pool_lock:
+        if _connection_pool is not None:
+            return _connection_pool
+
+        if _pool_init_error is not None:
+            raise RuntimeError("数据库连接池初始化失败，请检查数据库配置") from _pool_init_error
+
+        try:
+            _connection_pool = _build_connection_pool()
+            logger.info(
+                "数据库连接池初始化成功：%s@%s:%s/%s",
+                settings.db_user,
+                settings.db_host,
+                settings.db_port,
+                settings.db_name,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _pool_init_error = exc
+            logger.exception("数据库连接池初始化失败")
+            raise RuntimeError("数据库连接池初始化失败，请检查数据库配置") from exc
+
+    if _connection_pool is None:
+        raise RuntimeError("数据库连接池初始化失败，请检查数据库配置")
+    return _connection_pool
+
+
+def get_connection() -> pymysql.connections.Connection:
+    """Get a pooled MySQL connection.
+
+    The returned object's close() method returns the connection to the pool.
+    """
+    return _get_connection_pool().connection()
+
+
 def execute_query(sql: str, params: Any | None = None) -> list[dict[str, Any]]:
-    """执行查询并返回字典列表。"""
+    """Execute a query and return a list of dictionaries."""
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(sql, params or ())
+            cursor.execute(sql, params if params is not None else ())
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
     finally:
@@ -34,11 +93,11 @@ def execute_query(sql: str, params: Any | None = None) -> list[dict[str, Any]]:
 
 
 def execute_one(sql: str, params: Any | None = None) -> dict[str, Any] | None:
-    """执行查询并返回单条结果。"""
+    """Execute a query and return the first row."""
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(sql, params or ())
+            cursor.execute(sql, params if params is not None else ())
             row = cursor.fetchone()
             return dict(row) if row is not None else None
     finally:
@@ -46,19 +105,32 @@ def execute_one(sql: str, params: Any | None = None) -> dict[str, Any] | None:
 
 
 def execute_update(sql: str, params: Any | None = None) -> int:
-    """执行更新语句并返回影响行数。"""
+    """Execute an update statement and return the affected row count."""
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            affected_rows = cursor.execute(sql, params or ())
+            affected_rows = cursor.execute(sql, params if params is not None else ())
         connection.commit()
         return affected_rows
     finally:
         connection.close()
 
 
+def execute_insert(sql: str, params: Any | None = None) -> int:
+    """Execute an insert statement and return the last inserted id."""
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params if params is not None else ())
+            last_id = cursor.lastrowid
+        connection.commit()
+        return last_id
+    finally:
+        connection.close()
+
+
 def check_db_connection() -> bool:
-    """执行 SELECT 1 检测数据库是否可达，返回 True/False。"""
+    """Check whether the database is reachable."""
     try:
         conn = get_connection()
         try:
@@ -69,17 +141,3 @@ def check_db_connection() -> bool:
         return True
     except Exception:  # noqa: BLE001
         return False
-
-
-def execute_insert(sql: str, params: Any | None = None) -> int:
-    """执行插入语句并返回自增ID。"""
-    connection = get_connection()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(sql, params or ())
-            last_id = cursor.lastrowid
-        connection.commit()
-        return last_id
-    finally:
-        connection.close()
-
