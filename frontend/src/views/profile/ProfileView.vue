@@ -39,6 +39,7 @@ import {
 import { unfavoriteNews } from '@/api/interaction'
 import { changePasswordApi, updateUserProfileApi } from '@/api/user'
 import { useUserStore } from '@/stores/user'
+import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -128,6 +129,7 @@ const tabs = [
   { key: 'favorites', label: '收藏记录', icon: Star },
   { key: 'comments', label: '评论记录', icon: ChatDotRound },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick },
+  { key: 'trajectory', label: '阅读脉络', icon: View },
   { key: 'subscriptions', label: '订阅管理', icon: SwitchButton },
 ]
 
@@ -929,6 +931,10 @@ onMounted(() => {
             </div>
           </template>
 
+          <template v-else-if="tab.key === 'trajectory'">
+            <ReadingTrajectory />
+          </template>
+
           <template v-else-if="tab.key === 'subscriptions'">
             <div class="subscriptions-content">
               <div class="subscriptions-header">
@@ -1349,6 +1355,14 @@ onMounted(() => {
 .profile-tabs :deep(.el-tabs__item) {
   height: 56px;
   font-size: 15px;
+}
+
+.profile-tabs :deep(.el-tab-pane) {
+  width: 100%;
+}
+
+.profile-tabs :deep(.el-tabs__content) {
+  width: 100%;
 }
 
 .tab-icon {

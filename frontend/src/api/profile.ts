@@ -125,3 +125,76 @@ export async function getRecommendations(
     params: { limit },
   })
 }
+
+export interface ReadingTrajectoryParams {
+  days?: number
+  limit?: number
+}
+
+export interface ReadingTrajectorySummary {
+  total_reads: number
+  unique_news_count: number
+  category_count: number
+  topic_count: number
+  top_category: string
+  top_topic: string
+  date_range: string
+}
+
+export interface ReadingTrajectoryNode {
+  id: string
+  name: string
+  type: 'category' | 'topic' | 'news'
+  value: number
+  read_count?: number
+  news_id?: number | null
+  category_id?: number | null
+  topic_id?: number | null
+  category_name?: string | null
+  topic_name?: string | null
+  browse_time?: string | null
+}
+
+export interface ReadingTrajectoryEdge {
+  source: string
+  target: string
+  value: number
+  type: 'category_topic' | 'topic_news' | 'sequence'
+}
+
+export interface ReadingTopCategory {
+  category_id?: number | null
+  category_name: string
+  read_count: number
+}
+
+export interface ReadingTopTopic {
+  topic_id?: number | null
+  topic_name: string
+  read_count: number
+}
+
+export interface ReadingRecentNews {
+  news_id: number
+  title: string
+  category_name: string
+  topic_name: string
+  browse_time: string
+}
+
+export interface ReadingTrajectoryResponse {
+  summary: ReadingTrajectorySummary
+  nodes: ReadingTrajectoryNode[]
+  edges: ReadingTrajectoryEdge[]
+  top_categories: ReadingTopCategory[]
+  top_topics: ReadingTopTopic[]
+  recent_news: ReadingRecentNews[]
+}
+
+export async function getReadingTrajectory(
+  params?: ReadingTrajectoryParams
+): Promise<ReadingTrajectoryResponse> {
+  return request.get('/api/profile/reading-trajectory', {
+    params: { days: 30, limit: 100, ...params },
+  })
+}
