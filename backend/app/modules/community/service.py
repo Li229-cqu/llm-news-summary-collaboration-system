@@ -605,13 +605,22 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
             ht.title,
             ht.target_type,
             ht.target_id,
-            ht.heat_score,
             ht.rank_no,
             ht.tag,
             ht.update_time,
-            ht.create_time
+            ht.create_time,
+            (
+                COALESCE(SUM(n.view_count), 0)
+                + COALESCE(SUM(n.like_count), 0) * 3
+                + COALESCE(SUM(n.comment_count), 0) * 5
+                + COALESCE(SUM(n.favorite_count), 0) * 4
+            ) AS heat_score
         FROM hot_topic ht
-        ORDER BY ht.rank_no ASC, ht.heat_score DESC, ht.id ASC
+        LEFT JOIN news n ON n.topic_id = ht.target_id AND n.status = 1
+        WHERE ht.status = 1
+        GROUP BY ht.id, ht.title, ht.target_type, ht.target_id,
+                 ht.rank_no, ht.tag, ht.update_time, ht.create_time
+        ORDER BY heat_score DESC, ht.rank_no ASC, ht.id ASC
         LIMIT %s
         """,
         [max(limit, 0)],
@@ -620,14 +629,15 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
         return None
 
     items = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        heat = int(row.get("heat_score") or 0)
         items.append(
             {
                 "id": int(row.get("id") or 0),
                 "keyword": normalize_text(row.get("title")),
-                "rank": int(row.get("rank_no") or 0),
-                "search_count": int(row.get("heat_score") or 0),
-                "trend": "up" if int(row.get("rank_no") or 0) <= 3 else "stable" if int(row.get("rank_no") or 0) <= 6 else "down",
+                "rank": index,
+                "search_count": heat,
+                "trend": "up" if index <= 3 else "stable" if index <= 6 else "down",
                 "title": normalize_text(row.get("title")),
                 "target_type": normalize_text(row.get("target_type")),
                 "target_id": int(row.get("target_id") or 0),
