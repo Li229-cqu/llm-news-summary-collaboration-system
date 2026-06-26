@@ -36,48 +36,40 @@ def _generate_dynamic_titles(
     title_count: int,
     title_style: str
 ) -> list[str]:
-    """根据输入文本动态生成标题。"""
+    """根据输入文本动态生成标题（去除标题党模板）。"""
     sentences = _split_sentences(input_text)
     keywords = _extract_keywords(input_text, max_keywords=3)
 
     if not sentences:
         return ["新闻标题"] * title_count
 
-    first_sentence = sentences[0]
-    main_topic = keywords[0] if keywords else first_sentence[:20]
-
     titles = []
+    main_topic = keywords[0] if keywords else sentences[0][:20]
 
-    if title_style == "客观新闻型":
-        templates = [
-            f"{main_topic}取得重要进展",
-            f"{main_topic}相关新动态曝光",
-            f"{keywords[0] if keywords else '业界'}发布{keywords[1] if len(keywords) > 1 else '最新'}消息",
-            f"我国{main_topic}发展迎来新机遇",
-            f"{main_topic}成为关注焦点",
-        ]
-    elif title_style == "吸引点击型":
-        templates = [
-            f"震撼！{main_topic}竟然这样发展",
-            f"{main_topic}突然宣布重大决策",
-            f"万万没想到，{main_topic}居然...",
-            f"{keywords[0] if keywords else '这个'}领域爆出惊人新闻",
-            f"都惊呆了！{main_topic}最新动向曝光",
-        ]
-    else:  # 简洁概括型
-        templates = [
-            f"{main_topic}新进展",
-            f"{main_topic}重大突破",
-            f"{keywords[0] if keywords else '业界'}新动向",
-            f"{main_topic}发展新阶段",
-            f"{main_topic}最新消息",
-        ]
-
+    # 从输入文本中提取合适的标题
     for i in range(title_count):
-        title = templates[i % len(templates)]
+        if i < len(sentences):
+            title = sentences[i]
+        else:
+            title = sentences[0]
+
+        # 超过 30 字则裁剪
+        if len(title) > 30:
+            title = title[:30] + "..."
+
         titles.append(title)
 
-    return titles
+    # 如果需要更多标题，使用不同组合
+    while len(titles) < title_count:
+        if keywords:
+            title = f"{keywords[0]}相关新闻"
+            if len(keywords) > 1:
+                title = f"{keywords[0]}与{keywords[1]}领域新动态"
+        else:
+            title = f"新闻动态第{len(titles) + 1}"
+        titles.append(title)
+
+    return titles[:title_count]
 
 
 def _generate_summary_short(
@@ -85,26 +77,27 @@ def _generate_summary_short(
     summary_style: str,
     summary_type: str
 ) -> str:
-    """生成短摘要。"""
+    """生成短摘要（改为从输入文本提取前两句）。"""
     sentences = _split_sentences(input_text)
 
     if not sentences:
         return "文本过短，无法生成摘要"
 
-    if summary_type == "extract":
+    # 直接提取前两句作为摘要
+    short_summary = ""
+    if len(sentences) >= 2:
+        short_summary = sentences[0] + sentences[1]
+    elif len(sentences) == 1:
         short_summary = sentences[0]
-        if len(sentences) > 1:
-            short_summary += sentences[1]
     else:
-        keywords = _extract_keywords(input_text, max_keywords=3)
-        first_two_sentences = "".join(sentences[:2])
-        short_summary = f"本文主要介绍了{keywords[0] if keywords else '相关'}的相关内容，重点阐述了{first_two_sentences[:30]}等核心观点。"
+        return "文本过短，无法生成摘要"
 
+    # 根据风格进行简单调整
     if summary_style == "简明扼要":
-        if len(short_summary) > 60:
-            short_summary = short_summary[:60] + "..."
+        if len(short_summary) > 80:
+            short_summary = short_summary[:80] + "..."
     elif summary_style == "客观正式":
-        short_summary = f"在相关领域的发展过程中，{short_summary}"
+        short_summary = f"根据相关报道，{short_summary}"
     elif summary_style == "通俗易懂":
         short_summary = f"简单来说，{short_summary}"
 

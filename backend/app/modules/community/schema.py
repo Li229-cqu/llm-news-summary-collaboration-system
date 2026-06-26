@@ -130,4 +130,11 @@ class BlockResponse(BaseModel):
     user_id: int
 
 
+class CommentsSummaryResponse(BaseModel):
+    summary: str
+    sentiment: Literal["positive", "negative", "neutral"] = "neutral"
+    keyword: str = ""
+    source: Literal["llm", "fallback"] = "fallback"
+
+
 CommentItem.model_rebuild()

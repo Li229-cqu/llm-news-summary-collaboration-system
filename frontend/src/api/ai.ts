@@ -38,6 +38,7 @@ export interface AIGenerateResponse {
   keywords: string[]
   elements: NewsElement
   consistency: ConsistencyCheck
+  source?: 'mock' | 'llm'
 }
 
 /** 调用 AI 生成标题和摘要。 */

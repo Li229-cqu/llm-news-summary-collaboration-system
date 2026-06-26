@@ -27,6 +27,7 @@ from app.modules.community.schema import (
     BlockResponse,
     CommentItem,
     CommentListResponse,
+    CommentsSummaryResponse,
     CommunityPost,
     CreateCommentRequest,
     CreatePostRequest,
@@ -2101,20 +2102,189 @@ def get_hot_topics(limit: int = 10) -> list[HotSearchItem]:
     return get_hot_search(limit=limit)
 
 
-def ai_news_helper(question: str) -> AIHelperResponse:
-    responses = {
-        "新闻摘要": "AI 新闻摘要功能可以帮助用户快速提炼新闻核心内容，节省阅读时间。",
-        "热点": "当前热点话题包括 AI 技术、智能阅读、新闻分类等，您可以在热搜榜查看详情。",
-        "推荐": "系统可以根据浏览习惯推荐相关新闻，帮助您发现更多感兴趣的内容。",
-        "帮助": "我是您的 AI 新闻助手，欢迎继续提问社区或新闻相关问题。",
-    }
-    for key, answer in responses.items():
-        if key in question:
-            return AIHelperResponse(success=True, message="success", answer=answer)
+async def ai_news_helper(question: str) -> AIHelperResponse:
+    """AI 新闻助手：基于系统内容提供智能回答。"""
+    import httpx
+    from app.core.config import settings
+    from app.modules.news.service import get_news_list, get_hot_news
+    from app.modules.community.service import get_post_list, get_hot_search
+
+    try:
+        news_list = get_news_list(page=1, page_size=10)
+        hot_news = get_hot_news(limit=5)
+        posts = get_post_list(page=1, page_size=10)
+        hot_topics = get_hot_search(limit=5)
+
+        news_context = "\n".join([
+            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
+            for n in news_list.get("list", [])[:5]
+        ])
+
+        hot_news_context = "\n".join([
+            f"热点新闻 {n['id']}: {n['title']}"
+            for n in hot_news[:3]
+        ])
+
+        post_context = "\n".join([
+            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}"
+            for p in posts.list[:5]
+        ])
+
+        topic_context = "\n".join([
+            f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
+            for t in hot_topics[:3]
+        ])
+
+        system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
+
+【系统新闻内容】
+{news_context}
+
+【热点新闻】
+{hot_news_context}
+
+【社区讨论帖子】
+{post_context}
+
+【热点话题】
+{topic_context}
+
+请根据以上内容回答用户的问题。如果问题与系统内容相关，请引用具体信息进行回答。如果问题与系统内容无关，请礼貌地告知用户当前系统的数据范围。回答要简洁、准确、有价值。"""
+
+        ai_service_url = f"{settings.ai_service_url}/ai/chat"
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                ai_service_url,
+                json={
+                    "question": question,
+                    "context": system_prompt
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and "data" in data:
+                    answer = data["data"].get("answer", "")
+                    if answer:
+                        return AIHelperResponse(
+                            success=True,
+                            message="success",
+                            answer=answer
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"AI 服务调用失败，回退到关键词匹配：{exc}")
+
+    news_list = get_news_list(page=1, page_size=10)
+    hot_topics = get_hot_search(limit=5)
+
+    keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
+    matched_keywords = [k for k in keywords if k in question]
+
+    if matched_keywords:
+        if "新闻" in question or "摘要" in question:
+            news_count = len(news_list.get("list", []))
+            return AIHelperResponse(
+                success=True,
+                message="success",
+                answer=f"系统目前有 {news_count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
+            )
+        if "热点" in question or "话题" in question:
+            topics = ", ".join([t.title for t in hot_topics[:3]])
+            return AIHelperResponse(
+                success=True,
+                message="success",
+                answer=f"当前热点话题有：{topics}。点击查看详细内容。"
+            )
+        if "社区" in question or "帖子" in question:
+            return AIHelperResponse(
+                success=True,
+                message="success",
+                answer="社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
+            )
+
     return AIHelperResponse(
         success=True,
         message="success",
-        answer="谢谢你的提问！我是 AI 新闻助手，可以帮你理解新闻内容、热点话题和社区讨论。",
+        answer="谢谢你的提问！我是 AI 新闻助手，可以帮你了解系统中的新闻内容、热点话题和社区讨论。请问有什么可以帮你的？",
+    )
+
+
+async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
+    """获取帖子的评论区 AI 总结。"""
+    import httpx
+    from app.core.config import settings
+
+    all_comments = []
+    page = 1
+    page_size = 50
+    total_text_length = 0
+    max_text_length = 10000
+
+    while True:
+        comment_result = get_comments(post_id, page=page, page_size=page_size, current_user=None)
+        if not comment_result.list:
+            break
+
+        for comment in comment_result.list:
+            comment_text = getattr(comment, "content", "")
+            if total_text_length + len(comment_text) <= max_text_length:
+                all_comments.append(comment_text)
+                total_text_length += len(comment_text)
+            else:
+                break
+
+        if len(comment_result.list) < page_size:
+            break
+        page += 1
+
+    if not all_comments:
+        return CommentsSummaryResponse(
+            summary="该帖子暂无评论，快来发表你的看法吧！",
+            sentiment="neutral",
+            keyword="",
+            source="fallback"
+        )
+
+    comments_text = "\n".join([f"{i+1}. {comment}" for i, comment in enumerate(all_comments)])
+
+    system_prompt = """你是一个专业的评论区分析师。请总结以下用户评论的主要观点。
+要求：
+1. 总结核心观点和用户态度
+2. 总结长度在 200-300 字之间
+3. 客观准确，避免偏向
+4. 如有分歧观点，请分别概括"""
+
+    question = f"以下是用户对这条帖子的所有评论，请总结主要观点：\n\n{comments_text}"
+
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/chat"
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                ai_service_url,
+                json={
+                    "question": question,
+                    "context": system_prompt
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and "data" in data:
+                    summary = data["data"].get("answer", "")
+                    if summary:
+                        return CommentsSummaryResponse(
+                            summary=summary,
+                            sentiment="neutral",
+                            keyword="AI总结",
+                            source="llm"
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"AI 服务调用失败，返回基础总结：{exc}")
+
+    basic_summary = f"该帖子共有 {len(all_comments)} 条评论。用户对此话题进行了积极讨论，整体氛围较为活跃。建议逐条查看评论了解详细观点。"
+    return CommentsSummaryResponse(
+        summary=basic_summary,
+        sentiment="neutral",
+        keyword="",
+        source="fallback"
     )
 
 

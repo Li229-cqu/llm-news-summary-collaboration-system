@@ -17,7 +17,7 @@ interface HandledRequestError extends Error {
 const TOKEN_STORAGE_KEY = 'llm_news_token'
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  timeout: 10000,  // 默认 10 秒
+  timeout: 30000,  // 增加到 30 秒，AI 请求可能需要较长时间
 })
 
 let lastMessage = ''

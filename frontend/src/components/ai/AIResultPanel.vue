@@ -22,6 +22,10 @@ const displayResult = computed(() => {
   return props.overrideResult || aiDraft.result
 })
 
+const resultSource = computed(() => {
+  return displayResult.value?.source || 'mock'
+})
+
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
     ElMessage.success('已复制到剪贴板')
@@ -45,6 +49,13 @@ const hasResult = () => {
     <template #header>
       <div class="card-header">
         <span class="title">📊 生成结果</span>
+        <el-tag
+          v-if="hasResult()"
+          :type="resultSource === 'llm' ? 'success' : 'info'"
+          size="small"
+        >
+          {{ resultSource === 'llm' ? 'AI 生成' : 'Mock 数据' }}
+        </el-tag>
       </div>
     </template>
 

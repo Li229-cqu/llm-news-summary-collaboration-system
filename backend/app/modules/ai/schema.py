@@ -44,6 +44,7 @@ class AIGenerateResponse(BaseModel):
     keywords: List[str]
     elements: NewsElement
     consistency: ConsistencyCheck
+    source: Optional[Literal["mock", "llm"]] = "mock"
 
 
 class AIGenerateRecordItem(BaseModel):
