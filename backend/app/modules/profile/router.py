@@ -9,6 +9,9 @@ from app.modules.profile.schema import (
     CommentRecordItem,
     FavoriteItem,
     ProfileOverview,
+    ReadingHeatmapResponse,
+    ReadingTimelineResponse,
+    ReadingTrajectoryResponse,
     SubscriptionResponse,
     SubscriptionUpdateRequest,
 )
@@ -19,6 +22,9 @@ from app.modules.profile.service import (
     get_favorites,
     get_profile_overview,
     get_recommendations,
+    get_reading_heatmap,
+    get_reading_timeline,
+    get_reading_trajectory,
     get_subscriptions,
     update_subscriptions,
 )
@@ -37,6 +43,39 @@ async def get_overview(
 ) -> ApiResponse[ProfileOverview]:
     """获取个人中心概览数据。"""
     data = get_profile_overview(current_user)
+    return success_response(data)
+
+
+@router.get("/reading-trajectory", response_model=ApiResponse[ReadingTrajectoryResponse])
+async def get_reading_trajectory_view(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(200, ge=10, le=500),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReadingTrajectoryResponse]:
+    """获取用户阅读脉络图数据。"""
+    data = get_reading_trajectory(current_user.id, days=days, limit=limit)
+    return success_response(data)
+
+
+@router.get("/reading-timeline", response_model=ApiResponse[ReadingTimelineResponse])
+async def get_reading_timeline_view(
+    days: int = Query(30, ge=1, le=365),
+    group_by: str = Query("day"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReadingTimelineResponse]:
+    """获取用户阅读时间线数据。"""
+    data = get_reading_timeline(current_user.id, days=days, group_by=group_by)
+    return success_response(data)
+
+
+@router.get("/reading-heatmap", response_model=ApiResponse[ReadingHeatmapResponse])
+async def get_reading_heatmap_view(
+    days: int = Query(30, ge=1, le=365),
+    dimension: str = Query("category"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReadingHeatmapResponse]:
+    """获取用户阅读热力图数据。"""
+    data = get_reading_heatmap(current_user.id, days=days, dimension=dimension)
     return success_response(data)
 
 

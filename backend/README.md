@@ -156,3 +156,13 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - 管理后台接口需要 `admin` 或 `editor` 权限，`/api/admin/users` 仅 `admin` 可访问。
 - 用户列表不会返回 `password` 字段。
 - 管理后台待审核帖子接口实际路径为 `/api/admin/pending-posts`。
+
+## F1 阅读脉络接口补充
+
+- 个人中心已新增 3 个阅读脉络接口：
+  - `GET /api/profile/reading-trajectory`
+  - `GET /api/profile/reading-timeline`
+  - `GET /api/profile/reading-heatmap`
+- 这 3 个接口都需要登录，数据优先读取 `browse_history`、`news`、`news_category`、`news_topic`。
+- 如果用户没有浏览历史，接口返回空结构，不回退 mock 阅读脉络。
+- 当前实现只负责后端数据结构准备，不新增前端页面。
