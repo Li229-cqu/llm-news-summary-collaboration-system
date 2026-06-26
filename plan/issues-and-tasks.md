@@ -1,9 +1,7 @@
 # 项目待解决问题与并发任务分配
 
-> 更新时间：2026-06-26
+> 更新时间：2026-06-26（修订于 18:00）
 > 项目：基于大语言模型的智能新闻摘要与协同互动系统
-
-**已完成**：问题6（热度联动）、问题7（全文索引搜索）、问题9（editor 空值）、问题10（工具函数提取）、问题11（启动连通性检测）
 
 ---
 
@@ -19,29 +17,19 @@
 
 **问题描述**
 
-管理后台的概览数据（用户数、新闻数、待审核数）、用户列表、待审核帖子列表，全部读取进程内 Mock 数据，与数据库完全脱节：
-
-```python
-# backend/app/modules/admin/service.py
-user_count = len(MOCK_USERS)   # 永远是固定的3个mock用户
-news_count = len(MOCK_NEWS)    # 永远是mock新闻数量
-```
+管理后台的概览数据（用户数、新闻数、待审核数）、用户列表、待审核帖子列表，全部读取进程内 Mock 数据，与数据库完全脱节。
 
 **实现思路**
 
-1. `get_dashboard()` 改为执行真实 SQL：
-   - `SELECT COUNT(*) FROM user WHERE status=1`
-   - `SELECT COUNT(*) FROM news WHERE status=1`
-   - `SELECT COUNT(*) FROM community_post WHERE status=0`
-2. `get_users()` 改为分页查询 `user` 表，支持按角色/状态过滤
-3. `get_pending_posts()` 改为查询 `community_post WHERE status=0`，联表查询发帖用户信息
-4. 保留 Mock 兜底逻辑，数据库异常时回退
-5. 管理端"审核通过/拒绝"操作同步更新数据库 `status` 字段
+1. `get_dashboard()` 改为执行真实 SQL
+2. `get_users()` 改为分页查询 `user` 表
+3. `get_pending_posts()` 改为查询 `community_post WHERE status=0`
+4. 保留 Mock 兜底逻辑
 
 **涉及文件**
 
 - `backend/app/modules/admin/service.py`
-- `backend/app/modules/admin/schema.py`（按需扩展字段）
+- `backend/app/modules/admin/schema.py`
 
 ---
 
@@ -49,27 +37,18 @@ news_count = len(MOCK_NEWS)    # 永远是mock新闻数量
 
 **问题描述**
 
-当前每个数据库操作都完整经历 TCP连接→认证→执行→断开的完整生命周期：
-
-```python
-# backend/app/db/database.py
-def get_connection():
-    return pymysql.connect(...)  # 每次都新建！
-```
-
-在并发请求时，连接建立本身的耗时（通常 5-20ms）会成为性能瓶颈，且 MySQL 的最大连接数会被快速耗尽。
+当前每个数据库操作都完整经历 TCP 连接→认证→执行→断开，在并发请求时连接建立耗时成为瓶颈。
 
 **实现思路**
 
-1. 引入 `DBUtils` 库（`pip install dbutils`），使用 `PooledDB` 实现连接池
-2. 在 `database.py` 中初始化一个全局连接池实例（`mincached=2, maxcached=10, maxconnections=20`）
-3. `get_connection()` 改为从连接池取连接，用完归还而不是关闭
-4. 或改用 `SQLAlchemy` + `pymysql` 驱动（更主流，未来迁移成本低）
+1. 引入 `DBUtils` 库，使用 `PooledDB` 实现连接池
+2. 在 `database.py` 中初始化全局连接池实例
+3. `get_connection()` 改为从连接池取连接
 
 **涉及文件**
 
 - `backend/app/db/database.py`
-- `backend/requirements.txt`（新增 dbutils 或 sqlalchemy）
+- `backend/requirements.txt`
 
 ---
 
@@ -77,25 +56,13 @@ def get_connection():
 
 **问题描述**
 
-社区页右侧已有完整的对话 UI，前端调用 `/api/community/ai-helper`，但后端实现是关键词字典匹配，无论用户问什么，都只能命中以下 4 个词：
-
-```python
-# backend/app/modules/community/service.py
-def ai_news_helper(question: str) -> AIHelperResponse:
-    responses = {
-        "新闻摘要": "AI 新闻摘要功能可以帮助用户...",
-        "热点": "当前热点话题包括...",
-        "推荐": "系统可以根据浏览习惯...",
-        "帮助": "我是您的 AI 新闻助手...",
-    }
-```
+社区页右侧 AI 助手只能匹配 4 个关键词，无论用户问什么都无法提供有意义的回答。
 
 **实现思路**
 
-1. `ai_news_helper()` 改为通过 `httpx` 调用 `ai-service` 的 chat 接口（参考 `backend/app/modules/ai/service.py` 中已有的 `_call_ai_service()` 写法）
-2. 调用时附带系统提示词，限定 AI 回答范围为"新闻相关问题"
-3. `ai-service` 未启动或调用失败时，保留当前关键词字典作为兜底
-4. 前端已实现完整对话 UI，**无需改动前端**
+1. 通过 `httpx` 调用 `ai-service` 的 chat 接口
+2. 附带系统提示词限定回答范围为"新闻相关问题"
+3. ai-service 未启动时回退关键词兜底
 
 **涉及文件**
 
@@ -107,24 +74,19 @@ def ai_news_helper(question: str) -> AIHelperResponse:
 
 **问题描述**
 
-`LLM_ENABLED=false` 时，标题生成使用硬编码的标题党模板：
-
-```python
-# ai-service/app/services/generate_service.py
-f"震撼！{main_topic}竟然这样发展"
-f"万万没想到，{main_topic}居然..."
-```
+`LLM_ENABLED=false` 时，标题生成使用硬编码的标题党模板（"震撼！…"、"万万没想到…"）。
 
 **实现思路**
 
-1. 删除模板标题生成逻辑，改为从输入文本提取前两句作为摘要
-2. 标题改为提取新闻正文第一句，超过 30 字则裁剪
-3. 增加 `source` 字段区分（`"mock"` vs `"llm"`），前端据此展示"AI服务未启用，以下为文本提取结果"的提示
+1. 删除模板标题生成逻辑
+2. 改为从输入文本提取前两句作为摘要
+3. 标题改为提取新闻正文第一句，超过 30 字则裁剪
+4. 增加 `source` 字段区分 `"mock"` vs `"llm"`
 
 **涉及文件**
 
 - `ai-service/app/services/generate_service.py`
-- `frontend/src/components/ai/AIResultPanel.vue`（展示 source 提示）
+- `frontend/src/components/ai/AIResultPanel.vue`
 
 ---
 
@@ -136,15 +98,14 @@ f"万万没想到，{main_topic}居然..."
 
 **问题描述**
 
-爬虫抓取的图片 URL 直接存入数据库，前端直接加载第三方图片。中国新闻网等来源有防盗链保护，图片在非来源域名下会返回 403，导致页面图片全部显示为损坏图标。
+爬虫抓取的图片 URL 直接存入数据库，中国新闻网等来源有防盗链保护，图片显示为损坏图标。
 
 **实现思路**
 
-1. 爬虫中增加图片下载步骤：抓取封面图后，将图片二进制内容保存到 `backend/uploads/covers/` 目录
-2. 数据库 `cover_image` 字段改为存储本地相对路径，如 `/uploads/covers/2026/06/filename.jpg`
-3. 后端 FastAPI 挂载静态文件目录：`app.mount("/uploads", StaticFiles(directory="uploads"))`
-4. 文件名使用新闻 URL 的 MD5 哈希避免重复下载
-5. 设置请求超时和图片大小限制，防止爬虫卡死
+1. 爬虫中增加图片下载步骤：保存到 `backend/uploads/covers/` 目录
+2. 数据库存本地相对路径
+3. 后端 FastAPI 挂载静态文件目录
+4. 文件名使用 URL 的 MD5 哈希避免重复下载
 
 **涉及文件**
 
@@ -157,20 +118,124 @@ f"万万没想到，{main_topic}居然..."
 
 **问题描述**
 
-用户点击"查看脉络"后，如果 Timeline 尚未生成，后端需要调用 AI 服务，耗时可能超过 10 秒。当前前端没有任何进度提示，容易误以为页面卡死。
+Timeline 调用 AI 服务耗时超过 10 秒，前端没有任何进度提示，容易误以为页面卡死。
 
 **实现思路**
 
-1. `TimelineDrawer.vue` 在打开时，若 `status` 为 `generating`，展示加载骨架屏和提示文字"正在分析相关新闻，生成事件脉络..."
-2. 前端轮询方案：每 2 秒调用一次 `/api/timeline/{topic_id}` 检查 `status`，直到返回 `success`
-3. 后端在生成中时返回 `status: "generating"`，生成完成写入数据库后返回数据
-4. 前端设置最大等待时间（如 60 秒），超时后提示"生成超时，请稍后重试"
+1. TimelineDrawer.vue 打开时，若 `status` 为 `generating`，展示加载骨架屏
+2. 前端轮询 `/api/timeline/{topic_id}` 每 2 秒检查一次状态
+3. 后端在生成中时返回 `status: "generating"`
+4. 前端设置 60 秒超时
 
 **涉及文件**
 
 - `frontend/src/components/timeline/TimelineDrawer.vue`
 - `backend/app/modules/timeline/router.py`
 - `backend/app/modules/timeline/service.py`
+
+---
+
+#### 新功能1：Timeline 结构升级 + 数据模型丰富
+
+**问题描述**
+
+当前 Timeline 只是按时间排序的新闻摘要列表，缺乏结构化数据支撑后期的可视化流图和文档导出功能。
+
+**实现思路**
+
+**A. 丰富单个事件节点（TimelineNode）**：
+- `event_type`: 节点类型（policy/reaction/breakthrough/outcome/background），决定可视化样式
+- `importance`: 1-5 权重，影响可视化节点大小
+- `event_detail`: 300 字长摘要，供文档导出正文用
+- `related_event_ids`: 相关事件 ID 列表，用于画有向边
+- `keywords`: 关键词列表，供可视化标签和文档索引
+
+**B. 丰富整条脉络（TimelineResult）**：
+- `overview`: 整个事件的执行摘要（文档引言）
+- `key_figures`: 核心人物/机构列表
+- `phases`: 事件阶段分组（[{name, start_event_id, end_event_id}]），可视化分区块
+- `relationships`: 有向图的边数据（[{from_id, to_id, type: "causes"|"follows"|"parallel"}]）
+- `schema_version`: 版本号，后期改格式时向后兼容
+
+**C. 数据库拆分存储**（不破坏现有数据）：
+- 保留 `timeline_json` 存节点数组
+- 新增 `metadata_json` 存 overview/key_figures/phases
+- 新增 `relationships_json` 存图的边数据
+
+**后期支撑**：
+- **可视化流图**：直接用 `relationships` 画有向图，`event_type` 定节点颜色，`importance` 定大小
+- **文档导出**：用 `overview` 做引言 → 按 `phases` 分章节 → `event_detail` 做正文 → `source_news_id` 做参考文献
+
+**涉及文件**
+
+- `backend/app/modules/timeline/schema.py`（加新字段）
+- `backend/app/modules/timeline/service.py`（改 AI 提示词，让 ai-service 生成新字段）
+- `database/migrations/007_enhance_event_timeline.sql`（新增两列）
+
+---
+
+#### 新功能2：社区评论富媒体支持（表情 + 图片）
+
+**问题描述**
+
+评论区目前只支持纯文本，用户无法发表情和图片，降低了互动表现力。
+
+**实现思路**
+
+**A. 前端**：
+- 评论框下方增加「表情」和「上传图片」按钮
+- 表情使用开源库（如 emoji-picker-element），点击快速插入 emoji 码
+- 图片上传：单选图片，预览后上传，附加到评论内容前
+
+**B. 后端**：
+- 扩展 `news_comment` 表：新增 `media_json` 列存储媒体数据
+  ```json
+  {
+    "images": ["/uploads/comments/2026/06/abc123.jpg"],
+    "emojis": ["😂", "🎉"]
+  }
+  ```
+- 新建 API 上传端点：`POST /api/community/comment-media/upload` → 保存到 `backend/uploads/comments/` 目录
+- 文件名格式：`{timestamp}_{random}.{ext}`，图片限制 5MB
+
+**C. 数据库**：
+- `backend/uploads/comments/` 目录需挂载到 FastAPI（复用 problem5 的 StaticFiles 挂载）
+- 新增迁移脚本扩展 `news_comment` 表
+
+**完成标准**：评论能包含 1 张图片和多个表情；页面正常显示；图片防盗链保护
+
+**涉及文件**
+
+- `frontend/src/components/community/CommentInput.vue`（新增表情和图片输入）
+- `backend/app/modules/interaction/router.py`（新增媒体上传端点）
+- `backend/app/modules/interaction/service.py`（存储和读取媒体数据）
+- `database/migrations/008_add_comment_media.sql`（扩展表结构）
+
+---
+
+#### 新功能3：AI 评论区总结
+
+**问题描述**
+
+用户浏览评论区时需要逐条阅读，无法快速了解舆论核心观点。
+
+**实现思路**
+
+1. 新增 API 端点：`GET /api/community/posts/{post_id}/comments-summary`
+2. 后端读取该帖子下所有评论（分页读取，总字数限制 10000 以内）
+3. 构造提示词：「以下是用户对这条评论的所有回复，请总结主要观点」
+4. 调用 ai-service 的 chat 接口，返回 200-300 字的总结
+5. 前端在评论区顶部显示总结（可折叠）
+
+**缓存策略**：缓存 1 小时，新增评论后清除缓存
+
+**完成标准**：评论区显示 AI 总结面板；总结准确反映舆论方向；缓存生效
+
+**涉及文件**
+
+- `backend/app/modules/community/router.py`（新增路由）
+- `backend/app/modules/community/service.py`（实现总结逻辑）
+- `frontend/src/components/community/CommentsPanel.vue`（显示总结面板）
 
 ---
 
@@ -182,16 +247,11 @@ f"万万没想到，{main_topic}居然..."
 
 #### 安全问题1：密码明文存储与明文比对
 
-**问题描述**
-
-`database/seed.sql` 中密码为明文 `123456`，后端登录时直接字符串对比，数据库泄露后所有用户密码即刻暴露。注册（feature/module-d 已实现）同样写入明文。
-
 **实现思路**
 
 1. 引入 `passlib[bcrypt]` 库
 2. 注册/导入时调用 `bcrypt.hash(password)` 加密存储
 3. 登录时调用 `bcrypt.verify(input_password, db_hash)` 比对
-4. 更新 `seed.sql` 中密码字段为 bcrypt 哈希值
 
 **涉及文件**
 
@@ -203,16 +263,11 @@ f"万万没想到，{main_topic}居然..."
 
 #### 安全问题2：Token 为固定字符串，任何人可伪造
 
-**问题描述**
-
-系统 Token 是写死的字符串，任何人发送 `Authorization: Bearer mock-token-admin` 即可获得管理员权限。
-
 **实现思路**
 
 1. 引入 `python-jose[cryptography]` 实现 JWT
-2. 登录时用 `settings.secret_key` 签发 JWT，payload 含 `user_id`、`role`、`exp`
+2. 登录时签发 JWT，payload 含 `user_id`、`role`、`exp`
 3. `get_current_user` 改为解码并校验 JWT
-4. `backend/.env` 中 `SECRET_KEY` 改为真实随机字符串（32位以上）
 
 **涉及文件**
 
@@ -226,8 +281,8 @@ f"万万没想到，{main_topic}居然..."
 
 **实现思路**
 
-- 方案A（推荐）：改为 HttpOnly Cookie，需前后端配合
-- 方案B（折中）：保留 localStorage，后端响应头增加 `Content-Security-Policy` 限制外部脚本
+- 方案A（推荐）：改为 HttpOnly Cookie
+- 方案B（折中）：后端增加 Content-Security-Policy 限制外部脚本
 
 **涉及文件**
 
@@ -242,9 +297,9 @@ f"万万没想到，{main_topic}居然..."
 
 ### 👤 任务A — 数据库性能 + 管理后台接真实数据
 
-**负责问题**：问题2（连接池）、问题1（管理后台改真实DB）
+**负责问题**：问题2（连接池）、问题1（管理后台改真实 DB）
 
-**开发顺序**：连接池 → 管理后台改真实 SQL（管理后台依赖连接池稳定后再改）
+**开发顺序**：连接池 → 管理后台改真实 SQL
 
 **主要改动范围**：
 
@@ -255,48 +310,65 @@ backend/app/modules/admin/service.py
 backend/app/modules/admin/schema.py
 ```
 
-**完成标准**：`database.py` 的 `get_connection()` 改为连接池取连接；管理后台概览数据、用户列表、待审核帖子从数据库实时读取；数据库异常时自动回退 Mock。
+**完成标准**：连接池正常工作；管理后台概览/用户列表/待审核从数据库实时读取；异常时回退 Mock。
 
 ---
 
-### 👤 任务B — AI 能力接入
+### 👤 任务B — AI 能力接入 + 社区互动 AI 优化
 
-**负责问题**：问题4（AI Mock 质量）、问题3（社区 AI 助手接真实 AI）
+**负责问题**：问题4（AI Mock 质量）、问题3（社区 AI 助手接真实 AI）、新功能3（AI 评论总结）
 
-**开发顺序**：先改 Mock 质量（不依赖 ai-service 启动）→ 再接入真实 AI
+**开发顺序**：
+1. 先改 Mock 质量（不依赖 ai-service）
+2. 再接入社区 AI 助手（需 ai-service）
+3. 最后做评论总结（复用 ai-service 调用逻辑）
 
 **主要改动范围**：
 
 ```
 ai-service/app/services/generate_service.py
 frontend/src/components/ai/AIResultPanel.vue
-backend/app/modules/community/service.py（只改 ai_news_helper 函数）
+backend/app/modules/community/service.py（ai_news_helper + comments_summary）
+backend/app/modules/community/router.py（新增总结路由）
+frontend/src/components/community/CommentsPanel.vue（显示总结）
 ```
 
-**完成标准**：Mock 模式摘要生成不出现标题党词汇，改为提取原文句子；社区 AI 助手在 ai-service 启动时返回真实 AI 回答，未启动时回退关键词兜底不报错。
+**完成标准**：Mock 摘要不出现标题党；社区 AI 助手返回真实回答或兜底；评论总结准确。
 
 ---
 
-### 👤 任务C — 爬虫图片本地化
+### 👤 任务C — 爬虫图片本地化 + 社区评论富媒体
 
-**负责问题**：问题5（封面图防盗链）
+**负责问题**：问题5（封面图防盗链）、新功能2（评论富媒体）
+
+**开发顺序**：
+1. 先做爬虫图片本地化（不依赖其他）
+2. 再做评论富媒体（复用 uploads 挂载）
 
 **主要改动范围**：
 
 ```
 scripts/crawlers/rss_news_crawler.py
-backend/app/main.py（新增 StaticFiles 挂载，注意保留已有的 startup 事件）
+backend/app/main.py（挂载 StaticFiles）
+frontend/src/components/community/CommentInput.vue
+backend/app/modules/interaction/router.py
+backend/app/modules/interaction/service.py
+database/migrations/008_add_comment_media.sql
 ```
 
-**完成标准**：新爬取的新闻封面图保存到 `backend/uploads/covers/` 目录，数据库存本地路径，页面图片正常显示不出现 403。
+**完成标准**：新闻封面图本地保存且正常显示；评论支持表情和图片；图片上传成功。
 
-> ⚠️ `backend/app/main.py` 已有启动连通性检测代码，添加 StaticFiles 时**不要删除** `@app.on_event("startup")` 事件。
+**⚠️ 注意**：`backend/app/main.py` 已有 startup 事件，添加 StaticFiles 时保留现有代码。
 
 ---
 
-### 👤 任务D — Timeline 进度反馈
+### 👤 任务D — Timeline 进度反馈 + 结构升级
 
-**负责问题**：问题8（Timeline 加载状态）
+**负责问题**：问题8（Timeline 加载进度）、新功能1（Timeline 结构升级）
+
+**开发顺序**：
+1. 先做进度反馈（无损改动，快速给用户反馈）
+2. 再做结构升级（改 AI 提示词，丰富 schema）
 
 **主要改动范围**：
 
@@ -304,27 +376,19 @@ backend/app/main.py（新增 StaticFiles 挂载，注意保留已有的 startup 
 frontend/src/components/timeline/TimelineDrawer.vue
 backend/app/modules/timeline/router.py
 backend/app/modules/timeline/service.py
+backend/app/modules/timeline/schema.py
+database/migrations/007_enhance_event_timeline.sql
 ```
 
-**完成标准**：Timeline 抽屉打开时若处于生成中状态，显示骨架屏和提示文字；前端每 2 秒轮询一次状态，生成完成后自动展示；超过 60 秒提示"生成超时，请稍后重试"。
+**完成标准**：Timeline 生成中时显示进度提示；前端轮询检查状态；新 schema 包含 event_type/importance/overview/phases/relationships；后端能返回完整新数据。
 
 ---
 
 ### 🔐 安全专项（功能全部完成后统一处理）
 
-**负责问题**：安全问题1（密码加密）、安全问题2（JWT Token）、安全问题3（Token存储）
+**负责问题**：安全问题1、安全问题2、安全问题3
 
-**说明**：三个问题紧密相关，必须由**同一人**完成，改完后需通知所有人重新测试登录和注册流程（feature/module-d 已实现的注册功能也需同步更新为 bcrypt 加密）。
-
-**主要改动范围**：
-
-```
-backend/app/modules/auth/service.py
-backend/app/common/auth.py
-backend/requirements.txt
-database/seed.sql（密码字段更新为哈希值）
-frontend/src/stores/user.ts（可选）
-```
+**说明**：三个问题紧密相关，必须由**同一人**完成，改完后需通知所有人重新测试登录和注册。
 
 ---
 
@@ -334,8 +398,9 @@ frontend/src/stores/user.ts（可选）
 
 | 交叉文件 | 涉及任务 | 处理建议 |
 |---------|---------|---------|
-| `backend/app/main.py` | A（可能调整启动逻辑）、C（挂载 StaticFiles） | 改动区域不同，可并发；合并时各自保留对方代码 |
-| `backend/app/modules/auth/service.py` | 任务B（问题3 依赖登录态）、安全专项 | 安全专项**最后做**，不影响 B 的开发 |
+| `backend/app/main.py` | C（挂载 StaticFiles）、D（可能调整） | 改动区域不同，可并发；合并时各自保留代码 |
+| `backend/app/modules/community/service.py` | B（AI 助手 + 总结）、C（可能涉及） | B 先完成，C 不涉及此文件 |
+| `database/migrations/` | C（008）、D（007） | 执行顺序：007 → 008，编号确保序号不冲突 |
 
 ### 📋 推荐整体节奏
 
@@ -348,8 +413,14 @@ frontend/src/stores/user.ts（可选）
 
 第2轮（第1轮完成后）：
   A: 管理后台改真实 SQL（依赖连接池稳定）
-  B: 社区 AI 助手接入真实 AI
+  B: 社区 AI 助手 + 评论总结
+  C: 社区评论富媒体（依赖 uploads 挂载）
+  D: Timeline 结构升级 + AI 提示词改造
 
 安全专项（所有功能完成后）：
   一人负责: 密码加密 + JWT + Token 存储
 ```
+
+---
+
+**累计待做功能**：6 个问题 + 3 个新功能，分为 4 个任务，两轮并发开发。预估 2-3 周完成全部功能。
