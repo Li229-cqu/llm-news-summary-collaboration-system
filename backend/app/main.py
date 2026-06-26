@@ -28,13 +28,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 register_exception_handlers(app)
+
+
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str):
+    return success_response(message="OK")
 
 
 @app.on_event("startup")

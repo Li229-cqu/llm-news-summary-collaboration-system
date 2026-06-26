@@ -59,7 +59,7 @@ async def get_ai_history(
 
 @router.get("/records/{record_id}", response_model=ApiResponse[AIGenerateRecordDetail])
 async def get_history_detail(
-    record_id: int | str,
+    record_id: Union[int, str],
     current_user: Optional[UserInfo] = Depends(_get_optional_current_user),
 ) -> ApiResponse[AIGenerateRecordDetail]:
     """获取 AI 生成历史详情。"""
@@ -69,7 +69,7 @@ async def get_history_detail(
 
 @router.delete("/records/{record_id}", response_model=ApiResponse[DeleteAIRecordResult])
 async def delete_history(
-    record_id: int | str,
+    record_id: Union[int, str],
     current_user: Optional[UserInfo] = Depends(_get_optional_current_user),
 ) -> ApiResponse[DeleteAIRecordResult]:
     """删除 AI 生成历史。"""

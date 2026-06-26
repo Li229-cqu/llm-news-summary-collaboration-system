@@ -809,6 +809,8 @@ def _mock_get_posts(
         item["is_liked"] = item["liked"]
         item["is_favorited"] = _mock_is_post_favorited(post_id, user_id)
         item["is_blocked"] = _mock_is_post_blocked(author_id, user_id)
+        item["hot"] = int(item.get("heat_score") or 0) > 100
+        item["official"] = int(item.get("user_id") or 0) == 0
         related_news_id = item.get("related_news_id")
         item["related_news_title"] = normalize_text(
             item.get("related_news_title") or news_title_map.get(int(related_news_id or 0), "")

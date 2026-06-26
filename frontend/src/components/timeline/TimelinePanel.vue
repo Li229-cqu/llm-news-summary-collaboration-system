@@ -12,7 +12,12 @@
         </el-tag>
       </div>
 
-      <p class="timeline-panel__summary">{{ summaryText }}</p>
+      <p class="timeline-panel__summary">{{ overviewText }}</p>
+
+      <div v-if="timelineData.key_figures?.length" class="timeline-panel__key-figures">
+        <span class="key-figures-label">核心人物/机构</span>
+        <el-tag v-for="(figure, index) in timelineData.key_figures" :key="index" size="small">{{ figure }}</el-tag>
+      </div>
 
       <div class="timeline-panel__metrics">
         <div class="timeline-panel__metric">
@@ -23,8 +28,25 @@
           <span>节点数</span>
           <strong>{{ timelineData.timeline.length }}</strong>
         </div>
+        <div v-if="timelineData.phases?.length" class="timeline-panel__metric">
+          <span>阶段数</span>
+          <strong>{{ timelineData.phases.length }}</strong>
+        </div>
       </div>
     </el-card>
+
+    <div v-if="timelineData.phases?.length" class="timeline-panel__phases">
+      <el-card shadow="never">
+        <div class="phases-header">
+          <h3>事件阶段</h3>
+        </div>
+        <div class="phases-list">
+          <el-tag v-for="(phase, index) in timelineData.phases" :key="index" type="success" effect="plain" class="phase-tag">
+            {{ phase.name }}
+          </el-tag>
+        </div>
+      </el-card>
+    </div>
 
     <div class="timeline-panel__body">
       <section class="timeline-panel__timeline">
@@ -68,7 +90,10 @@ const props = defineProps<{
 }>()
 
 const topicName = computed(() => props.timelineData.topic_name || '事件脉络')
-const summaryText = computed(() => {
+const overviewText = computed(() => {
+  if (props.timelineData.overview) {
+    return props.timelineData.overview
+  }
   const firstNode = props.timelineData.timeline[0]
   return firstNode?.event_summary || '该话题下的事件脉络会按时间顺序展示关键节点。'
 })
@@ -122,6 +147,18 @@ const heatScore = computed(() => props.timelineData.timeline.length * 10 || 0)
   line-height: 1.9;
 }
 
+.timeline-panel__key-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-figures-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
 .timeline-panel__metrics {
   display: flex;
   flex-wrap: wrap;
@@ -146,6 +183,32 @@ const heatScore = computed(() => props.timelineData.timeline.length * 10 || 0)
 .timeline-panel__metric strong {
   color: var(--color-text-primary);
   font-size: 18px;
+}
+
+.timeline-panel__phases {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-card);
+  background: var(--color-bg-card);
+}
+
+.timeline-panel__phases :deep(.el-card__body) {
+  padding: 16px 20px;
+}
+
+.phases-header h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: var(--color-text-primary);
+}
+
+.phases-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phase-tag {
+  font-size: 12px;
 }
 
 .timeline-panel__body {

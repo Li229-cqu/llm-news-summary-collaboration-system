@@ -37,6 +37,29 @@ class TimelineNode(BaseModel):
     source_news_id: int
     source_title: str
     source_name: str
+    event_type: Literal["policy", "reaction", "breakthrough", "outcome", "background", "other"] = "other"
+    importance: int = Field(ge=1, le=5, default=3)
+    event_detail: str = ""
+    related_event_ids: list[int] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+
+
+class TimelinePhase(BaseModel):
+    name: str
+    start_event_id: int
+    end_event_id: int
+
+
+class TimelineRelationship(BaseModel):
+    from_id: int
+    to_id: int
+    type: Literal["causes", "follows", "parallel"] = "follows"
+
+
+class TimelineMetadata(BaseModel):
+    overview: str = ""
+    key_figures: list[str] = Field(default_factory=list)
+    phases: list[TimelinePhase] = Field(default_factory=list)
 
 
 class TimelineResponse(BaseModel):
@@ -61,4 +84,9 @@ class TimelineGenerateRequest(BaseModel):
 class TimelineGenerateResult(TimelineResponse):
     generated_at: str | None = None
     updated_at: str | None = None
-    generate_status: Literal["cached", "generated", "mock"] = "mock"
+    generate_status: Literal["cached", "generated", "mock", "generating"] = "mock"
+    schema_version: str = "1.0"
+    overview: str = ""
+    key_figures: list[str] = Field(default_factory=list)
+    phases: list[TimelinePhase] = Field(default_factory=list)
+    relationships: list[TimelineRelationship] = Field(default_factory=list)

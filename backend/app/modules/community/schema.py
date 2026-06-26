@@ -40,6 +40,8 @@ class CommunityPost(BaseModel):
     is_liked: bool = False
     is_favorited: bool = False
     is_blocked: bool = False
+    hot: bool = False
+    official: bool = False
 
 
 class CreatePostRequest(BaseModel):
