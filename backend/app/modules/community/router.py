@@ -16,6 +16,7 @@ from app.modules.community.schema import (
     BlockResponse,
     CommentItem,
     CommentListResponse,
+    CommentsSummaryResponse,
     CommunityPost,
     CreateCommentRequest,
     CreatePostRequest,
@@ -30,6 +31,7 @@ from app.modules.community.service import (
     create_comment,
     create_post,
     get_comments,
+    get_comments_summary,
     get_hot_search,
     get_hot_topics,
     get_post_detail,
@@ -186,4 +188,13 @@ async def hot_topics(limit: int = Query(10, ge=1, le=20, description="数量限�
 
 @router.post("/ai-helper", response_model=ApiResponse[AIHelperResponse])
 async def ai_helper(question: str = Body(..., embed=True, description="问题")) -> ApiResponse[AIHelperResponse]:
-    return success_response(ai_news_helper(question))
+    return success_response(await ai_news_helper(question))
+
+
+@router.get("/posts/{post_id}/comments-summary", response_model=ApiResponse[CommentsSummaryResponse])
+async def get_post_comments_summary(
+    post_id: int = Path(..., ge=1, description="帖子ID"),
+) -> ApiResponse[CommentsSummaryResponse]:
+    """获取帖子评论区的 AI 总结。"""
+    summary = await get_comments_summary(post_id)
+    return success_response(summary)

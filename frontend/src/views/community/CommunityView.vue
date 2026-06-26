@@ -209,6 +209,29 @@
         </div>
       </div>
       <div class="comments-section">
+        <div v-if="loadingCommentsSummary" class="loading-container">
+          <el-spinner />
+        </div>
+        <div v-else-if="commentsSummary" class="comments-summary-card">
+          <div class="summary-header">
+            <el-icon><ChatDotRound /></el-icon>
+            <span class="summary-title">AI 评论总结</span>
+            <el-tag :type="commentsSummary.source === 'llm' ? 'success' : 'info'" size="small">
+              {{ commentsSummary.source === 'llm' ? 'AI 生成' : '关键词匹配' }}
+            </el-tag>
+          </div>
+          <div class="summary-content">
+            <p>{{ commentsSummary.summary }}</p>
+          </div>
+          <div class="summary-tags">
+            <el-tag :type="getSentimentType(commentsSummary.sentiment)" size="small">
+              {{ getSentimentText(commentsSummary.sentiment) }}
+            </el-tag>
+            <el-tag type="info" size="small">
+              关键词: {{ commentsSummary.keyword }}
+            </el-tag>
+          </div>
+        </div>
         <h4>评论 ({{ comments.length }})</h4>
         <div v-if="loadingComments" class="loading-container">
           <el-spinner />
@@ -256,6 +279,7 @@ import {
   Minus,
   User,
   Share,
+  ChatDotRound,
 } from '@element-plus/icons-vue'
 import {
   getPostList,
@@ -266,8 +290,10 @@ import {
   toggleLike,
   getHotSearch,
   aiNewsHelper,
+  getCommentsSummary,
   type CommunityPost,
   type HotSearchItem,
+  type CommentsSummaryResponse,
 } from '@/api/community'
 import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 import { useUserStore } from '@/stores/user'
@@ -307,6 +333,8 @@ const selectedPost = ref<CommunityPost | null>(null)
 const comments = ref<any[]>([])
 const loadingComments = ref(false)
 const newComment = ref('')
+const commentsSummary = ref<CommentsSummaryResponse | null>(null)
+const loadingCommentsSummary = ref(false)
 
 function addTag() {
   if (newTag.value && !postForm.value.tags.includes(newTag.value)) {
@@ -449,6 +477,19 @@ async function showPostDetail(post: CommunityPost) {
   selectedPost.value = post
   showPostModal.value = true
   await loadComments(post.id)
+  await loadCommentsSummary(post.id)
+}
+
+async function loadCommentsSummary(postId: number) {
+  loadingCommentsSummary.value = true
+  try {
+    commentsSummary.value = await getCommentsSummary(postId)
+  } catch (e) {
+    commentsSummary.value = null
+    console.error('获取评论总结失败', e)
+  } finally {
+    loadingCommentsSummary.value = false
+  }
 }
 
 async function loadComments(postId: number) {
@@ -485,6 +526,22 @@ function formatTime(timeStr: string) {
 function truncateContent(content: string, maxLength: number) {
   if (content.length <= maxLength) return content
   return content.slice(0, maxLength) + '...'
+}
+
+function getSentimentType(sentiment: string) {
+  switch (sentiment) {
+    case 'positive': return 'success'
+    case 'negative': return 'danger'
+    default: return 'warning'
+  }
+}
+
+function getSentimentText(sentiment: string) {
+  switch (sentiment) {
+    case 'positive': return '正面'
+    case 'negative': return '负面'
+    default: return '中立'
+  }
 }
 
 onMounted(() => {
@@ -826,6 +883,40 @@ onMounted(() => {
 
 .comments-section {
   padding-bottom: 16px;
+}
+
+.comments-summary-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.summary-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.summary-content {
+  margin-bottom: 12px;
+}
+
+.summary-content p {
+  color: #333;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.summary-tags {
+  display: flex;
+  gap: 8px;
 }
 
 .comments-list {

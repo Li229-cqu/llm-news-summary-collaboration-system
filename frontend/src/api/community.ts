@@ -63,6 +63,13 @@ export interface AIHelperResponse {
   answer?: string
 }
 
+export interface CommentsSummaryResponse {
+  summary: string
+  sentiment: 'positive' | 'negative' | 'neutral'
+  keyword: string
+  source: 'llm' | 'fallback'
+}
+
 export interface LikeResponse {
   success: boolean
   liked: boolean
@@ -110,4 +117,8 @@ export function getHotSearch(params: { limit?: number } = {}) {
 
 export function aiNewsHelper(question: string) {
   return request.post<AIHelperResponse, AIHelperResponse>('/api/community/ai-helper', { question })
+}
+
+export function getCommentsSummary(postId: number | string) {
+  return request.get<CommentsSummaryResponse, CommentsSummaryResponse>(`/api/community/posts/${postId}/comments-summary`)
 }
