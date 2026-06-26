@@ -564,3 +564,10 @@ heat_score = view_count + like_count * 5 + favorite_count * 4 + comment_count * 
 ```
 
 当前订阅数据优先写入数据库 `user_category_subscription`；数据库不可用时后端保留 mock fallback，确保演示不中断。
+## A3 验收补充
+
+- 后端数据库访问层使用 `DBUtils.PooledDB` 连接池。
+- 管理后台接口当前优先读取真实数据库，数据库异常时回退 mock。
+- `/api/admin/dashboard`、`/api/admin/users`、`/api/admin/pending-posts` 需要管理后台权限。
+- 用户列表不会返回 `password` 字段。
+- 管理后台待审核帖子接口实际路径为 `/api/admin/pending-posts`。
