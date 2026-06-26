@@ -1,8 +1,9 @@
-"""
-Prompt 构造模块。
+""""""
 
-为智谱 GLM 模型构造标题摘要生成任务的 prompt。
-"""
+from __future__ import annotations
+
+from typing import List
+
 
 from app.schemas.generate import GenerateRequest
 

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, Header
 
 from app.common.auth import require_admin, require_editor_or_admin, require_login
 from app.common.response import ApiResponse, success_response
-from app.modules.auth.schema import LoginRequest, LoginResponse, UserInfo
-from app.modules.auth.service import get_current_mock_user, login_mock_user, logout_mock_user
+from app.modules.auth.schema import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ResetPasswordRequest, UserInfo
+from app.modules.auth.service import get_current_mock_user, login_mock_user, logout_mock_user, register_user, reset_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -18,6 +18,17 @@ async def ping_auth() -> ApiResponse[str]:
 @router.post("/login", response_model=ApiResponse[LoginResponse])
 async def login(request: LoginRequest) -> ApiResponse[LoginResponse]:
     return success_response(login_mock_user(request))
+
+
+@router.post("/register", response_model=ApiResponse[RegisterResponse])
+async def register(request: RegisterRequest) -> ApiResponse[RegisterResponse]:
+    return success_response(register_user(request))
+
+
+@router.post("/reset-password")
+async def reset_password_endpoint(request: ResetPasswordRequest) -> ApiResponse[dict]:
+    result = reset_password(request)
+    return success_response(result, message=result.get("message", "密码重置成功"))
 
 
 @router.post("/logout")

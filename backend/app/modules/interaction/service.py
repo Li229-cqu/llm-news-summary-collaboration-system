@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Set, Union
 
 from app.common.exceptions import AppException
 from app.db.database import execute_one, execute_query, execute_update, get_connection

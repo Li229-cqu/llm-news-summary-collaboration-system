@@ -1,4 +1,5 @@
-from typing import Callable, Optional
+from __future__ import annotations
+from typing import Callable, Optional, Set
 
 from fastapi import Depends, Header
 

@@ -11,8 +11,39 @@ export interface LoginResult {
   user: UserInfo
 }
 
+export interface RegisterParams {
+  username: string
+  password: string
+  confirm_password: string
+  nickname?: string
+  email?: string
+  phone?: string
+}
+
+export interface RegisterResult {
+  id: number
+  username: string
+  nickname: string
+}
+
+export interface ResetPasswordParams {
+  username: string
+  email?: string
+  phone?: string
+  new_password: string
+  confirm_password: string
+}
+
 export function loginApi(params: LoginParams) {
   return request.post<LoginResult, LoginResult>('/api/auth/login', params)
+}
+
+export function registerApi(params: RegisterParams) {
+  return request.post<RegisterResult, RegisterResult>('/api/auth/register', params)
+}
+
+export function resetPasswordApi(params: ResetPasswordParams) {
+  return request.post<{ message: string }, { message: string }>('/api/auth/reset-password', params)
 }
 
 export function logoutApi() {

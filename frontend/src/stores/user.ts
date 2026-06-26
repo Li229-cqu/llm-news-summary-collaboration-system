@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { logoutApi } from '@/api/auth'
 
 const TOKEN_STORAGE_KEY = 'llm_news_token'
 const USER_INFO_STORAGE_KEY = 'llm_news_user_info'
@@ -10,6 +11,8 @@ export interface UserInfo {
   nickname: string
   role: string
   avatar: string
+  email: string
+  phone: string
   status: number
 }
 
@@ -25,6 +28,8 @@ function isValidUserInfo(value: unknown): value is UserInfo {
     typeof user.nickname === 'string' &&
     typeof user.role === 'string' &&
     typeof user.avatar === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.phone === 'string' &&
     typeof user.status === 'number'
   )
 }
@@ -59,6 +64,14 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = null
     localStorage.removeItem(TOKEN_STORAGE_KEY)
     localStorage.removeItem(USER_INFO_STORAGE_KEY)
+  }
+
+  async function logout() {
+    try {
+      await logoutApi()
+    } catch {
+    }
+    clearUser()
   }
 
   function loadFromStorage() {
@@ -98,6 +111,7 @@ export const useUserStore = defineStore('user', () => {
     setUserInfo,
     setLoginInfo,
     clearUser,
+    logout,
     loadFromStorage,
   }
 })

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from app.db.database import execute_one, execute_query, execute_update
 from app.mock.ai_records import MOCK_AI_RECORDS

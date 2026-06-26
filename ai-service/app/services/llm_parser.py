@@ -1,18 +1,12 @@
-"""
-LLM 返回结果解析和修复模块。
+""""""
 
-负责：
-1. 清理 LLM 返回的 markdown 包裹
-2. 解析 JSON
-3. 修复字段缺失或类型错误
-4. 映射中文风险等级为英文
-5. 确保能构造出有效的 GenerateResponse
-"""
+from __future__ import annotations
+
 
 import json
 import re
 import logging
-from typing import Any
+from typing import Any, List, Optional, Tuple, Union
 
 from app.schemas.generate import GenerateResponse, NewsElement, ConsistencyCheck
 

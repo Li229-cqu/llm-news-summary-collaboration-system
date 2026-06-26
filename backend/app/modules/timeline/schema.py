@@ -1,6 +1,9 @@
-"""Timeline 模块请求与响应模型。"""
+""""""
 
-from typing import Literal
+from __future__ import annotations
+
+
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 

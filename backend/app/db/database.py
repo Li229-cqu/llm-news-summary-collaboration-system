@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 import pymysql
 
@@ -53,6 +53,19 @@ def execute_update(sql: str, params: Any | None = None) -> int:
             affected_rows = cursor.execute(sql, params or ())
         connection.commit()
         return affected_rows
+    finally:
+        connection.close()
+
+
+def execute_insert(sql: str, params: Any | None = None) -> int:
+    """执行插入语句并返回自增ID。"""
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params or ())
+            last_id = cursor.lastrowid
+        connection.commit()
+        return last_id
     finally:
         connection.close()
 

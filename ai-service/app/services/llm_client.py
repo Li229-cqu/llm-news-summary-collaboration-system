@@ -1,9 +1,9 @@
-"""
-智谱 GLM-4-Flash LLM 客户端。
+""""""
 
-使用 OpenAI 兼容方式调用智谱大模型。
-当前阶段（9.2）仅新增客户端，不接入主流程，主流程仍使用动态 mock。
-"""
+from __future__ import annotations
+
+from typing import List, Optional, Union
+
 
 import logging
 from openai import OpenAI, APIError

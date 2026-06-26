@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.common.exceptions import AppException
 from app.db.database import execute_one, execute_query, execute_update
