@@ -279,9 +279,9 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
 
 
 def _query_ai_record_detail_from_db(
-    record_id: int | str,
+    record_id: Union[int, str],
     current_user: Optional[Any] = None,
-) -> dict[str, Any] | None:
+) -> Optional[Dict[str, Any]]:
     user_id = _get_user_id(current_user)
     params: list[Any] = [record_id]
     where_clause = "id = %s"
@@ -340,7 +340,7 @@ def _query_ai_record_detail_from_db(
     }
 
 
-def _delete_ai_record_from_db(record_id: int | str, current_user: Optional[Any] = None) -> bool:
+def _delete_ai_record_from_db(record_id: Union[int, str], current_user: Optional[Any] = None) -> bool:
     user_id = _get_user_id(current_user)
     params: list[Any] = [record_id]
     where_clause = "id = %s"
@@ -416,7 +416,7 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
 
 
 def get_ai_record_detail(
-    record_id: int | str,
+    record_id: Union[int, str],
     current_user: Optional[Any] = None,
 ) -> AIGenerateRecordDetail:
     """获取 AI 生成记录详情，数据库优先，mock 兜底。"""
@@ -443,7 +443,7 @@ def get_ai_record_detail(
     )
 
 
-def delete_ai_record(record_id: int | str, current_user: Optional[Any] = None) -> bool:
+def delete_ai_record(record_id: Union[int, str], current_user: Optional[Any] = None) -> bool:
     """删除 AI 生成记录，数据库优先，mock 兜底。"""
     try:
         if _delete_ai_record_from_db(record_id, current_user=current_user):

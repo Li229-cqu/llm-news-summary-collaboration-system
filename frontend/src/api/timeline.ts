@@ -31,6 +31,23 @@ export interface TimelineNode {
   source_news_id: number
   source_title: string
   source_name: string
+  event_type?: 'policy' | 'reaction' | 'breakthrough' | 'outcome' | 'background' | 'other'
+  importance?: number
+  event_detail?: string
+  related_event_ids?: number[]
+  keywords?: string[]
+}
+
+export interface TimelinePhase {
+  name: string
+  start_event_id: number
+  end_event_id: number
+}
+
+export interface TimelineRelationship {
+  from_id: number
+  to_id: number
+  type?: 'causes' | 'follows' | 'parallel'
 }
 
 export interface TimelineResponse {
@@ -40,7 +57,12 @@ export interface TimelineResponse {
   source?: 'cache' | 'ai-service' | 'mock'
   generated_at?: string | null
   updated_at?: string | null
-  generate_status?: 'cached' | 'generated' | 'mock'
+  generate_status?: 'cached' | 'generated' | 'mock' | 'generating'
+  schema_version?: string
+  overview?: string
+  key_figures?: string[]
+  phases?: TimelinePhase[]
+  relationships?: TimelineRelationship[]
 }
 
 export interface TimelineNewsListResponse {

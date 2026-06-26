@@ -47,7 +47,7 @@ class CommentRecordItem(BaseModel):
 class AIRecordItem(BaseModel):
     id: int
     source: str
-    source_news_id: Optional[int | str] = None
+    source_news_id: Optional[Union[int, str]] = None
     source_title: str
     input_text: str
     candidate_titles: List[str]

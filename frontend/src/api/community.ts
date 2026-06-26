@@ -13,6 +13,8 @@ export interface CommunityPost {
   views: number
   tags: string[]
   liked?: boolean
+  hot?: boolean
+  official?: boolean
 }
 
 export interface CreatePostRequest {
