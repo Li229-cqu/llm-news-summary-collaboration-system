@@ -5,6 +5,7 @@
 
 from typing import Any, Dict, List, Optional
 
+from app.common.utils import paginate
 from app.mock.community import MOCK_COMMUNITY_POSTS
 from app.mock.news import MOCK_NEWS
 from app.mock.users import MOCK_USERS
@@ -14,21 +15,6 @@ from app.modules.admin.schema import AdminDashboard, AdminTestData, UserItem
 def get_test_data() -> AdminTestData:
     return AdminTestData(module="admin", description="管理后台模块基础接口占位")
 
-
-def _paginate(items: List[dict], page: int, page_size: int) -> Dict[str, Any]:
-    """对列表执行稳定的内存分页。"""
-    normalized_page = max(page, 1)
-    normalized_page_size = max(page_size, 1)
-    total = len(items)
-    start = (normalized_page - 1) * normalized_page_size
-    end = start + normalized_page_size
-
-    return {
-        "list": items[start:end],
-        "total": total,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-    }
 
 
 def get_dashboard() -> AdminDashboard:
@@ -56,7 +42,7 @@ def get_pending_posts(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
     ]
     pending_posts.sort(key=lambda x: x.get("create_time", ""), reverse=True)
 
-    return _paginate(pending_posts, page=page, page_size=page_size)
+    return paginate(pending_posts, page=page, page_size=page_size)
 
 
 def get_users(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
@@ -75,7 +61,7 @@ def get_users(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
 
     user_items.sort(key=lambda x: x["id"])
 
-    return _paginate(user_items, page=page, page_size=page_size)
+    return paginate(user_items, page=page, page_size=page_size)
 
 
 def get_system_config() -> Dict[str, Any]:

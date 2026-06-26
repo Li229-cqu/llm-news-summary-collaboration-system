@@ -10,6 +10,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set
 
 from app.common.exceptions import AppException
+from app.common.utils import format_datetime, normalize_text, paginate
 from app.db.database import execute_one, execute_query, execute_update, get_connection
 from app.mock.community import (
     MOCK_COMMUNITY_BLOCKS,
@@ -42,23 +43,8 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _normalize_text(value: Any, default: str = "") -> str:
-    if value is None:
-        return default
-    return str(value)
-
-
 def _format_datetime(value: Any) -> str:
-    if value is None:
-        return _now_text()
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if hasattr(value, "strftime"):
-        try:
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:  # noqa: BLE001
-            return str(value)
-    return _normalize_text(value, _now_text())
+    return format_datetime(value) or _now_text()
 
 
 def _parse_json_list(value: Any) -> list[str]:
@@ -97,8 +83,8 @@ def _current_user_name(current_user: Optional[Any]) -> str:
     if current_user is None:
         return "匿名用户"
     if isinstance(current_user, dict):
-        return _normalize_text(current_user.get("nickname") or current_user.get("username"))
-    return _normalize_text(getattr(current_user, "nickname", "") or getattr(current_user, "username", ""))
+        return normalize_text(current_user.get("nickname") or current_user.get("username"))
+    return normalize_text(getattr(current_user, "nickname", "") or getattr(current_user, "username", ""))
 
 
 def _db_has_posts() -> bool:
@@ -125,18 +111,6 @@ def _community_post_has_tags_column() -> bool:
     return int((row or {}).get("total") or 0) > 0
 
 
-def _paginate(items: list[dict[str, Any]], page: int, page_size: int) -> dict[str, Any]:
-    normalized_page = max(page, 1)
-    normalized_page_size = max(page_size, 1)
-    total = len(items)
-    start = (normalized_page - 1) * normalized_page_size
-    end = start + normalized_page_size
-    return {
-        "list": items[start:end],
-        "total": total,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-    }
 
 
 def _mock_post_lookup() -> dict[int, dict[str, Any]]:
@@ -191,22 +165,22 @@ def _post_row_to_item(
     heat_score = int(row.get("heat_score") or 0)
     author_name = _resolve_post_author(
         int(row.get("user_id") or 0),
-        _normalize_text(row.get("nickname")),
-        _normalize_text(row.get("username")),
-        _normalize_text(row.get("author")),
+        normalize_text(row.get("nickname")),
+        normalize_text(row.get("username")),
+        normalize_text(row.get("author")),
     )
     tags = _parse_json_list(row.get("tags"))
 
     return {
         "id": int(row.get("id") or 0),
         "user_id": int(row.get("user_id") or 0),
-        "username": _normalize_text(row.get("username")),
-        "nickname": _normalize_text(row.get("nickname")),
-        "avatar": _normalize_text(row.get("avatar")),
-        "title": _normalize_text(row.get("title")),
-        "content": _normalize_text(row.get("content")),
+        "username": normalize_text(row.get("username")),
+        "nickname": normalize_text(row.get("nickname")),
+        "avatar": normalize_text(row.get("avatar")),
+        "title": normalize_text(row.get("title")),
+        "content": normalize_text(row.get("content")),
         "related_news_id": row.get("related_news_id"),
-        "related_news_title": _normalize_text(row.get("related_news_title")),
+        "related_news_title": normalize_text(row.get("related_news_title")),
         "topic_id": row.get("topic_id"),
         "like_count": like_count,
         "comment_count": comment_count,
@@ -238,20 +212,20 @@ def _comment_row_to_item(
 ) -> dict[str, Any]:
     author_name = _resolve_post_author(
         int(row.get("user_id") or 0),
-        _normalize_text(row.get("nickname")),
-        _normalize_text(row.get("username")),
-        _normalize_text(row.get("author")),
+        normalize_text(row.get("nickname")),
+        normalize_text(row.get("username")),
+        normalize_text(row.get("author")),
     )
     like_count = int(row.get("like_count") or 0)
     item = {
         "id": int(row.get("id") or 0),
         "post_id": int(row.get("post_id") or 0),
         "user_id": int(row.get("user_id") or 0),
-        "username": _normalize_text(row.get("username")),
-        "nickname": _normalize_text(row.get("nickname")),
-        "avatar": _normalize_text(row.get("avatar")),
+        "username": normalize_text(row.get("username")),
+        "nickname": normalize_text(row.get("nickname")),
+        "avatar": normalize_text(row.get("avatar")),
         "parent_id": row.get("parent_id"),
-        "content": _normalize_text(row.get("content")),
+        "content": normalize_text(row.get("content")),
         "like_count": like_count,
         "status": int(row.get("status") or 0),
         "create_time": _format_datetime(row.get("create_time")),
@@ -296,7 +270,7 @@ def _mock_posts_sorted() -> list[dict[str, Any]]:
 
 
 def _mock_news_title_map() -> dict[int, str]:
-    return {int(item["id"]): _normalize_text(item.get("title")) for item in MOCK_NEWS}
+    return {int(item["id"]): normalize_text(item.get("title")) for item in MOCK_NEWS}
 
 
 def _mock_comments_for_post(post_id: int) -> list[dict[str, Any]]:
@@ -612,8 +586,8 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
                     **row,
                     "author": _resolve_post_author(
                         int(row.get("user_id") or 0),
-                        _normalize_text(row.get("nickname")),
-                        _normalize_text(row.get("username")),
+                        normalize_text(row.get("nickname")),
+                        normalize_text(row.get("username")),
                     ),
                     "author_id": int(row.get("user_id") or 0),
                 },
@@ -650,14 +624,14 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
         items.append(
             {
                 "id": int(row.get("id") or 0),
-                "keyword": _normalize_text(row.get("title")),
+                "keyword": normalize_text(row.get("title")),
                 "rank": int(row.get("rank_no") or 0),
                 "search_count": int(row.get("heat_score") or 0),
                 "trend": "up" if int(row.get("rank_no") or 0) <= 3 else "stable" if int(row.get("rank_no") or 0) <= 6 else "down",
-                "title": _normalize_text(row.get("title")),
-                "target_type": _normalize_text(row.get("target_type")),
+                "title": normalize_text(row.get("title")),
+                "target_type": normalize_text(row.get("target_type")),
                 "target_id": int(row.get("target_id") or 0),
-                "tag": _normalize_text(row.get("tag")),
+                "tag": normalize_text(row.get("tag")),
                 "update_time": _format_datetime(row.get("update_time")),
                 "create_time": _format_datetime(row.get("create_time")),
             }
@@ -793,8 +767,8 @@ def _mock_get_posts(
         items = [
             item
             for item in items
-            if lowered in _normalize_text(item.get("title")).casefold()
-            or lowered in _normalize_text(item.get("content")).casefold()
+            if lowered in normalize_text(item.get("title")).casefold()
+            or lowered in normalize_text(item.get("content")).casefold()
         ]
 
     items.sort(
@@ -808,7 +782,7 @@ def _mock_get_posts(
     for item in items:
         post_id = int(item["id"])
         author_id = int(item.get("user_id") or 0)
-        item["author"] = _normalize_text(item.get("author")) or _resolve_post_author(
+        item["author"] = normalize_text(item.get("author")) or _resolve_post_author(
             author_id,
             "",
             "",
@@ -825,11 +799,11 @@ def _mock_get_posts(
         item["is_favorited"] = _mock_is_post_favorited(post_id, user_id)
         item["is_blocked"] = _mock_is_post_blocked(author_id, user_id)
         related_news_id = item.get("related_news_id")
-        item["related_news_title"] = _normalize_text(
+        item["related_news_title"] = normalize_text(
             item.get("related_news_title") or news_title_map.get(int(related_news_id or 0), "")
         )
 
-    return _paginate(items, page=page, page_size=page_size)
+    return paginate(items, page=page, page_size=page_size)
 
 
 def _mock_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, Any] | None:
@@ -840,7 +814,7 @@ def _mock_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str
     news_title_map = _mock_news_title_map()
     author_id = int(item.get("user_id") or 0)
     user_id = _current_user_id(current_user)
-    item["author"] = _normalize_text(item.get("author"))
+    item["author"] = normalize_text(item.get("author"))
     item["author_id"] = author_id
     item["created_at"] = _format_datetime(item.get("create_time"))
     item["updated_at"] = _format_datetime(item.get("update_time"))
@@ -852,7 +826,7 @@ def _mock_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str
     item["is_favorited"] = _mock_is_post_favorited(post_id, user_id)
     item["is_blocked"] = _mock_is_post_blocked(author_id, user_id)
     related_news_id = item.get("related_news_id")
-    item["related_news_title"] = _normalize_text(
+    item["related_news_title"] = normalize_text(
         item.get("related_news_title") or news_title_map.get(int(related_news_id or 0), "")
     )
     return item
@@ -876,15 +850,15 @@ def _mock_get_comments(post_id: int, current_user: Optional[Any] = None) -> list
                 "id": comment_id,
                 "post_id": post_id,
                 "user_id": author_id,
-                "username": _normalize_text(item.get("username")),
-                "nickname": _normalize_text(item.get("nickname")),
-                "avatar": _normalize_text(item.get("avatar")),
+                "username": normalize_text(item.get("username")),
+                "nickname": normalize_text(item.get("nickname")),
+                "avatar": normalize_text(item.get("avatar")),
                 "parent_id": item.get("parent_id"),
-                "content": _normalize_text(item.get("content")),
+                "content": normalize_text(item.get("content")),
                 "like_count": int(item.get("like_count") or 0),
                 "status": int(item.get("status") or 0),
                 "create_time": _format_datetime(item.get("create_time")),
-                "author": _normalize_text(item.get("author")),
+                "author": normalize_text(item.get("author")),
                 "author_id": author_id,
                 "created_at": _format_datetime(item.get("create_time")),
                 "likes": int(item.get("like_count") or 0),
@@ -901,16 +875,16 @@ def _mock_hot_search(limit: int = 10) -> list[dict[str, Any]]:
         items.append(
             {
                 "id": int(item["id"]),
-                "keyword": _normalize_text(item.get("title")),
+                "keyword": normalize_text(item.get("title")),
                 "rank": int(item.get("rank_no") or 0),
                 "search_count": int(item.get("heat_score") or 0),
                 "trend": "up" if int(item.get("rank_no") or 0) <= 3 else "stable" if int(item.get("rank_no") or 0) <= 6 else "down",
-                "title": _normalize_text(item.get("title")),
-                "target_type": _normalize_text(item.get("target_type")),
+                "title": normalize_text(item.get("title")),
+                "target_type": normalize_text(item.get("target_type")),
                 "target_id": int(item.get("target_id") or 0),
-                "tag": _normalize_text(item.get("tag")),
-                "update_time": _normalize_text(item.get("update_time")),
-                "create_time": _normalize_text(item.get("update_time")),
+                "tag": normalize_text(item.get("tag")),
+                "update_time": normalize_text(item.get("update_time")),
+                "create_time": normalize_text(item.get("update_time")),
             }
         )
     return items
@@ -930,9 +904,9 @@ def _post_create_row_from_request(request: CreatePostRequest, current_user: Opti
     return {
         "id": 0,
         "user_id": user_id or 0,
-        "username": _normalize_text(getattr(current_user, "username", "") if current_user else ""),
+        "username": normalize_text(getattr(current_user, "username", "") if current_user else ""),
         "nickname": _current_user_name(current_user),
-        "avatar": _normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
+        "avatar": normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
         "title": request.title,
         "content": request.content,
         "related_news_id": request.related_news_id,
@@ -1688,9 +1662,9 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
     post = {
         "id": new_id,
         "user_id": _current_user_id(current_user) or 0,
-        "username": _normalize_text(getattr(current_user, "username", "") if current_user else ""),
+        "username": normalize_text(getattr(current_user, "username", "") if current_user else ""),
         "nickname": _current_user_name(current_user),
-        "avatar": _normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
+        "avatar": normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
         "title": request.title,
         "content": request.content,
         "related_news_id": request.related_news_id,
@@ -1732,9 +1706,9 @@ def _mock_create_comment(post_id: int, request: CreateCommentRequest, current_us
         "id": new_id,
         "post_id": post_id,
         "user_id": _current_user_id(current_user) or 0,
-        "username": _normalize_text(getattr(current_user, "username", "") if current_user else ""),
+        "username": normalize_text(getattr(current_user, "username", "") if current_user else ""),
         "nickname": _current_user_name(current_user),
-        "avatar": _normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
+        "avatar": normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
         "parent_id": None,
         "content": request.content,
         "like_count": 0,
@@ -1765,9 +1739,9 @@ def _mock_reply_comment(comment_id: int, request: CreateCommentRequest, current_
         "id": new_id,
         "post_id": post_id,
         "user_id": _current_user_id(current_user) or 0,
-        "username": _normalize_text(getattr(current_user, "username", "") if current_user else ""),
+        "username": normalize_text(getattr(current_user, "username", "") if current_user else ""),
         "nickname": _current_user_name(current_user),
-        "avatar": _normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
+        "avatar": normalize_text(getattr(current_user, "avatar", "") if current_user else ""),
         "parent_id": comment_id,
         "content": request.content,
         "like_count": 0,
@@ -1906,15 +1880,15 @@ def _mock_get_post_comments(post_id: int, current_user: Optional[Any] = None) ->
                 "id": comment_id,
                 "post_id": post_id,
                 "user_id": author_id,
-                "username": _normalize_text(item.get("username")),
-                "nickname": _normalize_text(item.get("nickname")),
-                "avatar": _normalize_text(item.get("avatar")),
+                "username": normalize_text(item.get("username")),
+                "nickname": normalize_text(item.get("nickname")),
+                "avatar": normalize_text(item.get("avatar")),
                 "parent_id": item.get("parent_id"),
-                "content": _normalize_text(item.get("content")),
+                "content": normalize_text(item.get("content")),
                 "like_count": int(item.get("like_count") or 0),
                 "status": int(item.get("status") or 0),
                 "create_time": _format_datetime(item.get("create_time")),
-                "author": _normalize_text(item.get("author")),
+                "author": normalize_text(item.get("author")),
                 "author_id": author_id,
                 "created_at": _format_datetime(item.get("create_time")),
                 "likes": int(item.get("like_count") or 0),

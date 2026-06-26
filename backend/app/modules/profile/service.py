@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
+from app.common.utils import format_datetime, normalize_text, paginate
 from app.db.database import execute_one, execute_query, execute_update
 from app.mock.ai_records import MOCK_AI_RECORDS
 from app.mock.comments import MOCK_NEWS_COMMENTS
@@ -43,24 +44,6 @@ def _get_current_user_id(current_user: Optional[Any]) -> Optional[int]:
     return getattr(current_user, "id", None)
 
 
-def _normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _format_datetime(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if hasattr(value, "strftime"):
-        try:
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:  # noqa: BLE001
-            return str(value)
-    return str(value)
-
 
 def _parse_json_field(value: Any, default: Any = None) -> Any:
     if value is None:
@@ -80,19 +63,6 @@ def _parse_json_field(value: Any, default: Any = None) -> Any:
     return value
 
 
-def _paginate(items: List[dict], page: int, page_size: int) -> Dict[str, Any]:
-    normalized_page = max(page, 1)
-    normalized_page_size = max(page_size, 1)
-    total = len(items)
-    start = (normalized_page - 1) * normalized_page_size
-    end = start + normalized_page_size
-
-    return {
-        "list": items[start:end],
-        "total": total,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-    }
 
 
 def _mock_profile_overview(current_user: Optional[Any] = None) -> ProfileOverview:
@@ -197,7 +167,7 @@ def _mock_browse_history(
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     user_history = [item for item in MOCK_BROWSE_HISTORY if item["user_id"] == user_id]
     user_history.sort(key=lambda x: x["browse_time"], reverse=True)
@@ -216,7 +186,7 @@ def _mock_browse_history(
                 ).dict()
             )
 
-    return _paginate(history_items, page=page, page_size=page_size)
+    return paginate(history_items, page=page, page_size=page_size)
 
 
 def _db_browse_history(
@@ -226,7 +196,7 @@ def _db_browse_history(
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     rows = execute_query(
         """
@@ -251,13 +221,13 @@ def _db_browse_history(
         history_items.append(
             BrowseHistoryItem(
                 news_id=int(row["news_id"]),
-                title=_normalize_text(row["title"]),
-                category_name=_normalize_text(row["category_name"]),
-                browse_time=_format_datetime(row["browse_time"]),
+                title=normalize_text(row["title"]),
+                category_name=normalize_text(row["category_name"]),
+                browse_time=format_datetime(row["browse_time"]),
             ).dict()
         )
 
-    return _paginate(history_items, page=page, page_size=page_size)
+    return paginate(history_items, page=page, page_size=page_size)
 
 
 def get_browse_history(
@@ -279,7 +249,7 @@ def _mock_favorites(
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     user_favorites = [item for item in MOCK_NEWS_FAVORITES if item["user_id"] == user_id]
     news_map = {news["id"]: news for news in MOCK_NEWS}
@@ -300,7 +270,7 @@ def _mock_favorites(
             )
 
     favorite_items.sort(key=lambda x: x["publish_time"], reverse=True)
-    return _paginate(favorite_items, page=page, page_size=page_size)
+    return paginate(favorite_items, page=page, page_size=page_size)
 
 
 def _db_favorites(
@@ -308,7 +278,7 @@ def _db_favorites(
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     rows = execute_query(
         """
@@ -337,15 +307,15 @@ def _db_favorites(
         favorite_items.append(
             FavoriteItem(
                 news_id=int(row["news_id"]),
-                title=_normalize_text(row["title"]),
-                summary=_normalize_text(row["summary"]),
-                category_name=_normalize_text(row["category_name"]),
-                source=_normalize_text(row["source"]),
-                publish_time=_format_datetime(row["publish_time"]),
+                title=normalize_text(row["title"]),
+                summary=normalize_text(row["summary"]),
+                category_name=normalize_text(row["category_name"]),
+                source=normalize_text(row["source"]),
+                publish_time=format_datetime(row["publish_time"]),
             ).dict()
         )
 
-    return _paginate(favorite_items, page=page, page_size=page_size)
+    return paginate(favorite_items, page=page, page_size=page_size)
 
 
 def get_favorites(
@@ -369,7 +339,7 @@ def _mock_comments(
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     user_comments = [
         item for item in MOCK_NEWS_COMMENTS if item["user_id"] == user_id and item["status"] != 4
@@ -394,7 +364,7 @@ def _mock_comments(
                 ).dict()
             )
 
-    return _paginate(comment_items, page=page, page_size=page_size)
+    return paginate(comment_items, page=page, page_size=page_size)
 
 
 def _db_comments(
@@ -404,7 +374,7 @@ def _db_comments(
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     rows = execute_query(
         """
@@ -434,16 +404,16 @@ def _db_comments(
             CommentRecordItem(
                 comment_id=int(row["comment_id"]),
                 news_id=int(row["news_id"]),
-                news_title=_normalize_text(row["news_title"]),
-                category_name=_normalize_text(row["category_name"]),
-                content=_normalize_text(row["content"]),
+                news_title=normalize_text(row["news_title"]),
+                category_name=normalize_text(row["category_name"]),
+                content=normalize_text(row["content"]),
                 like_count=int(row["like_count"] or 0),
                 status=int(row["status"] or 0),
-                create_time=_format_datetime(row["create_time"]),
+                create_time=format_datetime(row["create_time"]),
             ).dict()
         )
 
-    return _paginate(comment_items, page=page, page_size=page_size)
+    return paginate(comment_items, page=page, page_size=page_size)
 
 
 def get_comments(
@@ -467,7 +437,7 @@ def _mock_ai_records(
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     user_records = [item for item in MOCK_AI_RECORDS if item.get("user_id", 1) == user_id]
     user_records.sort(key=lambda x: x.get("id", 0), reverse=True)
@@ -490,7 +460,7 @@ def _mock_ai_records(
             ).dict()
         )
 
-    return _paginate(record_items, page=page, page_size=page_size)
+    return paginate(record_items, page=page, page_size=page_size)
 
 
 def _db_ai_records(
@@ -498,7 +468,7 @@ def _db_ai_records(
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
 
     rows = execute_query(
         """
@@ -532,19 +502,19 @@ def _db_ai_records(
         record_items.append(
             AIRecordItem(
                 id=int(row["id"]),
-                source=_normalize_text(row.get("source")) or "manual",
+                source=normalize_text(row.get("source")) or "manual",
                 source_news_id=row.get("source_news_id"),
-                source_title=_normalize_text(row.get("source_title")),
-                input_text=_normalize_text(row["input_text"]),
+                source_title=normalize_text(row.get("source_title")),
+                input_text=normalize_text(row["input_text"]),
                 candidate_titles=_parse_json_field(row.get("candidate_titles"), default=[]),
-                summary_short=_normalize_text(row.get("summary_short")),
-                summary_long=_normalize_text(row.get("summary_long")) or None,
-                risk_level=_normalize_text(row.get("risk_level")) or "low",
-                create_time=_format_datetime(row.get("created_at")),
+                summary_short=normalize_text(row.get("summary_short")),
+                summary_long=normalize_text(row.get("summary_long")) or None,
+                risk_level=normalize_text(row.get("risk_level")) or "low",
+                create_time=format_datetime(row.get("created_at")),
             ).dict()
         )
 
-    return _paginate(record_items, page=page, page_size=page_size)
+    return paginate(record_items, page=page, page_size=page_size)
 
 
 def get_ai_records(
@@ -565,8 +535,8 @@ def _mock_subscriptions(current_user: Optional[Any] = None) -> SubscriptionRespo
     categories = [
         SubscriptionCategory(
             id=int(item.get("id") or 0),
-            name=_normalize_text(item.get("name")),
-            code=_normalize_text(item.get("code")),
+            name=normalize_text(item.get("name")),
+            code=normalize_text(item.get("code")),
             subscribed=False,
         )
         for item in sorted(NEWS_CATEGORIES, key=lambda item: (item.get("sort", 0), item.get("id", 0)))
@@ -601,8 +571,8 @@ def get_subscriptions(current_user: Optional[Any] = None) -> SubscriptionRespons
         categories = [
             SubscriptionCategory(
                 id=int(row["id"]),
-                name=_normalize_text(row["name"]),
-                code=_normalize_text(row["code"]),
+                name=normalize_text(row["name"]),
+                code=normalize_text(row["code"]),
                 subscribed=bool(row.get("subscribed")),
             )
             for row in rows

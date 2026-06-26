@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import httpx
 
 from app.common.exceptions import AppException
+from app.common.utils import normalize_text
 from app.core.config import settings
 from app.db.database import execute_one, execute_query, execute_update
 from app.mock.news import MOCK_NEWS
@@ -33,11 +34,6 @@ AI_SERVICE_UNAVAILABLE_MESSAGE = "AI 服务暂时不可用，请稍后重试"
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
-def _normalize_text(value: Any, default: str = "") -> str:
-    if value is None:
-        return default
-    return str(value)
 
 
 def _parse_json_list(value: Any, default: list[Any] | None = None) -> list[Any]:
@@ -87,7 +83,7 @@ def _parse_json_dict(value: Any, default: dict[str, Any] | None = None) -> dict[
 def _parse_publish_time(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value
-    text = _normalize_text(value).replace("T", " ").strip()
+    text = normalize_text(value).replace("T", " ").strip()
     if not text:
         return datetime.min
     try:
@@ -99,17 +95,17 @@ def _parse_publish_time(value: Any) -> datetime:
 def _format_publish_time(value: Any) -> str:
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
-    text = _normalize_text(value).replace("T", " ").strip()
+    text = normalize_text(value).replace("T", " ").strip()
     return text
 
 
 def _topic_row_to_model(row: dict[str, Any], news_count: int) -> TimelineTopic:
     return TimelineTopic(
         topic_id=int(row["id"]),
-        topic_name=_normalize_text(row["topic_name"]),
+        topic_name=normalize_text(row["topic_name"]),
         keyword_list=[str(item) for item in _parse_json_list(row.get("keyword_list"), [])],
         heat_score=int(row.get("heat_score") or 0),
-        summary=_normalize_text(row.get("summary")),
+        summary=normalize_text(row.get("summary")),
         news_count=news_count,
     )
 
@@ -135,7 +131,7 @@ def _mock_topics() -> list[TimelineTopic]:
 
 
 def _normalize_generate_status(value: Any) -> str:
-    status = _normalize_text(value, "cached")
+    status = normalize_text(value, "cached")
     if status in {"cached", "generated", "mock"}:
         return status
     if status in {"success", "ok"}:
@@ -171,10 +167,10 @@ def _db_topics() -> list[TimelineTopic] | None:
     return [
         TimelineTopic(
             topic_id=int(row["id"]),
-            topic_name=_normalize_text(row["topic_name"]),
+            topic_name=normalize_text(row["topic_name"]),
             keyword_list=[str(item) for item in _parse_json_list(row.get("keyword_list"), [])],
             heat_score=int(row.get("heat_score") or 0),
-            summary=_normalize_text(row.get("summary")),
+            summary=normalize_text(row.get("summary")),
             news_count=int(row.get("news_count") or 0),
         )
         for row in rows
@@ -267,13 +263,13 @@ def _build_news_items(rows: list[dict[str, Any]]) -> list[TimelineNewsItem]:
         items.append(
             TimelineNewsItem(
                 id=int(row["id"]),
-                title=_normalize_text(row["title"]),
-                content=_normalize_text(row["content"]),
-                source=_normalize_text(row.get("source")),
+                title=normalize_text(row["title"]),
+                content=normalize_text(row["content"]),
+                source=normalize_text(row.get("source")),
                 publish_time=_format_publish_time(row.get("publish_time")),
-                summary=_normalize_text(row.get("summary")) or None,
+                summary=normalize_text(row.get("summary")) or None,
                 category_id=row.get("category_id"),
-                category_name=_normalize_text(row.get("category_name")) or None,
+                category_name=normalize_text(row.get("category_name")) or None,
                 topic_id=row.get("topic_id"),
             )
         )
@@ -283,7 +279,7 @@ def _build_news_items(rows: list[dict[str, Any]]) -> list[TimelineNewsItem]:
 def _build_topic_news_response(topic: dict[str, Any], rows: list[dict[str, Any]]) -> TimelineNewsListResponse:
     return TimelineNewsListResponse(
         topic_id=int(topic["id"]),
-        topic_name=_normalize_text(topic["topic_name"]),
+        topic_name=normalize_text(topic["topic_name"]),
         news_items=_build_news_items(rows),
     )
 
@@ -351,8 +347,8 @@ def _timeline_row_to_result(row: dict[str, Any], topic_name: str, source: str) -
         topic_name=topic_name,
         timeline=timeline,
         source=source,
-        generated_at=_normalize_text(row.get("generated_at")) or None,
-        updated_at=_normalize_text(row.get("updated_at")) or None,
+        generated_at=normalize_text(row.get("generated_at")) or None,
+        updated_at=normalize_text(row.get("updated_at")) or None,
         generate_status=_normalize_generate_status(row.get("generate_status")),
     )
 
@@ -440,13 +436,13 @@ def _save_cache_to_mock(result: TimelineGenerateResult) -> None:
 def _build_ai_payload(topic: dict[str, Any], news_rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "topic_id": int(topic["id"]),
-        "topic_name": _normalize_text(topic["topic_name"]),
+        "topic_name": normalize_text(topic["topic_name"]),
         "news_items": [
             {
                 "id": int(row["id"]),
-                "title": _normalize_text(row["title"]),
-                "content": _normalize_text(row["content"]),
-                "source": _normalize_text(row.get("source")),
+                "title": normalize_text(row["title"]),
+                "content": normalize_text(row["content"]),
+                "source": normalize_text(row.get("source")),
                 "publish_time": _format_publish_time(row.get("publish_time")),
             }
             for row in news_rows
@@ -455,21 +451,21 @@ def _build_ai_payload(topic: dict[str, Any], news_rows: list[dict[str, Any]]) ->
 
 
 def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]) -> TimelineGenerateResult:
-    topic_name = _normalize_text(topic["topic_name"])
+    topic_name = normalize_text(topic["topic_name"])
     nodes = []
     for index, row in enumerate(news_rows, start=1):
-        summary = _normalize_text(row.get("summary")) or _normalize_text(row.get("content"))[:100]
+        summary = normalize_text(row.get("summary")) or normalize_text(row.get("content"))[:100]
         if len(summary) > 100:
             summary = f"{summary[:100]}..."
         nodes.append(
             TimelineNode(
                 event_id=index,
                 event_time=_format_publish_time(row.get("publish_time")),
-                event_title=_normalize_text(row["title"]),
+                event_title=normalize_text(row["title"]),
                 event_summary=summary,
                 source_news_id=int(row["id"]),
-                source_title=_normalize_text(row["title"]),
-                source_name=_normalize_text(row.get("source")),
+                source_title=normalize_text(row["title"]),
+                source_name=normalize_text(row.get("source")),
             )
         )
 
@@ -497,12 +493,12 @@ def _build_ai_result(topic: dict[str, Any], data: dict[str, Any]) -> TimelineGen
         nodes.append(
             TimelineNode(
                 event_id=int(item.get("event_id", index)),
-                event_time=_normalize_text(item.get("event_time")),
-                event_title=_normalize_text(item.get("event_title")),
-                event_summary=_normalize_text(item.get("event_summary")),
+                event_time=normalize_text(item.get("event_time")),
+                event_title=normalize_text(item.get("event_title")),
+                event_summary=normalize_text(item.get("event_summary")),
                 source_news_id=int(item.get("source_news_id") or 0),
-                source_title=_normalize_text(item.get("source_title")),
-                source_name=_normalize_text(item.get("source_name")),
+                source_title=normalize_text(item.get("source_title")),
+                source_name=normalize_text(item.get("source_name")),
             )
         )
 
@@ -512,12 +508,12 @@ def _build_ai_result(topic: dict[str, Any], data: dict[str, Any]) -> TimelineGen
     now = _now_text()
     return TimelineGenerateResult(
         topic_id=int(topic["id"]),
-        topic_name=_normalize_text(data.get("topic_name") or topic["topic_name"]),
+        topic_name=normalize_text(data.get("topic_name") or topic["topic_name"]),
         timeline=nodes,
         source="ai-service",
-        generated_at=_normalize_text(data.get("generated_at")) or now,
-        updated_at=_normalize_text(data.get("updated_at")) or now,
-        generate_status=_normalize_text(data.get("generate_status"), "generated"),
+        generated_at=normalize_text(data.get("generated_at")) or now,
+        updated_at=normalize_text(data.get("updated_at")) or now,
+        generate_status=normalize_text(data.get("generate_status"), "generated"),
     )
 
 
@@ -582,7 +578,7 @@ async def get_timeline_detail(topic_id: int) -> TimelineGenerateResult:
         source = "cache"
         if cached.get("generate_status") == "mock":
             source = "mock"
-        return _timeline_row_to_result(cached, _normalize_text(topic["topic_name"]), source=source)
+        return _timeline_row_to_result(cached, normalize_text(topic["topic_name"]), source=source)
 
     return await _generate_with_ai_or_fallback(topic, news_rows)
 

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.common.exceptions import AppException
+from app.common.utils import format_datetime, normalize_text, paginate
 from app.db.database import execute_one, execute_query, execute_update
 from app.mock.news import (
     MOCK_BROWSE_HISTORY,
@@ -20,6 +21,27 @@ from app.mock.news import (
 logger = logging.getLogger(__name__)
 
 _NEWS_SOURCE_URL_EXISTS: Optional[bool] = None
+_NEWS_FULLTEXT_INDEX_EXISTS: Optional[bool] = None
+
+
+def _news_has_fulltext_index() -> bool:
+    global _NEWS_FULLTEXT_INDEX_EXISTS
+    if _NEWS_FULLTEXT_INDEX_EXISTS is None:
+        try:
+            row = execute_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'news'
+                  AND INDEX_TYPE = 'FULLTEXT'
+                  AND INDEX_NAME = 'ft_news_search'
+                """
+            )
+            _NEWS_FULLTEXT_INDEX_EXISTS = int((row or {}).get("total") or 0) > 0
+        except Exception:  # noqa: BLE001
+            _NEWS_FULLTEXT_INDEX_EXISTS = False
+    return _NEWS_FULLTEXT_INDEX_EXISTS
 
 
 def _get_current_user_id(current_user: Optional[Any]) -> Optional[int]:
@@ -48,24 +70,6 @@ def _parse_json_field(value: Any, default: Any = None) -> Any:
     return value
 
 
-def _format_datetime(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if hasattr(value, "strftime"):
-        try:
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:  # noqa: BLE001
-            return str(value)
-    return str(value)
-
-
-def _normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
 
 def _news_source_url_select() -> str:
     """Return a compatible SELECT expression for optional news.source_url."""
@@ -91,31 +95,31 @@ def _news_source_url_select() -> str:
 def _format_news_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": int(row.get("id") or 0),
-        "title": _normalize_text(row.get("title")),
-        "summary": _normalize_text(row.get("summary")),
-        "content": _normalize_text(row.get("content")),
-        "cover_image": _normalize_text(row.get("cover_image")),
+        "title": normalize_text(row.get("title")),
+        "summary": normalize_text(row.get("summary")),
+        "content": normalize_text(row.get("content")),
+        "cover_image": normalize_text(row.get("cover_image")),
         "category_id": int(row.get("category_id") or 0),
-        "category_name": _normalize_text(row.get("category_name")) or "未分类",
+        "category_name": normalize_text(row.get("category_name")) or "未分类",
         "topic_id": row.get("topic_id"),
-        "source": _normalize_text(row.get("source")),
-        "editor": _normalize_text(row.get("editor")),
-        "publish_time": _format_datetime(row.get("publish_time")),
+        "source": normalize_text(row.get("source")),
+        "editor": normalize_text(row.get("editor")),
+        "publish_time": format_datetime(row.get("publish_time")),
         "view_count": int(row.get("view_count") or 0),
         "like_count": int(row.get("like_count") or 0),
         "comment_count": int(row.get("comment_count") or 0),
         "favorite_count": int(row.get("favorite_count") or 0),
         "status": int(row.get("status") or 0),
         "tags": _parse_json_field(row.get("tags"), default=[]),
-        "source_url": _normalize_text(row.get("source_url")),
+        "source_url": normalize_text(row.get("source_url")),
     }
 
 
 def _format_category_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": int(row.get("id") or 0),
-        "name": _normalize_text(row.get("name")),
-        "code": _normalize_text(row.get("code")),
+        "name": normalize_text(row.get("name")),
+        "code": normalize_text(row.get("code")),
         "sort": int(row.get("sort") or 0),
         "status": int(row.get("status") or 0),
     }
@@ -124,32 +128,20 @@ def _format_category_row(row: dict[str, Any]) -> dict[str, Any]:
 def _format_hot_row(row: dict[str, Any], rank: int) -> dict[str, Any]:
     return {
         "id": int(row.get("id") or 0),
-        "title": _normalize_text(row.get("title")),
-        "category_name": _normalize_text(row.get("category_name")) or "未分类",
-        "source": _normalize_text(row.get("source")),
+        "title": normalize_text(row.get("title")),
+        "category_name": normalize_text(row.get("category_name")) or "未分类",
+        "source": normalize_text(row.get("source")),
         "view_count": int(row.get("view_count") or 0),
         "comment_count": int(row.get("comment_count") or 0),
         "like_count": int(row.get("like_count") or 0),
         "favorite_count": int(row.get("favorite_count") or 0),
-        "cover_image": _normalize_text(row.get("cover_image")),
-        "publish_time": _format_datetime(row.get("publish_time")),
+        "cover_image": normalize_text(row.get("cover_image")),
+        "publish_time": format_datetime(row.get("publish_time")),
         "heat_score": int(row.get("heat_score") or 0),
         "rank": rank,
     }
 
 
-def _paginate(items: list[dict[str, Any]], page: int, page_size: int) -> dict[str, Any]:
-    normalized_page = max(page, 1)
-    normalized_page_size = max(page_size, 1)
-    total = len(items)
-    start = (normalized_page - 1) * normalized_page_size
-    end = start + normalized_page_size
-    return {
-        "list": items[start:end],
-        "total": total,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-    }
 
 
 def _mock_categories() -> list[dict[str, Any]]:
@@ -205,7 +197,7 @@ def _mock_get_news_list(
         ]
 
     items.sort(key=lambda item: (item["publish_time"], item["id"]), reverse=True)
-    return _paginate(items, page=page, page_size=page_size)
+    return paginate(items, page=page, page_size=page_size)
 
 
 def _mock_get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
@@ -342,11 +334,15 @@ def _db_news_filters(
 
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
-        like_value = f"%{normalized_keyword}%"
-        clauses.append(
-            "(n.title LIKE %s OR n.summary LIKE %s OR n.content LIKE %s OR COALESCE(nc.name, '') LIKE %s OR COALESCE(nc.code, '') LIKE %s)"
-        )
-        params.extend([like_value, like_value, like_value, like_value, like_value])
+        if _news_has_fulltext_index():
+            clauses.append("MATCH(n.title, n.summary, n.content) AGAINST(%s IN BOOLEAN MODE)")
+            params.append(normalized_keyword)
+        else:
+            like_value = f"%{normalized_keyword}%"
+            clauses.append(
+                "(n.title LIKE %s OR n.summary LIKE %s OR n.content LIKE %s OR COALESCE(nc.name, '') LIKE %s OR COALESCE(nc.code, '') LIKE %s)"
+            )
+            params.extend([like_value, like_value, like_value, like_value, like_value])
 
     return " AND ".join(clauses), params
 
@@ -553,7 +549,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
     )
 
     detail = _format_news_row(news)
-    detail["content"] = _normalize_text(news.get("content"))
+    detail["content"] = normalize_text(news.get("content"))
     detail["related_news"] = [_format_news_row(row) for row in related_rows]
     detail["recommended_news"] = [_format_news_row(row) for row in recommended_rows]
 
@@ -662,7 +658,7 @@ def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
 def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
     """搜索新闻。"""
     if not keyword or not keyword.strip():
-        return _paginate([], page=page, page_size=page_size)
+        return paginate([], page=page, page_size=page_size)
     try:
         result = _db_news_list(keyword=keyword, page=page, page_size=page_size)
         return result

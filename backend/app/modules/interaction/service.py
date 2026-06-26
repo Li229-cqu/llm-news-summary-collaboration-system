@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Set, Union
 
 from app.common.exceptions import AppException
+from app.common.utils import format_datetime, normalize_text
 from app.db.database import execute_one, execute_query, execute_update, get_connection
 from app.mock.comments import MOCK_COMMENT_LIKES, MOCK_NEWS_COMMENTS
 from app.mock.news import MOCK_NEWS, MOCK_NEWS_FAVORITES, MOCK_NEWS_LIKES
@@ -48,24 +49,6 @@ def _get_current_user_value(current_user: Any, field: str, default: Any = "") ->
     return getattr(current_user, field, default)
 
 
-def _normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _format_datetime(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if hasattr(value, "strftime"):
-        try:
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:  # noqa: BLE001
-            return str(value)
-    return str(value)
-
 
 def _comment_row_to_item_payload(
     row: Dict[str, Any],
@@ -83,14 +66,14 @@ def _comment_row_to_item_payload(
         "id": comment_id,
         "news_id": int(row.get("news_id") or 0),
         "user_id": int(row.get("user_id") or 0),
-        "username": _normalize_text(row.get("username")),
-        "nickname": _normalize_text(row.get("nickname")),
-        "avatar": _normalize_text(row.get("avatar")),
+        "username": normalize_text(row.get("username")),
+        "nickname": normalize_text(row.get("nickname")),
+        "avatar": normalize_text(row.get("avatar")),
         "parent_id": None if row.get("parent_id") is None else int(row.get("parent_id") or 0),
-        "content": "该评论已被折叠" if status == 2 else _normalize_text(row.get("content")),
+        "content": "该评论已被折叠" if status == 2 else normalize_text(row.get("content")),
         "like_count": int(row.get("like_count") or 0),
         "status": status,
-        "create_time": _format_datetime(row.get("create_time")),
+        "create_time": format_datetime(row.get("create_time")),
         "is_liked": is_liked,
         "replies": [],
     }
