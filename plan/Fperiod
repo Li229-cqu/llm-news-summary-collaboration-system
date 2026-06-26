@@ -1,0 +1,1089 @@
+# 任务 F：用户阅读脉络可视化开发方案
+
+## 一、功能定位
+
+任务 F 的目标是在个人中心页面中，根据用户的浏览历史、收藏记录和新闻分类/话题信息，生成用户个人的“阅读脉络”。
+
+该功能不是简单展示浏览历史列表，而是把用户的阅读行为整理成三种可视化结果：
+
+1. **阅读脉络图**：展示用户关注的新闻分类、话题和新闻之间的关系。
+2. **阅读时间轴**：按日期展示用户阅读兴趣的变化。
+3. **阅读热力图**：展示用户在不同时间段、不同分类或话题上的活跃程度。
+4. **阅读年报导出**：将用户阅读数据整理为 PDF 报告。
+
+最终效果类似：
+
+```text id="kizrni"
+用户最近主要关注：科技、财经、社会
+阅读路径：人工智能 → 大模型 → 智能交通 → 新能源汽车
+高频阅读时间：晚上 20:00 - 23:00
+最关注话题：人工智能技术发展
+阅读偏好：偏好科技类深度新闻和财经趋势新闻
+```
+
+---
+
+## 二、功能入口设计
+
+在个人中心 `ProfileView.vue` 中新增一个 Tab：
+
+```text id="f3d96b"
+阅读脉络
+```
+
+个人中心页面最终可以包含：
+
+```text id="4tz5bj"
+1. 个人概览
+2. 浏览历史
+3. 收藏记录
+4. 评论记录
+5. AI 生成记录
+6. 阅读脉络
+```
+
+“阅读脉络”页内部再分为三个区域：
+
+```text id="yknd9t"
+上方：阅读数据概览卡片
+中间：阅读脉络力导向图
+下方左侧：阅读时间轴
+下方右侧：阅读热力图
+底部：导出 PDF 年报按钮
+```
+
+---
+
+## 三、数据来源
+
+本功能优先使用已有数据库表。
+
+### 1. browse_history
+
+用于获取用户阅读过哪些新闻，以及阅读时间。
+
+核心字段：
+
+```text id="0sd5yl"
+user_id
+news_id
+browse_time
+```
+
+### 2. news
+
+用于获取新闻标题、分类、话题、来源、发布时间、标签等。
+
+核心字段：
+
+```text id="x3kxlu"
+id
+title
+summary
+category_id
+topic_id
+source
+publish_time
+tags
+view_count
+like_count
+comment_count
+favorite_count
+```
+
+### 3. news_category
+
+用于获取新闻分类名称。
+
+核心字段：
+
+```text id="yldvh9"
+id
+name
+code
+```
+
+### 4. news_topic
+
+用于获取 Timeline 话题名称。
+
+核心字段：
+
+```text id="4ganvb"
+id
+topic_name
+summary
+keyword_list
+heat_score
+```
+
+### 5. favorite / user_like
+
+可选增强数据，用于判断用户是否收藏或点赞过该新闻。
+
+这部分可以在第一版中先不强依赖，后续用于增强“兴趣权重”。
+
+---
+
+## 四、整体开发阶段
+
+## 第 1 阶段：F1 后端数据组织
+
+负责人：1 人
+优先级：最高
+是否阻塞其他任务：是，F5 依赖 F1；F2/F3/F4 可以先用 mock 并行开发。
+
+### 目标
+
+在 profile 模块中新增 3 个接口：
+
+```text id="btb0f3"
+GET /api/profile/reading-trajectory
+GET /api/profile/reading-timeline
+GET /api/profile/reading-heatmap
+```
+
+三个接口都必须要求登录。
+
+后端从 `browse_history` 查询当前用户的浏览历史，并关联 `news`、`news_category`、`news_topic` 组织可视化数据。
+
+### 涉及文件
+
+```text id="jrfb6n"
+backend/app/modules/profile/service.py
+backend/app/modules/profile/router.py
+backend/app/modules/profile/schema.py
+docs/api.md
+backend/README.md
+```
+
+---
+
+## 五、F1：后端数据组织详细设计
+
+## 5.1 公共查询逻辑
+
+三个接口都可以共用一个基础查询函数。
+
+### 建议函数
+
+```python id="x17az7"
+get_user_reading_records(user_id: int, days: int = 30, limit: int = 200)
+```
+
+### 基础 SQL 思路
+
+```sql id="2m5fnc"
+SELECT
+  bh.id AS history_id,
+  bh.user_id,
+  bh.news_id,
+  bh.browse_time,
+
+  n.title,
+  n.summary,
+  n.category_id,
+  n.topic_id,
+  n.source,
+  n.publish_time,
+  n.tags,
+  n.view_count,
+  n.like_count,
+  n.comment_count,
+  n.favorite_count,
+
+  nc.name AS category_name,
+  nc.code AS category_code,
+
+  nt.topic_name,
+  nt.summary AS topic_summary
+FROM browse_history bh
+JOIN news n ON n.id = bh.news_id
+LEFT JOIN news_category nc ON nc.id = n.category_id
+LEFT JOIN news_topic nt ON nt.id = n.topic_id
+WHERE bh.user_id = %s
+  AND bh.browse_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+ORDER BY bh.browse_time DESC
+LIMIT %s;
+```
+
+### 处理 topic_id 为空的情况
+
+真实爬取新闻可能没有 `topic_id`，所以不能完全依赖 `news_topic`。
+
+推荐兜底规则：
+
+```text id="cy5o31"
+1. 如果 topic_id 不为空，使用 topic_name。
+2. 如果 topic_id 为空但 tags 不为空，使用 tags 中第一个标签作为临时话题。
+3. 如果 tags 也为空，使用 category_name 作为话题兜底。
+```
+
+也就是说，阅读脉络不能因为 `topic_id` 为空就断掉。
+
+---
+
+## 5.2 API 1：阅读脉络图
+
+### 接口
+
+```text id="zl6z14"
+GET /api/profile/reading-trajectory?days=30&limit=200
+```
+
+### 作用
+
+生成力导向图所需的节点和边数据。
+
+### 节点设计
+
+节点分为三类：
+
+```text id="zrynyw"
+category：新闻分类节点
+topic：话题节点
+news：新闻节点
+```
+
+### 节点示例
+
+```json id="xgzwso"
+{
+  "id": "category_5",
+  "name": "科技",
+  "type": "category",
+  "value": 12,
+  "read_count": 12
+}
+```
+
+```json id="1cq8b6"
+{
+  "id": "topic_1",
+  "name": "人工智能技术发展",
+  "type": "topic",
+  "value": 8,
+  "read_count": 8
+}
+```
+
+```json id="46tqdy"
+{
+  "id": "news_31",
+  "name": "人工智能技术加速落地，多行业探索智能化转型",
+  "type": "news",
+  "value": 1,
+  "news_id": 31,
+  "category_name": "科技",
+  "topic_name": "人工智能技术发展",
+  "browse_time": "2026-06-26 14:00:00"
+}
+```
+
+### 边设计
+
+边分为三类：
+
+```text id="qfpnof"
+category_topic：分类 -> 话题
+topic_news：话题 -> 新闻
+sequence：用户连续阅读路径
+```
+
+### 边示例
+
+```json id="pdyu30"
+{
+  "source": "category_5",
+  "target": "topic_1",
+  "value": 8,
+  "type": "category_topic"
+}
+```
+
+```json id="7mz3ll"
+{
+  "source": "topic_1",
+  "target": "news_31",
+  "value": 1,
+  "type": "topic_news"
+}
+```
+
+```json id="vuplry"
+{
+  "source": "news_31",
+  "target": "news_42",
+  "value": 1,
+  "type": "sequence"
+}
+```
+
+### 返回结构
+
+```json id="kwsmxw"
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "summary": {
+      "total_reads": 42,
+      "unique_news_count": 36,
+      "category_count": 5,
+      "topic_count": 12,
+      "top_category": "科技",
+      "top_topic": "人工智能技术发展",
+      "date_range": "最近30天"
+    },
+    "nodes": [],
+    "edges": [],
+    "top_categories": [],
+    "top_topics": [],
+    "recent_news": []
+  }
+}
+```
+
+### 计算规则
+
+#### 分类节点 read_count
+
+```text id="sch5o2"
+某分类下用户浏览记录数量
+```
+
+#### 话题节点 read_count
+
+```text id="acwvjw"
+某话题下用户浏览记录数量
+```
+
+#### 新闻节点 value
+
+```text id="qd5pcw"
+默认 1
+如果同一新闻被多次浏览，可以累加
+```
+
+#### 边权重
+
+```text id="3jmn1r"
+分类 -> 话题：该分类下该话题阅读次数
+话题 -> 新闻：通常为 1 或该新闻阅读次数
+新闻 -> 新闻：连续阅读次数
+```
+
+---
+
+## 5.3 API 2：阅读时间轴
+
+### 接口
+
+```text id="d9b7vb"
+GET /api/profile/reading-timeline?days=30&group_by=day
+```
+
+### 作用
+
+按日期聚合用户阅读记录，用于前端时间轴展示。
+
+### 返回结构
+
+```json id="l95oyy"
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "summary": {
+      "total_days": 12,
+      "total_reads": 42,
+      "most_active_date": "2026-06-24",
+      "most_active_category": "科技"
+    },
+    "items": [
+      {
+        "date": "2026-06-24",
+        "total_reads": 6,
+        "categories": [
+          {
+            "category_id": 5,
+            "category_name": "科技",
+            "read_count": 4
+          }
+        ],
+        "topics": [
+          {
+            "topic_id": 1,
+            "topic_name": "人工智能技术发展",
+            "read_count": 3
+          }
+        ],
+        "news": [
+          {
+            "news_id": 31,
+            "title": "人工智能技术加速落地，多行业探索智能化转型",
+            "category_name": "科技",
+            "topic_name": "人工智能技术发展",
+            "browse_time": "2026-06-24 20:35:00"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 聚合规则
+
+按 `browse_time` 日期聚合：
+
+```text id="t49k4u"
+DATE(browse_time)
+```
+
+每一天展示：
+
+```text id="1m9l26"
+1. 阅读总数
+2. 当天主要分类
+3. 当天主要话题
+4. 当天阅读新闻列表
+```
+
+### 前端展示效果
+
+```text id="m9e9vg"
+2026-06-24
+  阅读 6 篇
+  主要关注：科技、财经
+  关键词：人工智能、大模型、智能交通
+  新闻列表：
+    - xxx 新闻
+    - xxx 新闻
+```
+
+---
+
+## 5.4 API 3：阅读热力图
+
+### 接口
+
+```text id="bq9pnv"
+GET /api/profile/reading-heatmap?days=30&dimension=category
+```
+
+### 作用
+
+生成分类或话题在日期维度上的活跃度矩阵。
+
+### 第一版推荐维度
+
+```text id="ty1h0z"
+x 轴：日期
+y 轴：新闻分类
+value：阅读次数
+```
+
+后续可以扩展：
+
+```text id="m6vzp8"
+x 轴：小时
+y 轴：星期
+value：阅读次数
+```
+
+### 返回结构
+
+```json id="gqnny6"
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "x_axis": ["2026-06-20", "2026-06-21", "2026-06-22"],
+    "y_axis": ["科技", "财经", "社会", "体育"],
+    "cells": [
+      {
+        "x": "2026-06-20",
+        "y": "科技",
+        "value": 3,
+        "news_count": 3
+      },
+      {
+        "x": "2026-06-21",
+        "y": "财经",
+        "value": 2,
+        "news_count": 2
+      }
+    ],
+    "summary": {
+      "max_value": 5,
+      "most_active_category": "科技",
+      "most_active_date": "2026-06-24"
+    }
+  }
+}
+```
+
+### 计算规则
+
+```text id="zgfu1e"
+按 日期 + 分类 聚合 COUNT(*)
+```
+
+SQL 思路：
+
+```sql id="8tg00x"
+SELECT
+  DATE(bh.browse_time) AS read_date,
+  nc.name AS category_name,
+  COUNT(*) AS read_count
+FROM browse_history bh
+JOIN news n ON n.id = bh.news_id
+LEFT JOIN news_category nc ON nc.id = n.category_id
+WHERE bh.user_id = %s
+  AND bh.browse_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+GROUP BY DATE(bh.browse_time), nc.name
+ORDER BY read_date ASC;
+```
+
+---
+
+## 六、F2：前端力导向图组件
+
+负责人：1 人
+文件：
+
+```text id="9mysxj"
+frontend/src/components/profile/ReadingTrajectory.vue
+```
+
+### 技术选择
+
+推荐使用 ECharts Graph，而不是 D3.js。
+
+原因：
+
+```text id="gbi4h1"
+1. ECharts 上手更快
+2. Vue 集成简单
+3. graph 图配置清晰
+4. 支持 force layout
+5. 适合课程项目展示
+```
+
+需要安装：
+
+```powershell id="083ot1"
+cd frontend
+npm.cmd install echarts
+```
+
+### 组件功能
+
+`ReadingTrajectory.vue` 负责展示用户阅读脉络图。
+
+功能包括：
+
+```text id="4chnkh"
+1. 请求 /api/profile/reading-trajectory
+2. 展示分类节点、话题节点、新闻节点
+3. 节点大小根据 read_count 调整
+4. 不同节点类型使用不同图标或颜色
+5. 点击新闻节点跳转 /news/:id
+6. 点击分类/话题节点高亮相关路径
+7. 支持 loading、empty、error 状态
+```
+
+### 节点视觉设计
+
+| 节点类型     | 展示含义       |
+| -------- | ---------- |
+| category | 大节点，表示新闻分类 |
+| topic    | 中节点，表示兴趣话题 |
+| news     | 小节点，表示具体新闻 |
+
+### 交互设计
+
+```text id="3qzj6b"
+点击分类节点：高亮该分类下所有话题和新闻
+点击话题节点：高亮该话题下相关新闻
+点击新闻节点：跳转新闻详情页
+鼠标悬停：显示阅读次数、最近阅读时间
+```
+
+---
+
+## 七、F3：前端时间轴组件
+
+负责人：1 人
+文件：
+
+```text id="joemjp"
+frontend/src/components/profile/ReadingTimeline.vue
+```
+
+### 组件功能
+
+`ReadingTimeline.vue` 负责展示用户阅读时间轴。
+
+功能包括：
+
+```text id="3ktf65"
+1. 请求 /api/profile/reading-timeline
+2. 按日期展示阅读记录
+3. 每一天显示阅读数量
+4. 显示当天主要分类和主要话题
+5. 展示当天阅读新闻列表
+6. 点击新闻跳转 /news/:id
+7. 支持折叠/展开某一天
+```
+
+### 页面结构
+
+```text id="xpz2bj"
+日期
+  阅读数量
+  主要分类标签
+  主要话题标签
+  新闻列表
+```
+
+### 推荐 Element Plus 组件
+
+```text id="6xjqy2"
+el-timeline
+el-timeline-item
+el-tag
+el-card
+el-empty
+el-skeleton
+```
+
+---
+
+## 八、F4：前端热力图组件
+
+负责人：1 人
+文件：
+
+```text id="jz65ie"
+frontend/src/components/profile/ReadingHeatmap.vue
+```
+
+### 技术选择
+
+推荐继续使用 ECharts。
+
+热力图类型：
+
+```text id="g8rfk5"
+heatmap
+```
+
+### 组件功能
+
+```text id="4v0xya"
+1. 请求 /api/profile/reading-heatmap
+2. 展示 日期 x 分类 的活跃度矩阵
+3. 颜色深浅表示阅读次数
+4. 鼠标悬停显示具体日期、分类、阅读数
+5. 支持切换最近 7 天 / 30 天 / 90 天
+6. 支持 empty 状态
+```
+
+### 热力图示例
+
+```text id="akuvlg"
+横轴：日期
+纵轴：分类
+颜色：阅读次数
+```
+
+### 后续可扩展
+
+```text id="qdv379"
+1. 小时 x 星期热力图
+2. 话题 x 日期热力图
+3. 收藏热力图
+4. AI 生成行为热力图
+```
+
+---
+
+## 九、F5：PDF 年报导出
+
+负责人：1 人
+文件：
+
+```text id="x67edg"
+frontend/src/utils/export-pdf.ts
+```
+
+### 技术选择
+
+推荐：
+
+```powershell id="4qkgkc"
+cd frontend
+npm.cmd install jspdf html2canvas
+```
+
+### 功能目标
+
+在个人中心“阅读脉络”页面增加按钮：
+
+```text id="j3rkht"
+导出我的阅读年报
+```
+
+点击后导出 PDF，内容包括：
+
+```text id="0x2jty"
+1. 用户阅读概览
+2. 阅读总数
+3. 最关注分类
+4. 最关注话题
+5. 阅读脉络图截图
+6. 阅读时间轴摘要
+7. 阅读热力图截图
+8. 最近阅读新闻列表
+```
+
+### 导出方式
+
+第一版使用前端截图导出：
+
+```text id="198abj"
+html2canvas 截取阅读脉络页面 DOM
+jspdf 生成 PDF
+```
+
+### 建议函数
+
+```ts id="j09wv6"
+export async function exportReadingReport(elementId: string, filename: string) {}
+```
+
+### 注意
+
+```text id="m58yc8"
+1. F5 必须等 F1 API 稳定后再做。
+2. 导出前确保图表已经渲染完成。
+3. PDF 内容不要太长，优先导出概览和主要图表。
+4. 如果图表太高，需要分页处理。
+```
+
+---
+
+## 十、ProfileView 集成方案
+
+修改文件：
+
+```text id="hs6pwa"
+frontend/src/views/profile/ProfileView.vue
+frontend/src/api/profile.ts
+```
+
+### profile.ts 新增 API
+
+```ts id="53g6pi"
+export function getReadingTrajectory(params) {}
+export function getReadingTimeline(params) {}
+export function getReadingHeatmap(params) {}
+```
+
+### ProfileView 新增 Tab
+
+```text id="z315k1"
+阅读脉络
+```
+
+Tab 内容结构：
+
+```vue id="2k78t2"
+<template>
+  <div class="reading-insight-page">
+    <ReadingOverview :summary="summary" />
+
+    <ReadingTrajectory />
+
+    <div class="reading-grid">
+      <ReadingTimeline />
+      <ReadingHeatmap />
+    </div>
+
+    <el-button type="primary" @click="handleExport">
+      导出我的阅读年报
+    </el-button>
+  </div>
+</template>
+```
+
+第一版也可以不单独做 `ReadingOverview`，直接在 `ReadingTrajectory.vue` 顶部展示 summary。
+
+---
+
+## 十一、接口字段约定
+
+### 1. reading-trajectory
+
+```text id="yi2j7m"
+GET /api/profile/reading-trajectory?days=30&limit=200
+```
+
+返回：
+
+```text id="q68ucf"
+summary
+nodes
+edges
+top_categories
+top_topics
+recent_news
+```
+
+### 2. reading-timeline
+
+```text id="i9zppk"
+GET /api/profile/reading-timeline?days=30&group_by=day
+```
+
+返回：
+
+```text id="d1wjz7"
+summary
+items
+```
+
+### 3. reading-heatmap
+
+```text id="gcx7uv"
+GET /api/profile/reading-heatmap?days=30&dimension=category
+```
+
+返回：
+
+```text id="zym323"
+x_axis
+y_axis
+cells
+summary
+```
+
+---
+
+## 十二、Mock 数据并发开发方案
+
+F2/F3/F4 可以不等 F1 完全完成，先用 mock 数据开发组件。
+
+### F2 mock
+
+```ts id="h5hlnr"
+const mockTrajectory = {
+  summary: {},
+  nodes: [
+    { id: 'category_5', name: '科技', type: 'category', value: 12 },
+    { id: 'topic_ai', name: '人工智能', type: 'topic', value: 8 },
+    { id: 'news_1', name: 'AI 新闻示例', type: 'news', value: 1, news_id: 1 }
+  ],
+  edges: [
+    { source: 'category_5', target: 'topic_ai', value: 8 },
+    { source: 'topic_ai', target: 'news_1', value: 1 }
+  ]
+}
+```
+
+### F3 mock
+
+```ts id="kr073t"
+const mockTimeline = {
+  items: [
+    {
+      date: '2026-06-24',
+      total_reads: 5,
+      categories: [{ category_name: '科技', read_count: 3 }],
+      topics: [{ topic_name: '人工智能', read_count: 2 }],
+      news: []
+    }
+  ]
+}
+```
+
+### F4 mock
+
+```ts id="r9bs86"
+const mockHeatmap = {
+  x_axis: ['2026-06-20', '2026-06-21'],
+  y_axis: ['科技', '财经'],
+  cells: [
+    { x: '2026-06-20', y: '科技', value: 3 },
+    { x: '2026-06-21', y: '财经', value: 2 }
+  ]
+}
+```
+
+---
+
+## 十三、开发顺序
+
+## 第 1 阶段：F1 后端数据组织
+
+优先完成：
+
+```text id="ldu7yy"
+1. profile/schema.py 定义响应结构
+2. profile/service.py 实现数据查询和聚合
+3. profile/router.py 新增 3 个接口
+4. docs/api.md 补充接口说明
+5. 使用真实浏览历史测试
+```
+
+完成标准：
+
+```text id="56zt1q"
+3 个 API 均可返回真实用户阅读数据
+用户无浏览历史时返回空结构
+数据库异常时 fallback mock 或返回友好空数据
+```
+
+---
+
+## 第 2 阶段：F2/F3/F4 前端并发开发
+
+可以并行：
+
+```text id="05mpd6"
+F2 ReadingTrajectory.vue
+F3 ReadingTimeline.vue
+F4 ReadingHeatmap.vue
+```
+
+完成标准：
+
+```text id="mhj4pb"
+三个组件都能先使用 mock 数据展示
+F1 API 完成后切换为真实接口数据
+页面 loading / empty / error 状态完整
+```
+
+---
+
+## 第 3 阶段：ProfileView 集成
+
+任务：
+
+```text id="hig08c"
+1. profile.ts 增加 API 方法
+2. ProfileView 增加“阅读脉络”Tab
+3. 三个组件接入个人中心页面
+4. 统一 days 筛选，例如 7天 / 30天 / 90天
+```
+
+完成标准：
+
+```text id="ndk4f7"
+个人中心可以完整展示阅读脉络
+切换天数后图表更新
+点击新闻节点或列表可跳转详情页
+```
+
+---
+
+## 第 4 阶段：F5 PDF 导出
+
+任务：
+
+```text id="itofxf"
+1. 安装 jspdf 和 html2canvas
+2. 新增 export-pdf.ts
+3. 阅读脉络页面增加导出按钮
+4. 导出 PDF 年报
+```
+
+完成标准：
+
+```text id="0chnsr"
+PDF 中包含阅读概览、脉络图、时间轴、热力图和最近阅读列表
+导出样式整洁
+导出过程有 loading
+```
+
+---
+
+## 第 5 阶段：联调验收
+
+后端测试：
+
+```text id="duw2yw"
+GET /api/profile/reading-trajectory
+GET /api/profile/reading-timeline
+GET /api/profile/reading-heatmap
+```
+
+前端测试：
+
+```text id="4smd0r"
+个人中心 → 阅读脉络
+查看脉络图
+查看时间轴
+查看热力图
+导出 PDF
+点击新闻跳转详情
+```
+
+---
+
+## 十四、完成标准
+
+最终完成标准如下：
+
+| 功能     | 完成标准                        |
+| ------ | --------------------------- |
+| 阅读脉络图  | 节点和边准确反映用户阅读分类、话题、新闻关系      |
+| 阅读时间轴  | 能按日期展示用户阅读记录和兴趣变化           |
+| 阅读热力图  | 能展示用户在不同日期、分类上的阅读活跃度        |
+| PDF 导出 | 能导出包含核心图表和统计信息的阅读报告         |
+| 数据准确性  | 与 browse_history、news 表数据一致 |
+| 空状态    | 用户无阅读记录时有友好提示               |
+| 异常处理   | 数据库异常或接口失败时不导致页面崩溃          |
+| 页面体验   | 与个人中心整体风格统一                 |
+
+---
+
+## 十五、建议命名
+
+页面名称：
+
+```text id="kgomvj"
+阅读脉络
+```
+
+组件名称：
+
+```text id="k395uy"
+ReadingTrajectory.vue
+ReadingTimeline.vue
+ReadingHeatmap.vue
+```
+
+导出文件名：
+
+```text id="20l27q"
+我的阅读脉络报告.pdf
+```
+
+接口名称：
+
+```text id="lmx60k"
+reading-trajectory
+reading-timeline
+reading-heatmap
+```
+
+---
+
+## 十六、可写入项目文档的功能描述
+
+用户阅读脉络可视化模块基于用户浏览历史、新闻分类、新闻话题和新闻标签等数据，自动生成用户个人阅读画像。系统通过力导向图展示用户关注的分类、话题与新闻之间的关联，通过时间轴展示用户阅读兴趣随时间的变化，通过热力图展示用户在不同日期和分类上的阅读活跃度。同时，系统支持将阅读脉络导出为 PDF 年报，帮助用户回顾个人阅读路径和兴趣变化。
+
+该模块从传统的“浏览历史列表”升级为“可视化阅读画像”，增强了个人中心的数据分析能力和智能化体验，也为后续个性化推荐、兴趣建模和 AI 内容服务优化提供数据基础。
