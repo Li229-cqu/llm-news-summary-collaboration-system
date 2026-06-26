@@ -3,7 +3,7 @@
     <div class="news-meta__row news-meta__row--primary">
       <el-tag v-if="news.category_name" effect="plain" type="primary">{{ news.category_name }}</el-tag>
       <span class="news-meta__item">来源：{{ news.source }}</span>
-      <span class="news-meta__item">编辑：{{ news.editor }}</span>
+      <span v-if="news.editor" class="news-meta__item">编辑：{{ news.editor }}</span>
       <span class="news-meta__item">发布时间：{{ news.publish_time }}</span>
     </div>
 
