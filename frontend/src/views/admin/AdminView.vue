@@ -1,4 +1,5 @@
 <script setup lang="ts">import { ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
  User,
  UserFilled,
@@ -74,19 +75,100 @@ const statsCards = [
  },
 ];
 const editorFeatures = [
- { title: '内容审核', description: '审核待发布的新闻内容', icon: Warning },
- { title: '评论筛选', description: '管理和处理用户评论', icon: Message },
- { title: '社区帖子管理', description: '审核和管理社区帖子', icon: TrendCharts },
- { title: '热搜话题维护', description: '管理热门话题和搜索词', icon: PieChart },
+ {
+  key: 'content-audit',
+  title: '内容审核',
+  description: '审核待发布的新闻内容',
+  icon: Warning,
+  status: 'coming-soon',
+  adminOnly: false,
+ },
+ {
+  key: 'comment-filter',
+  title: '评论筛选',
+  description: '管理和处理用户评论',
+  icon: Message,
+  status: 'coming-soon',
+  adminOnly: false,
+ },
+ {
+  key: 'community-posts',
+  title: '社区帖子管理',
+  description: '审核和管理社区帖子',
+  icon: TrendCharts,
+  targetTab: 'pending',
+  status: 'available',
+  adminOnly: false,
+ },
+ {
+  key: 'hot-topics',
+  title: '热搜话题维护',
+  description: '管理热门话题和搜索词',
+  icon: PieChart,
+  status: 'coming-soon',
+  adminOnly: false,
+ },
 ];
 const adminFeatures = [
- { title: '账号管理', description: '管理平台用户账号', icon: User },
- { title: '角色权限管理', description: '配置用户角色和权限', icon: Key },
- { title: '内容总管理', description: '全站内容统一管理', icon: DataBoard },
- { title: 'AI 模型配置', description: '配置 AI 服务参数', icon: Setting },
- { title: '提示词模板', description: '管理 AI 提示词模板', icon: Files },
- { title: '系统日志', description: '查看系统运行日志', icon: PieChart },
- { title: '数据备份与恢复', description: '数据维护和备份', icon: Refresh },
+ {
+  key: 'account-mgmt',
+  title: '账号管理',
+  description: '管理平台用户账号',
+  icon: User,
+  targetTab: 'users',
+  status: 'available',
+  adminOnly: true,
+ },
+ {
+  key: 'role-permission',
+  title: '角色权限管理',
+  description: '配置用户角色和权限',
+  icon: Key,
+  status: 'coming-soon',
+  adminOnly: true,
+ },
+ {
+  key: 'content-mgmt',
+  title: '内容总管理',
+  description: '全站内容统一管理',
+  icon: DataBoard,
+  status: 'coming-soon',
+  adminOnly: true,
+ },
+ {
+  key: 'ai-config',
+  title: 'AI 模型配置',
+  description: '配置 AI 服务参数',
+  icon: Setting,
+  targetTab: 'config',
+  status: 'available',
+  adminOnly: true,
+ },
+ {
+  key: 'prompt-template',
+  title: '提示词模板',
+  description: '管理 AI 提示词模板',
+  icon: Files,
+  targetTab: 'config',
+  status: 'available',
+  adminOnly: true,
+ },
+ {
+  key: 'system-logs',
+  title: '系统日志',
+  description: '查看系统运行日志',
+  icon: PieChart,
+  status: 'coming-soon',
+  adminOnly: true,
+ },
+ {
+  key: 'backup-recovery',
+  title: '数据备份与恢复',
+  description: '数据维护和备份',
+  icon: Refresh,
+  status: 'coming-soon',
+  adminOnly: true,
+ },
 ];
 async function loadDashboard() {
  loading.value = true;
@@ -151,6 +233,29 @@ function handleTabChange(key: string) {
  loadSystemConfig();
  break;
  }
+}
+
+function handleFeatureClick(feature: any) {
+ if (feature.adminOnly && !userStore.isAdmin) {
+  ElMessage.warning('需要管理员权限访问此功能');
+  return;
+ }
+
+ if (feature.status === 'coming-soon') {
+  ElMessage.info(`${feature.title}功能待开发，敬请期待`);
+  return;
+ }
+
+ if (feature.targetTab) {
+  handleTabChange(feature.targetTab);
+  return;
+ }
+
+ ElMessage.info(`${feature.title}功能待开发`);
+}
+
+function handleAuditAction(action: 'approve' | 'reject') {
+ ElMessage.info('帖子审核功能待开发');
 }
 function getRoleLabel(role: string) {
  const roleMap: Record<string, string> = {
@@ -232,14 +337,27 @@ onMounted(() => {
                   <div class="feature-grid">
                     <el-card
                       v-for="feature in editorFeatures"
-                      :key="feature.title"
+                      :key="feature.key"
                       class="feature-card"
+                      :class="{
+                        'feature-card-available': feature.status === 'available',
+                        'feature-card-coming': feature.status === 'coming-soon',
+                      }"
                       shadow="hover"
-                      @click="feature.title === '社区帖子管理' && handleTabChange('pending')"
+                      @click="handleFeatureClick(feature)"
                     >
                       <component :is="feature.icon" :size="28" class="feature-icon" />
                       <div class="feature-info">
-                        <h3>{{ feature.title }}</h3>
+                        <div class="feature-title-row">
+                          <h3>{{ feature.title }}</h3>
+                          <el-tag
+                            v-if="feature.status === 'coming-soon'"
+                            size="small"
+                            type="info"
+                          >
+                            待开发
+                          </el-tag>
+                        </div>
                         <p>{{ feature.description }}</p>
                       </div>
                     </el-card>
@@ -251,14 +369,27 @@ onMounted(() => {
                   <div class="feature-grid admin-grid">
                     <el-card
                       v-for="feature in adminFeatures"
-                      :key="feature.title"
+                      :key="feature.key"
                       class="feature-card"
+                      :class="{
+                        'feature-card-available': feature.status === 'available',
+                        'feature-card-coming': feature.status === 'coming-soon',
+                      }"
                       shadow="hover"
-                      @click="feature.title === '账号管理' && handleTabChange('users')"
+                      @click="handleFeatureClick(feature)"
                     >
                       <component :is="feature.icon" :size="28" class="feature-icon admin-icon" />
                       <div class="feature-info">
-                        <h3>{{ feature.title }}</h3>
+                        <div class="feature-title-row">
+                          <h3>{{ feature.title }}</h3>
+                          <el-tag
+                            v-if="feature.status === 'coming-soon'"
+                            size="small"
+                            type="info"
+                          >
+                            待开发
+                          </el-tag>
+                        </div>
                         <p>{{ feature.description }}</p>
                       </div>
                     </el-card>
@@ -284,8 +415,20 @@ onMounted(() => {
                   />
                   <el-table-column label="操作" width="180">
                     <template #default>
-                      <el-button size="small" type="success">通过</el-button>
-                      <el-button size="small" type="danger">拒绝</el-button>
+                      <el-button
+                        size="small"
+                        type="success"
+                        @click="handleAuditAction('approve')"
+                      >
+                        通过
+                      </el-button>
+                      <el-button
+                        size="small"
+                        type="danger"
+                        @click="handleAuditAction('reject')"
+                      >
+                        拒绝
+                      </el-button>
                     </template>
                   </el-table-column>
                 </el-table>
@@ -339,6 +482,13 @@ onMounted(() => {
                 <el-spinner />
               </div>
               <div v-else class="config-form">
+                <el-alert
+                  type="info"
+                  title="演示配置"
+                  description="当前配置为后端默认演示值，暂未接入数据库配置表。正式环境建议读取数据库或配置文件。"
+                  :closable="false"
+                  style="margin-bottom: 24px"
+                />
                 <el-form label-width="160px">
                   <el-form-item label="站点名称">
                     <el-input :value="systemConfig.site_name" disabled />
@@ -502,6 +652,27 @@ onMounted(() => {
   gap: 16px;
   cursor: pointer;
   padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.feature-card-available {
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border-light);
+}
+
+.feature-card-available:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+}
+
+.feature-card-coming {
+  opacity: 0.6;
+  background: var(--color-bg-page);
+  border: 1px dashed var(--color-border-light);
+}
+
+.feature-card-coming:hover {
+  opacity: 0.8;
 }
 
 .feature-icon {
@@ -512,8 +683,21 @@ onMounted(() => {
   color: #f56c6c;
 }
 
+.feature-info {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.feature-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 .feature-info h3 {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 16px;
 }
 
