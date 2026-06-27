@@ -334,7 +334,7 @@ def _db_news_filters(
 
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
-        if _news_has_fulltext_index():
+        if _news_has_fulltext_index() and len(normalized_keyword) >= 2:
             clauses.append("MATCH(n.title, n.summary, n.content) AGAINST(%s IN BOOLEAN MODE)")
             params.append(normalized_keyword)
         else:
