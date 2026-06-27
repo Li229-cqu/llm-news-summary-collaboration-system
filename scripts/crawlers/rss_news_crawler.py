@@ -65,6 +65,18 @@ RSS_SOURCES: dict[str, list[dict[str, str]]] = {
             "category_code": "sports",
             "source_name": "中国新闻网",
         },
+        {
+            "name": "中国新闻网-科技",
+            "url": "https://www.chinanews.com.cn/rss/it.xml",
+            "category_code": "technology",
+            "source_name": "中国新闻网",
+        },
+        {
+            "name": "中国新闻网-娱乐",
+            "url": "https://www.chinanews.com.cn/rss/ent.xml",
+            "category_code": "entertainment",
+            "source_name": "中国新闻网",
+        },
     ],
     "people": [
         {
@@ -85,12 +97,24 @@ RSS_SOURCES: dict[str, list[dict[str, str]]] = {
             "category_code": "world",
             "source_name": "人民网",
         },
+        {
+            "name": "人民网-科技",
+            "url": "http://www.people.com.cn/rss/it.xml",
+            "category_code": "technology",
+            "source_name": "人民网",
+        },
+        {
+            "name": "人民网-娱乐",
+            "url": "http://www.people.com.cn/rss/ent.xml",
+            "category_code": "entertainment",
+            "source_name": "人民网",
+        },
     ],
 }
 
-ENABLE_PEOPLE_RSS = False
+ENABLE_PEOPLE_RSS = True  # 启用人民网 RSS 源以获得更多数据
 DEFAULT_MAX_ITEMS = 10
-DEFAULT_SOURCE_MODE = "china_news"
+DEFAULT_SOURCE_MODE = "all"  # 使用所有 RSS 源
 
 logger = logging.getLogger("rss_news_crawler")
 
