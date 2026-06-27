@@ -1,14 +1,23 @@
 """新闻互动模块接口路由。"""
 
+import os
+import secrets
+import time
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, File, Header, UploadFile
 
 from app.common.auth import require_login
+from app.common.exceptions import AppException
 from app.common.response import ApiResponse, success_response
 from app.modules.auth.schema import UserInfo
 from app.modules.auth.service import get_mock_user_by_token
-from app.modules.interaction.schema import CommentCreateRequest, CommentReplyRequest
+from app.modules.interaction.schema import (
+    CommentCreateRequest,
+    CommentMediaUploadResponse,
+    CommentReplyRequest,
+)
 from app.modules.interaction.service import (
     create_news_comment,
     favorite_news,
@@ -113,3 +122,63 @@ async def like_comment_route(
 ) -> ApiResponse[Any]:
     """点赞评论，需要登录。"""
     return success_response(like_comment(comment_id=comment_id, current_user=current_user))
+
+
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+BASE_DIR = Path(__file__).resolve().parents[3]  # backend/
+UPLOADS_DIR = BASE_DIR / "uploads" / "comments"
+
+
+@router.post(
+    "/api/comments/media/upload",
+    response_model=ApiResponse[CommentMediaUploadResponse],
+)
+async def upload_comment_media(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[CommentMediaUploadResponse]:
+    """上传评论富媒体图片，需要登录。"""
+    # 校验文件类型
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise AppException(
+            code=400,
+            message=f"不支持的图片类型：{content_type}，仅支持 JPG/PNG/GIF/WebP",
+        )
+
+    ext = os.path.splitext(file.filename or ".jpg")[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise AppException(
+            code=400,
+            message=f"不支持的图片格式：{ext}，仅支持 JPG/PNG/GIF/WebP",
+        )
+
+    # 读取文件内容并校验大小
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise AppException(code=400, message="图片大小不能超过 5MB")
+
+    # 按月份分目录
+    month_dir = time.strftime("%Y/%m")
+    target_dir = UPLOADS_DIR / month_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # 生成唯一文件名
+    timestamp = int(time.time() * 1000)
+    random_suffix = secrets.token_hex(4)
+    filename = f"{timestamp}_{random_suffix}{ext}"
+    file_path = target_dir / filename
+
+    file_path.write_bytes(contents)
+
+    url = f"/uploads/comments/{month_dir}/{filename}"
+    return success_response(
+        CommentMediaUploadResponse(
+            url=url,
+            filename=filename,
+            size=len(contents),
+        )
+    )

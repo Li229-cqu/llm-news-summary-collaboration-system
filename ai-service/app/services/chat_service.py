@@ -1,7 +1,10 @@
+import logging
 from app.common.exceptions import AIServiceException
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.llm_client import call_llm
+
+logger = logging.getLogger(__name__)
 
 
 def chat(request: ChatRequest) -> ChatResponse:
@@ -11,6 +14,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     # 如果 LLM 未启用，返回 mock 数据
     if not settings.llm_enabled:
+        logger.info("🤖 [MOCK MODE] 返回模拟 AI 回答（LLM 未启用）")
         from app.mock.sample_outputs import CHAT_OUTPUT
         return ChatResponse(**CHAT_OUTPUT)
 
@@ -28,7 +32,9 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     try:
         # 调用 LLM
+        logger.info("🚀 [REAL API] 调用真实大语言模型 API...")
         answer = call_llm(messages)
+        logger.info("✅ [REAL API] 大模型 API 调用成功")
         return ChatResponse(
             answer=answer,
             recommended_questions=[
@@ -39,6 +45,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         )
     except Exception as e:
         # LLM 调用失败，返回默认回答
+        logger.error(f"❌ [REAL API] 大模型 API 调用失败: {str(e)}")
         return ChatResponse(
             answer=f"抱歉，AI 服务暂时无法回答。错误信息：{str(e)}",
             recommended_questions=[

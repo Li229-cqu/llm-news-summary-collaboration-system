@@ -12,7 +12,9 @@
       <template v-if="isGenerating">
         <div class="generating-status">
           <div class="generating-spinner">
-            <el-spinner size="large" />
+            <el-icon class="is-loading" :size="40">
+              <LoadingIcon />
+            </el-icon>
           </div>
           <div class="generating-text">
             <p class="generating-title">正在生成事件脉络</p>
@@ -52,6 +54,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Loading as LoadingIcon } from '@element-plus/icons-vue'
 import {
   generateTimeline,
   getTimeline,

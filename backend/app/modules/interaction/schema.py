@@ -38,12 +38,23 @@ class _CommentContentRequest(BaseModel):
         return normalized_content
 
 
+class CommentMediaJson(BaseModel):
+    """评论中的媒体数据（图片、表情等）。"""
+
+    images: Optional[List[str]] = None
+    emojis: Optional[List[str]] = None
+
+
 class CommentCreateRequest(_CommentContentRequest):
     """发布一级新闻评论的请求模型。"""
+
+    media_json: Optional[CommentMediaJson] = None
 
 
 class CommentReplyRequest(_CommentContentRequest):
     """回复新闻评论的请求模型。"""
+
+    media_json: Optional[CommentMediaJson] = None
 
 
 class CommentItem(BaseModel):
@@ -61,6 +72,7 @@ class CommentItem(BaseModel):
     status: int
     create_time: str
     is_liked: bool = False
+    media_json: Optional[CommentMediaJson] = None
     replies: List["CommentItem"] = Field(default_factory=list)
 
 
@@ -77,6 +89,14 @@ class CommentLikeResult(BaseModel):
     comment_id: int
     liked: bool
     like_count: int
+
+
+class CommentMediaUploadResponse(BaseModel):
+    """评论媒体上传响应。"""
+
+    url: str
+    filename: str
+    size: int
 
 
 CommentItem.model_rebuild()

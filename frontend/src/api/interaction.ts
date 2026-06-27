@@ -12,12 +12,19 @@ export interface InteractionResult {
   message: string | null
 }
 
+export interface CommentMediaJson {
+  images?: string[]
+  emojis?: string[]
+}
+
 export interface CommentCreatePayload {
   content: string
+  media_json?: CommentMediaJson | null
 }
 
 export interface CommentReplyPayload {
   content: string
+  media_json?: CommentMediaJson | null
 }
 
 export interface CommentItem {
@@ -34,6 +41,13 @@ export interface CommentItem {
   create_time: string
   is_liked: boolean
   replies: CommentItem[]
+  media_json?: CommentMediaJson | null
+}
+
+export interface CommentMediaUploadResponse {
+  url: string
+  filename: string
+  size: number
 }
 
 export interface CommentListResponse {
@@ -88,4 +102,17 @@ export function replyComment(commentId: number | string, payload: CommentReplyPa
 /** 点赞评论，需要登录。 */
 export function likeComment(commentId: number | string) {
   return request.post<CommentLikeResult, CommentLikeResult>(`/api/comments/${commentId}/like`)
+}
+
+/** 上传评论富媒体图片，需要登录。 */
+export function uploadCommentMedia(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<CommentMediaUploadResponse, CommentMediaUploadResponse>(
+    '/api/comments/media/upload',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    },
+  )
 }

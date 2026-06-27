@@ -111,23 +111,29 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
 
 async def _call_ai_service(request: AIGenerateRequest) -> AIGenerateResponse:
     endpoint = f"{settings.ai_service_url.rstrip('/')}/ai/generate-title-summary"
+    logger.info(f"🚀 [REAL API] 调用 AI 服务: {endpoint}")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(endpoint, json=request.model_dump())
             response.raise_for_status()
             payload = response.json()
+        logger.info("✅ [REAL API] AI 服务调用成功")
     except (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        logger.error(f"❌ [REAL API] AI 服务调用失败: {str(exc)}")
         raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
 
     if payload.get("code") != 200:
+        logger.error(f"❌ [REAL API] AI 服务返回错误: {payload.get('message')}")
         raise AppException(
             code=payload.get("code", 503),
             message=payload.get("message", AI_SERVICE_UNAVAILABLE_MESSAGE),
         )
 
     try:
+        logger.info("✅ [REAL API] AI 生成结果解析成功")
         return AIGenerateResponse(**payload["data"])
     except (KeyError, TypeError, ValueError) as exc:
+        logger.error(f"❌ [REAL API] AI 生成结果解析失败: {str(exc)}")
         raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
 
 

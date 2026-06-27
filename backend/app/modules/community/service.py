@@ -2259,6 +2259,7 @@ async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
 
     try:
         ai_service_url = f"{settings.ai_service_url}/ai/chat"
+        logger.info(f"🚀 [REAL API] 调用 AI 服务生成评论总结: {ai_service_url}")
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 ai_service_url,
@@ -2272,6 +2273,7 @@ async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
                 if data.get("code") == 200 and "data" in data:
                     summary = data["data"].get("answer", "")
                     if summary:
+                        logger.info("✅ [REAL API] AI 评论总结生成成功")
                         return CommentsSummaryResponse(
                             summary=summary,
                             sentiment="neutral",
@@ -2279,8 +2281,9 @@ async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
                             source="llm"
                         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(f"AI 服务调用失败，返回基础总结：{exc}")
+        logger.warning(f"❌ [REAL API] AI 服务调用失败，返回基础总结：{exc}")
 
+    logger.info("🤖 [FALLBACK] 使用基础总结（关键词匹配）")
     basic_summary = f"该帖子共有 {len(all_comments)} 条评论。用户对此话题进行了积极讨论，整体氛围较为活跃。建议逐条查看评论了解详细观点。"
     return CommentsSummaryResponse(
         summary=basic_summary,
