@@ -8,3 +8,4 @@ pymysql
 DBUtils
 beautifulsoup4
 python-dateutil
+python-multipart

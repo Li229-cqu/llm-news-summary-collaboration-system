@@ -1,304 +1,399 @@
 # 基于大语言模型的智能新闻摘要与协同互动系统
 
-**第38组-LCX组**
+本项目是一个前后端分离的新闻摘要与协同互动系统，包含新闻浏览、新闻互动、AI 标题摘要生成、社区互动、个人中心、管理后台、RSS 新闻爬虫、Timeline 事件脉络等模块。
 
-## 一、项目简介
+当前项目采用：
 
-《基于大语言模型的智能新闻摘要与协同互动系统》是一个面向新闻浏览、AI 标题摘要生成、社区互动和个人中心管理的前后端分离系统。系统采用"数据库优先 + mock 兜底"的策略，确保在数据库异常时仍能正常演示。
+- 前端：Vue 3 + Vite + TypeScript + Element Plus
+- 后端：FastAPI + MySQL + PyMySQL
+- AI 服务：FastAPI，默认支持 mock 结果，后续可切换真实大模型
+- 数据库：MySQL 8.0
+- 爬虫：RSS 新闻爬虫，支持增量抓取与正文解析
 
-当前系统已完成 **11 个核心功能模块**，支持完整的新闻阅读、AI 生成、社区互动和个人管理的闭环体验。
-
-## 二、核心功能模块（已实现）
-
-### 📰 新闻浏览与管理
-- ✅ **新闻首页**：热点新闻、分类筛选、订阅管理
-- ✅ **新闻搜索**：按标题、分类、关键词搜索
-- ✅ **新闻详情**：完整正文、封面图展示、相关推荐
-- ✅ **分类导航**：多个新闻分类和主题导航
-- ✅ **真实数据**：RSS 爬虫自动抓取新闻，数据库实时更新
-
-### 💬 新闻互动与评论
-- ✅ **评论系统**：一级评论、嵌套回复、点赞功能
-- ✅ **评论富媒体**：支持表情选择器、图片上传和预览
-- ✅ **互动统计**：评论数、点赞数、收藏数实时统计
-- ✅ **评论媒体**：支持 emoji 表情和图片混合评论
-
-### 🤖 AI 智能生成
-- ✅ **标题生成**：AI 生成 3-5 个候选标题，支持多种风格
-- ✅ **摘要生成**：短摘要、长摘要、要点摘要多维度生成
-- ✅ **内容分析**：关键词提取、新闻要素识别、一致性校验
-- ✅ **生成历史**：保存所有生成记录到个人中心，可复用
-- ✅ **两种模式**：Mock 模式（快速演示）+ LLM 模式（真实生成）
-
-### 👥 社区互动
-- ✅ **社区帖子**：用户发帖、编辑、删除、置顶功能
-- ✅ **热搜榜**：实时热搜话题排名
-- ✅ **帖子评论**：多层次评论系统，支持富媒体内容
-- ✅ **AI 评论总结**：智能总结评论区舆论核心观点
-- ✅ **社区互动**：点赞、收藏、分享等互动功能
-
-### 👤 个人中心管理
-- ✅ **用户概览**：阅读统计、互动统计、收藏统计
-- ✅ **浏览历史**：查看阅读过的所有新闻
-- ✅ **收藏管理**：管理收藏的新闻和内容
-- ✅ **评论记录**：查看发表过的所有评论
-- ✅ **AI 生成记录**：查看所有 AI 生成的摘要和标题
-
-### 📊 阅读数据分析
-- ✅ **个性化推荐**：基于用户浏览、收藏、点赞的个性化新闻推荐
-- ✅ **阅读脉络图**：力导向图展示用户关注的话题关联和演变
-- ✅ **阅读时间线**：按时间展示用户的阅读轨迹和话题演变
-- ✅ **阅读热力图**：矩阵形式展示用户在不同话题的活跃度
-
-### ⏰ Timeline 事件脉络
-- ✅ **事件时间线**：智能组织新闻为时间有序的事件脉络
-- ✅ **进度反馈**：生成中实时显示进度，避免用户困惑
-- ✅ **结构化数据**：事件包含类型、重要度、关键词等元数据
-- ✅ **事件关系**：支持事件间的因果和时间关系建立
-
-### 🔐 用户认证与权限
-- ✅ **用户登录**：支持用户名密码登录，Token 认证
-- ✅ **角色权限**：普通用户、审核编辑、管理员三种角色
-- ✅ **受保护接口**：评论、收藏、生成等接口需要登录认证
-- ✅ **权限控制**：编辑可审核社区帖子，管理员可管理后台
-
-### 📋 管理后台
-- ✅ **仪表板**：概览统计（用户数、新闻数、评论数、帖子数）
-- ✅ **用户管理**：用户列表、用户信息查看
-- ✅ **内容审核**：待审核帖子列表、审核和拒绝功能
-- ✅ **数据统计**：各模块的实时数据统计
-
-### 🔄 数据库与持久化
-- ✅ **MySQL 数据库**：完整的数据库表结构和关系设计
-- ✅ **数据库优先**：优先读写数据库，异常时回退 Mock
-- ✅ **数据迁移**：支持版本化迁移脚本，自动升级表结构
-- ✅ **爬虫集成**：RSS 爬虫自动抓取新闻并存入数据库
-
-## 三、技术栈
-
-### 前端
-- Vue 3 + Vite
-- TypeScript
-- Element Plus UI 框架
-- Pinia 状态管理
-- Axios 网络请求
-- ECharts 数据可视化
-- emoji-picker-element 表情选择
-
-### 后端
-- Python FastAPI
-- Pydantic 数据验证
-- MySQL 8.0 数据库
-- PyMySQL 数据库驱动
-- python-multipart 文件上传支持
-
-### AI 服务
-- FastAPI 框架
-- 智谱 GLM-4-Flash 大模型（支持）
-- Mock 数据生成（快速演示）
-- 流式响应支持
-
-## 四、核心特性
-
-### 🚀 性能优化
-- 连接池支持（预留）
-- 数据缓存策略
-- 分页查询优化
-- 异步操作支持
-
-### 🛡️ 可靠性
-- Mock 兜底机制：任何组件异常时自动回退到模拟数据
-- 日志系统：清晰的日志标记（🤖 Mock | 🚀 Real API | ✅ Success | ❌ Error）
-- 错误处理：友好的错误提示和异常恢复
-- 数据备份：支持数据库完整备份和恢复
-
-### 📈 可扩展性
-- 模块化架构：各功能模块独立开发和测试
-- API 版本化：支持多版本 API 兼容
-- 插件体系：AI 服务可以轻松接入新的大模型
-- Schema 版本化：数据模型支持版本管理
-
-## 五、项目结构
+## 一、项目目录
 
 ```text
 llm-news-summary-collaboration-system/
-├── frontend/           # 前端 Vue 3 项目
-├── backend/            # FastAPI 后端服务
-├── ai-service/         # AI 生成服务（Mock + LLM）
-├── database/           # 数据库 schema、seed、migrations
-├── scripts/            # RSS 爬虫和工具脚本
-├── docs/               # 项目文档和接口说明
-├── plan/               # 项目规划和任务管理
-└── README.md           # 本文件
+├─ frontend/            前端项目
+├─ backend/             后端 API 服务
+├─ ai-service/          AI 生成服务
+├─ database/            数据库 schema、seed、migrations
+├─ scripts/crawlers/    RSS 新闻爬虫
+├─ docs/                项目文档和接口文档
+├─ plan/                任务规划
+└─ README.md
 ```
 
-## 六、快速开始
+## 二、第一次运行完整流程
 
-### 6.1 环境准备
+第一次拉取项目后，建议按下面顺序执行。
 
-需要安装：
-- Node.js 16+
-- Python 3.8+
-- MySQL 8.0+
-- Git
+### 1. 拉取代码
 
-### 6.2 数据库初始化
-
-```bash
-# 创建数据库用户
-mysql -u root -p < database/setup.sql
-
-# 导入表结构
-mysql -u llm_news_user -p llm_news_system < database/schema.sql
-
-# 导入初始数据
-mysql -u llm_news_user -p llm_news_system < database/seed.sql
-
-# 执行迁移脚本（按顺序）
-mysql -u llm_news_user -p llm_news_system < database/migrations/001_*.sql
-mysql -u llm_news_user -p llm_news_system < database/migrations/002_*.sql
-# ... 按编号顺序执行所有迁移
+```powershell
+git clone git@github.com:Li229-cqu/llm-news-summary-collaboration-system.git
+cd llm-news-summary-collaboration-system
+git checkout develop
+git pull origin develop
 ```
 
-### 6.3 启动应用
+如果已经有本地仓库，只需要：
 
-**三个独立的终端窗口：**
+```powershell
+git checkout develop
+git pull origin develop
+```
 
-**窗口 1 - 后端服务：**
-```bash
+### 2. 准备 MySQL 数据库
+
+先确认本机已经安装 MySQL 8.0，并且已经创建项目数据库用户：
+
+```text
+数据库名：llm_news_system
+数据库用户：llm_news_user
+数据库密码：123456
+数据库地址：127.0.0.1:3306
+```
+
+如果还没有创建数据库和用户，请先用 root 登录 MySQL 后执行：
+
+```sql
+CREATE DATABASE IF NOT EXISTS llm_news_system
+DEFAULT CHARACTER SET utf8mb4
+DEFAULT COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'llm_news_user'@'localhost'
+IDENTIFIED BY '123456';
+
+GRANT ALL PRIVILEGES ON llm_news_system.* TO 'llm_news_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+注意：不要把 root 密码写进项目文件。
+
+### 3. 导入数据库表结构和基础数据
+
+PowerShell 不能直接使用 `< database/schema.sql` 这种写法，请使用 `cmd /c`。
+
+在项目根目录执行：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
+```
+
+输入密码：
+
+```text
+123456
+```
+
+然后导入基础数据：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\seed.sql"
+```
+
+输入密码：
+
+```text
+123456
+```
+
+### 4. 执行数据库迁移
+
+如果数据库是旧版本，或者你是从别人更新后的代码继续运行，需要执行 migrations。
+
+按编号依次执行：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\001_add_news_source_url_and_crawl_log.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\002_add_ai_generate_record_source_fields.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\003_add_community_post_tags.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\005_create_user_category_subscription.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\006_add_fulltext_index.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\007_add_news_editor_column.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\008_add_hot_topic_status.sql"
+```
+
+每条命令提示输入密码时，输入：
+
+```text
+123456
+```
+
+### 5. 配置后端环境变量
+
+检查是否存在：
+
+```text
+backend/.env
+```
+
+如果没有，创建 `backend/.env`：
+
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=llm_news_system
+DB_USER=llm_news_user
+DB_PASSWORD=123456
+
+AI_SERVICE_URL=http://127.0.0.1:8001
+```
+
+确认 `.env` 不要提交到 Git。
+
+### 6. 安装并启动 backend
+
+打开第一个 PowerShell 窗口：
+
+```powershell
 cd backend
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
-.venv/Scripts/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**窗口 2 - AI 服务：**
-```bash
+如果虚拟环境已经创建过，以后只需要：
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+后端地址：
+
+```text
+http://127.0.0.1:8000
+```
+
+后端 Swagger：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### 7. 安装并启动 ai-service
+
+打开第二个 PowerShell 窗口：
+
+```powershell
 cd ai-service
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 copy .env.example .env
-.venv/Scripts/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-**窗口 3 - 前端应用：**
-```bash
+如果虚拟环境已经创建过，以后只需要：
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+AI 服务地址：
+
+```text
+http://127.0.0.1:8001
+```
+
+AI 服务 Swagger：
+
+```text
+http://127.0.0.1:8001/docs
+```
+
+默认 `.env.example` 中 `LLM_ENABLED=false`，表示使用 mock AI 结果，方便本地演示。
+
+### 8. 安装并启动 frontend
+
+打开第三个 PowerShell 窗口：
+
+```powershell
 cd frontend
 npm install
-npm run dev
+npm.cmd run dev
 ```
 
-### 6.4 访问应用
+前端地址：
 
-- 前端：http://localhost:5173
-- 后端 API：http://127.0.0.1:8000
-- API 文档：http://127.0.0.1:8000/docs
-- AI 服务：http://127.0.0.1:8001
-- AI API 文档：http://127.0.0.1:8001/docs
+```text
+http://localhost:5173
+```
 
-## 七、默认账号
+如果 5173 被占用，Vite 可能会自动切到 5174，请看终端输出的实际地址。
+
+## 三、以后常规运行流程
+
+如果你已经完成过第一次初始化，以后每天启动只需要开三个终端。
+
+### 终端 1：启动 backend
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 终端 2：启动 ai-service
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+### 终端 3：启动 frontend
+
+```powershell
+cd frontend
+npm.cmd run dev
+```
+
+然后访问：
+
+```text
+http://localhost:5173
+```
+
+## 四、常用测试账号
 
 | 角色 | 用户名 | 密码 |
-|------|--------|------|
+| --- | --- | --- |
 | 普通用户 | `user` | `123456` |
 | 审核编辑 | `editor` | `123456` |
 | 管理员 | `admin` | `123456` |
 
-## 八、AI 模型配置
+## 五、RSS 新闻爬虫
 
-### Mock 模式（默认）
-- 快速返回，无需 API Key
-- 适合本地开发和课堂演示
-- 无需外部网络
+爬虫脚本位置：
 
-### LLM 模式（可选启用）
-配置 `.env` 环境变量：
-```env
-LLM_ENABLED=true
-LLM_API_KEY=<你的 API Key>
-LLM_PROVIDER=zhipu
-LLM_MODEL=glm-4-flash
+```text
+scripts/crawlers/rss_news_crawler.py
 ```
 
-## 九、RSS 爬虫
+预览，不入库：
 
-自动抓取新闻并保存到数据库：
+```powershell
+python scripts/crawlers/rss_news_crawler.py --dry-run --max-items 3
+```
 
-```bash
-# 预览模式（不保存）
-python scripts/crawlers/rss_news_crawler.py --dry-run --max-items 5
+抓取并写入数据库：
 
-# 正式抓取
-python scripts/crawlers/rss_news_crawler.py --max-items 10 --fetch-content
+```powershell
+python scripts/crawlers/rss_news_crawler.py --max-items 5 --fetch-content
+```
 
-# 补全已有新闻内容
+补全文章正文：
+
+```powershell
 python scripts/crawlers/rss_news_crawler.py --fetch-content --update-existing-content
+```
 
-# 归档旧新闻
+归档旧新闻：
+
+```powershell
 python scripts/crawlers/rss_news_crawler.py --cleanup-days 30
 ```
 
-## 十、项目文档
+如果你使用 backend 虚拟环境运行爬虫：
 
-详见 `docs/` 目录：
-- `api.md` - REST API 接口文档
-- `development_plan.md` - 开发计划和阶段总结
-- `development_standard.md` - 代码规范和最佳实践
-- `mock_data_news.md` - Mock 数据说明
-
-以及 `plan/` 目录：
-- `Fperiod` - 功能开发周期规划
-- `issues-and-tasks.md` - 待办问题和并发任务
-
-## 十一、部署
-
-项目支持多种部署方式：
-
-### Docker 部署
-```bash
-docker-compose up -d
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
 ```
 
-### Nginx 配置
-参考 `deploy/nginx.conf`
+## 六、验证数据库是否有数据
 
-### 生产环境建议
-- 使用 Gunicorn 或 uWSGI 替代 Uvicorn
-- 启用 HTTPS
-- 配置数据库连接池
-- 实施速率限制
-- 添加日志聚合
+PowerShell 中执行：
 
-## 十二、常见问题
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system -e ""SELECT COUNT(*) AS user_count FROM user; SELECT COUNT(*) AS news_count FROM news; SELECT COUNT(*) AS post_count FROM community_post; SELECT COUNT(*) AS comment_count FROM post_comment;"""
+```
 
-### Q: 页面仍显示 Mock 数据
-A: 检查：
-1. MySQL 是否启动
-2. `backend/.env` 配置是否正确
-3. 数据库表是否有数据
+输入密码：
 
-### Q: AI 服务不可用
-A: 检查：
-1. ai-service 是否启动（`http://127.0.0.1:8001/docs`）
-2. `LLM_ENABLED` 配置
-3. API Key 是否有效
+```text
+123456
+```
 
-### Q: 图片无法加载
-A: 可能原因：
-1. 外站防盗链（待优化为本地存储）
-2. 网络连接问题
-3. 爬虫未抓取封面图
+也可以进入 MySQL 后执行：
 
-## 十三、许可证
+```powershell
+mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system
+```
 
-项目采用 MIT 许可证。详见 LICENSE 文件。
+然后输入：
 
-## 十四、贡献
+```sql
+SELECT COUNT(*) FROM user;
+SELECT COUNT(*) FROM news;
+SELECT COUNT(*) FROM community_post;
+SELECT COUNT(*) FROM post_comment;
+```
 
-欢迎提交 Issue 和 Pull Request。请遵循 `docs/development_standard.md` 中的代码规范。
+## 七、常见问题
 
----
+### 1. PowerShell 提示 `<` 运算符不可用
 
-**项目状态**：功能开发基本完成，正在进行性能优化和功能完善。
+不要在 PowerShell 里直接写：
 
-**最后更新**：2026-06-27 UTC+8
+```powershell
+mysql -u llm_news_user -p llm_news_system < database/schema.sql
+```
+
+请使用：
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
+```
+
+### 2. 页面仍然显示 mock 数据
+
+优先检查：
+
+1. MySQL 是否启动。
+2. `backend/.env` 是否存在。
+3. `backend/.env` 中数据库账号密码是否正确。
+4. 是否执行了 `schema.sql`、`seed.sql` 和 migrations。
+5. backend 是否重新启动。
+
+### 3. 前端端口变成 5174
+
+说明 5173 被占用。可以关闭占用 5173 的旧前端进程，或者直接访问终端显示的新地址。
+
+### 4. `npm run build` 出现 `.vite-temp` 权限错误
+
+这是 Windows 下 Vite 缓存文件偶发权限问题。可以先关闭正在运行的前端服务，再删除：
+
+```text
+frontend/node_modules/.vite-temp
+```
+
+然后重新执行：
+
+```powershell
+npm.cmd run dev
+```
+
+## 八、主要访问地址
+
+| 服务 | 地址 |
+| --- | --- |
+| 前端 | `http://localhost:5173` |
+| 后端 | `http://127.0.0.1:8000` |
+| 后端 Swagger | `http://127.0.0.1:8000/docs` |
+| AI 服务 | `http://127.0.0.1:8001` |
+| AI Swagger | `http://127.0.0.1:8001/docs` |
+
+## 九、开发说明
+
+- 前端只调用 backend，不直接调用 ai-service。
+- backend 优先读取数据库，数据库异常时保留 mock fallback。
+- ai-service 默认使用 mock 结果，便于本地演示。
+- `.env` 文件不要提交到 Git。
+- 不要把 MySQL root 密码或真实 API Key 写进 README、代码或示例配置。
