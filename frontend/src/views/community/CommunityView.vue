@@ -505,7 +505,7 @@ function getRankClass(rank: number) {
 }
 
 async function sendAIQuestion() {
-  if (!aiQuestion.value) return
+  if (!aiQuestion.value.trim() || aiLoading.value) return
   aiMessages.value.push({ type: 'user', content: aiQuestion.value })
   const question = aiQuestion.value
   aiQuestion.value = ''
@@ -513,6 +513,9 @@ async function sendAIQuestion() {
   try {
     const result = await aiNewsHelper(question)
     aiMessages.value.push({ type: 'ai', content: result.answer || '暂无回答' })
+  } catch (error) {
+    aiMessages.value.push({ type: 'ai', content: '抱歉，AI服务暂时不可用，请稍后重试。' })
+    ElMessage.warning('AI服务暂时不可用，已切换到本地回答模式')
   } finally {
     aiLoading.value = false
   }

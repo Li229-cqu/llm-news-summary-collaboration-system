@@ -118,7 +118,7 @@ export function getHotSearch(params: { limit?: number } = {}) {
 }
 
 export function aiNewsHelper(question: string) {
-  return request.post<AIHelperResponse, AIHelperResponse>('/api/community/ai-helper', { question })
+  return request.post<AIHelperResponse, AIHelperResponse>('/api/community/ai-helper', { question }, { timeout: 60000 })
 }
 
 export function getCommentsSummary(postId: number | string) {

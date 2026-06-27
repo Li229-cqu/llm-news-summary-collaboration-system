@@ -2154,6 +2154,7 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
 请根据以上内容回答用户的问题。如果问题与系统内容相关，请引用具体信息进行回答。如果问题与系统内容无关，请礼貌地告知用户当前系统的数据范围。回答要简洁、准确、有价值。"""
 
         ai_service_url = f"{settings.ai_service_url}/ai/chat"
+        logger.info(f"🚀 [REAL API] 调用 AI 服务生成新闻助手回答: {ai_service_url}")
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 ai_service_url,
@@ -2167,14 +2168,16 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
                 if data.get("code") == 200 and "data" in data:
                     answer = data["data"].get("answer", "")
                     if answer:
+                        logger.info("✅ [REAL API] AI 新闻助手回答生成成功")
                         return AIHelperResponse(
                             success=True,
                             message="success",
                             answer=answer
                         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(f"AI 服务调用失败，回退到关键词匹配：{exc}")
+        logger.warning(f"❌ [REAL API] AI 服务调用失败，回退到关键词匹配：{exc}")
 
+    logger.info("🤖 [FALLBACK] 使用关键词匹配回答")
     news_list = get_news_list(page=1, page_size=10)
     hot_topics = get_hot_search(limit=5)
 

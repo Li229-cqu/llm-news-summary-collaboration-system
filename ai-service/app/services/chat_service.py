@@ -12,13 +12,11 @@ def chat(request: ChatRequest) -> ChatResponse:
     if not request.question.strip():
         raise AIServiceException(code=400, message="问题不能为空")
 
-    # 如果 LLM 未启用，返回 mock 数据
     if not settings.llm_enabled:
         logger.info("🤖 [MOCK MODE] 返回模拟 AI 回答（LLM 未启用）")
         from app.mock.sample_outputs import CHAT_OUTPUT
-        return ChatResponse(**CHAT_OUTPUT)
+        return ChatResponse(**CHAT_OUTPUT, source="mock")
 
-    # 构造消息列表
     messages = [
         {
             "role": "system",
@@ -31,7 +29,6 @@ def chat(request: ChatRequest) -> ChatResponse:
     ]
 
     try:
-        # 调用 LLM
         logger.info("🚀 [REAL API] 调用真实大语言模型 API...")
         answer = call_llm(messages)
         logger.info("✅ [REAL API] 大模型 API 调用成功")
@@ -41,10 +38,10 @@ def chat(request: ChatRequest) -> ChatResponse:
                 "请问有什么新闻热点吗？",
                 "如何获取新闻摘要？",
                 "推荐相关新闻内容"
-            ]
+            ],
+            source="llm"
         )
     except Exception as e:
-        # LLM 调用失败，返回默认回答
         logger.error(f"❌ [REAL API] 大模型 API 调用失败: {str(e)}")
         return ChatResponse(
             answer=f"抱歉，AI 服务暂时无法回答。错误信息：{str(e)}",
@@ -52,5 +49,6 @@ def chat(request: ChatRequest) -> ChatResponse:
                 "请问有什么新闻热点吗？",
                 "如何获取新闻摘要？",
                 "推荐相关新闻内容"
-            ]
+            ],
+            source="mock"
         )

@@ -13,6 +13,32 @@ from app.services.llm_parser import parse_llm_response
 
 logger = logging.getLogger(__name__)
 
+CLICKBAIT_WORDS = [
+    "震撼", "炸裂", "万万没想到", "惊呆", "震惊", "吓尿", "跪了",
+    "惨了", "绝了", "神了", "逆天", "厉害了", "毁三观", "吓傻",
+    "哭晕", "吓哭", "吓瘫", "吓疯", "吓呆", "吓傻了", "吓懵",
+    "看傻", "看呆", "看懵", "看跪", "看哭", "听傻", "听呆",
+    "惊呆了", "震惊了", "吓尿了", "跪了跪了", "绝绝子", "YYDS",
+    "OMG", "卧槽", "我靠", "我勒个去", "天呐", "我的天",
+    "重磅", "炸裂了", "爆了", "刷屏", "沸腾", "疯传", "刷屏了",
+    "沸腾了", "疯传了", "燃爆", "燃炸", "燃爆了", "燃炸了",
+    "揭秘", "曝光", "内幕", "真相", "惊天", "惊人", "诡异",
+    "离奇", "惊悚", "恐怖", "吓人", "可怕", "要命", "危险",
+    "必读", "必看", "必转", "赶紧", "速看", "快看", "立刻",
+    "马上", "现在", "赶紧看", "速来", "快来看", "快来围观",
+    "不看后悔", "看了后悔", "不看亏大", "看了吓一跳", "看了沉默",
+    "看了流泪", "看了心碎", "看了崩溃", "看了窒息", "看了抑郁",
+    "深度好文", "深度解析", "深度揭秘", "深度曝光", "深度好文",
+    "深度好文", "深度好文", "深度好文", "深度好文", "深度好文",
+]
+
+
+def _remove_clickbait(text: str) -> str:
+    """去除标题党词汇。"""
+    for word in CLICKBAIT_WORDS:
+        text = text.replace(word, "")
+    return text.strip()
+
 
 def _split_sentences(text: str) -> list[str]:
     """按中文句号、问号、感叹号、分号等分割句子。"""
@@ -69,7 +95,7 @@ def _generate_dynamic_titles(
             title = f"新闻动态第{len(titles) + 1}"
         titles.append(title)
 
-    return titles[:title_count]
+    return [_remove_clickbait(title) for title in titles[:title_count]]
 
 
 def _generate_summary_short(
@@ -101,7 +127,7 @@ def _generate_summary_short(
     elif summary_style == "通俗易懂":
         short_summary = f"简单来说，{short_summary}"
 
-    return short_summary
+    return _remove_clickbait(short_summary)
 
 
 def _generate_summary_long(
@@ -131,7 +157,7 @@ def _generate_summary_long(
     elif summary_style == "通俗易懂":
         long_summary = f"说得更通俗一点，{long_summary}"
 
-    return long_summary
+    return _remove_clickbait(long_summary)
 
 
 def _generate_summary_points(input_text: str, summary_type: str) -> list[str]:
