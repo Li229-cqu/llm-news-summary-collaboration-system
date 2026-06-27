@@ -269,3 +269,130 @@ ON DUPLICATE KEY UPDATE
   `keywords` = VALUES(`keywords`),
   `risk_level` = VALUES(`risk_level`),
   `status` = VALUES(`status`);
+
+-- 社区帖子演示数据：用于社区页面数据库读取与互动测试
+INSERT INTO `community_post` (
+  `id`, `user_id`, `title`, `content`, `related_news_id`, `topic_id`, `tags`,
+  `like_count`, `comment_count`, `favorite_count`, `heat_score`, `status`,
+  `create_time`, `update_time`
+)
+VALUES
+  (
+    1, 1, '大家平时会先看 AI 摘要还是直接读全文？',
+    '最近新闻详情页已经可以跳转到 AI 标题摘要生成页，我试了一下，长新闻先看摘要确实更容易判断是否值得阅读全文。想和大家讨论一下：如果是科技、财经这类信息密度高的新闻，你们更希望摘要偏短、更客观，还是希望同时给出背景和后续影响？',
+    1, 1, JSON_ARRAY('AI摘要', '阅读效率', '新闻详情'),
+    8, 3, 3, 96, 1, '2026-06-20 09:15:00', '2026-06-20 10:10:00'
+  ),
+  (
+    2, 2, '低空经济新闻适合做事件脉络吗？',
+    '低空经济相关报道往往涉及政策、产业园、无人机应用和安全规范。单篇新闻能提供一个角度，但如果能把同一话题下的报道按时间线串起来，应该更容易看清产业发展节奏。大家觉得事件脉络里最重要的是时间节点、来源新闻，还是节点摘要？',
+    2, 2, JSON_ARRAY('低空经济', '事件脉络', '无人机'),
+    12, 2, 4, 118, 1, '2026-06-20 11:30:00', '2026-06-20 12:05:00'
+  ),
+  (
+    3, 3, '新能源汽车和智能交通的数据怎么展示更直观？',
+    '新能源汽车相关信息包含销量、充电设施、智能驾驶、城市交通等维度。如果后续个人中心能把用户阅读过的新能源新闻聚合成阅读脉络，可能可以帮助用户发现自己长期关注的话题。欢迎补充你们觉得适合可视化的字段。',
+    3, 3, JSON_ARRAY('新能源汽车', '智能交通', '数据可视化'),
+    10, 2, 2, 105, 1, '2026-06-21 14:20:00', '2026-06-21 15:00:00'
+  ),
+  (
+    4, 1, '社区讨论区可以增加哪些新闻互动入口？',
+    '现在社区页已经有帖子列表、热搜话题和互动按钮。如果从新闻详情页进入社区讨论，最好能自动关联原新闻，并把标题、来源展示出来，这样讨论不会脱离新闻语境。这个帖子主要用来测试社区数据库数据展示和评论回复功能。',
+    4, 1, JSON_ARRAY('社区互动', '关联新闻', '功能测试'),
+    6, 2, 1, 88, 1, '2026-06-22 08:45:00', '2026-06-22 09:30:00'
+  ),
+  (
+    5, 2, '编辑视角：评论审核应该保留哪些状态？',
+    '评论数据里已经有正常、折叠、待审核和删除等状态。为了演示后台审核能力，建议社区评论和新闻评论都保留状态字段，并在页面上区分正常展示和折叠展示。后续如果接入真实审核流程，也更容易扩展。',
+    5, 1, JSON_ARRAY('评论审核', '后台管理', '数据状态'),
+    5, 1, 1, 76, 1, '2026-06-22 16:10:00', '2026-06-22 17:00:00'
+  ),
+  (
+    6, 1, '待审核演示帖：社区内容审核流程测试',
+    '这是一条用于管理后台待审核列表演示的帖子。普通社区列表不应展示，管理员后台或编辑后台可以读取到该状态，用于测试审核、筛选和后续管理流程。',
+    6, 2, JSON_ARRAY('待审核', '管理后台', '演示数据'),
+    0, 0, 0, 20, 3, '2026-06-23 10:00:00', '2026-06-23 10:00:00'
+  )
+ON DUPLICATE KEY UPDATE
+  `title` = VALUES(`title`),
+  `content` = VALUES(`content`),
+  `related_news_id` = VALUES(`related_news_id`),
+  `topic_id` = VALUES(`topic_id`),
+  `tags` = VALUES(`tags`),
+  `like_count` = VALUES(`like_count`),
+  `comment_count` = VALUES(`comment_count`),
+  `favorite_count` = VALUES(`favorite_count`),
+  `heat_score` = VALUES(`heat_score`),
+  `status` = VALUES(`status`),
+  `update_time` = VALUES(`update_time`);
+
+-- 社区评论演示数据：包含一级评论和回复评论
+INSERT INTO `post_comment` (
+  `id`, `post_id`, `user_id`, `parent_id`, `content`, `like_count`, `status`, `create_time`, `update_time`
+)
+VALUES
+  (1, 1, 2, NULL, '我更倾向先看短摘要，再决定是否阅读全文。尤其是长篇科技新闻，摘要能帮我快速抓重点。', 4, 1, '2026-06-20 09:35:00', '2026-06-20 09:35:00'),
+  (2, 1, 3, NULL, '如果能同时给出“核心事实”和“可能影响”，会比单纯压缩正文更有价值。', 3, 1, '2026-06-20 09:50:00', '2026-06-20 09:50:00'),
+  (3, 1, 1, 2, '同意，尤其是财经新闻，影响分析很重要，但也要标明是系统生成结果。', 2, 1, '2026-06-20 10:05:00', '2026-06-20 10:05:00'),
+  (4, 2, 1, NULL, '低空经济很适合做时间线，政策和应用场景变化都比较明显。', 5, 1, '2026-06-20 11:45:00', '2026-06-20 11:45:00'),
+  (5, 2, 3, 4, '可以把“政策发布、试点落地、产业园建设”作为节点类型，阅读会更清楚。', 3, 1, '2026-06-20 12:02:00', '2026-06-20 12:02:00'),
+  (6, 3, 1, NULL, '个人中心的阅读脉络如果能按话题聚合，会比单纯列表更有帮助。', 4, 1, '2026-06-21 14:45:00', '2026-06-21 14:45:00'),
+  (7, 3, 2, NULL, '新能源新闻还可以和时间线联动，看政策、企业、基础设施之间的关系。', 2, 1, '2026-06-21 14:58:00', '2026-06-21 14:58:00'),
+  (8, 4, 3, NULL, '关联新闻很有必要，不然社区讨论容易变成泛泛聊天。', 3, 1, '2026-06-22 09:00:00', '2026-06-22 09:00:00'),
+  (9, 4, 1, 8, '后续可以在详情页增加“参与讨论”入口，直接带上新闻 id。', 2, 1, '2026-06-22 09:18:00', '2026-06-22 09:18:00'),
+  (10, 5, 3, NULL, '待审核和折叠状态最好在后台能筛选，这样演示逻辑更完整。', 1, 1, '2026-06-22 16:35:00', '2026-06-22 16:35:00')
+ON DUPLICATE KEY UPDATE
+  `content` = VALUES(`content`),
+  `like_count` = VALUES(`like_count`),
+  `status` = VALUES(`status`),
+  `update_time` = VALUES(`update_time`);
+
+-- 社区点赞、收藏、拉黑演示数据
+INSERT INTO `user_like` (`user_id`, `target_id`, `target_type`, `create_time`)
+VALUES
+  (1, 2, 'community_post', '2026-06-20 12:10:00'),
+  (1, 3, 'community_post', '2026-06-21 15:10:00'),
+  (2, 1, 'community_post', '2026-06-20 09:40:00'),
+  (3, 1, 'community_post', '2026-06-20 09:55:00'),
+  (1, 1, 'post_comment', '2026-06-20 10:15:00'),
+  (1, 4, 'post_comment', '2026-06-20 12:15:00'),
+  (2, 6, 'post_comment', '2026-06-21 15:05:00'),
+  (3, 8, 'post_comment', '2026-06-22 09:10:00')
+ON DUPLICATE KEY UPDATE
+  `create_time` = VALUES(`create_time`);
+
+INSERT INTO `favorite` (`user_id`, `target_id`, `target_type`, `create_time`)
+VALUES
+  (1, 2, 'community_post', '2026-06-20 12:20:00'),
+  (1, 3, 'community_post', '2026-06-21 15:20:00'),
+  (2, 1, 'community_post', '2026-06-20 10:00:00'),
+  (3, 2, 'community_post', '2026-06-20 12:25:00')
+ON DUPLICATE KEY UPDATE
+  `create_time` = VALUES(`create_time`);
+
+INSERT INTO `user_block` (`user_id`, `blocked_user_id`, `create_time`)
+VALUES
+  (2, 3, '2026-06-22 18:00:00')
+ON DUPLICATE KEY UPDATE
+  `create_time` = VALUES(`create_time`);
+
+-- 社区热搜与话题入口演示数据
+INSERT INTO `hot_topic` (
+  `id`, `title`, `target_type`, `target_id`, `heat_score`, `rank_no`, `tag`, `status`, `update_time`, `create_time`
+)
+VALUES
+  (4, 'AI 摘要如何改变新闻阅读', 'community_post', 1, 980, 4, '讨论', 1, '2026-06-20 10:10:00', '2026-06-20 10:10:00'),
+  (5, '低空经济事件脉络', 'news_topic', 2, 940, 5, '时间线', 1, '2026-06-20 12:05:00', '2026-06-20 12:05:00'),
+  (6, '新能源汽车与智能交通', 'news_topic', 3, 910, 6, '产业', 1, '2026-06-21 15:00:00', '2026-06-21 15:00:00'),
+  (7, '社区互动功能测试', 'community_post', 4, 860, 7, '社区', 1, '2026-06-22 09:30:00', '2026-06-22 09:30:00'),
+  (8, '评论审核与后台管理', 'community_post', 5, 820, 8, '管理', 1, '2026-06-22 17:00:00', '2026-06-22 17:00:00')
+ON DUPLICATE KEY UPDATE
+  `title` = VALUES(`title`),
+  `target_type` = VALUES(`target_type`),
+  `target_id` = VALUES(`target_id`),
+  `heat_score` = VALUES(`heat_score`),
+  `rank_no` = VALUES(`rank_no`),
+  `tag` = VALUES(`tag`),
+  `status` = VALUES(`status`),
+  `update_time` = VALUES(`update_time`),
+  `create_time` = VALUES(`create_time`);

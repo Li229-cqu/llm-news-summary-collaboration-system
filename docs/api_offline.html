@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>《基于大语言模型的智能新闻摘要与协同互动系统》API 接口文档</title>
+  <style>
+    :root {
+      --primary: #2f80ed;
+      --primary-dark: #1d5fbf;
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+      --code-bg: #f8fafc;
+      --get: #2d8cf0;
+      --post: #19be6b;
+      --delete: #f56c6c;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: inherit; text-decoration: none; }
+    code { font-family: Consolas, "SFMono-Regular", Menlo, Monaco, monospace; }
+
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: linear-gradient(135deg, var(--primary) 0%, #5ca3f5 100%);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(47, 128, 237, 0.22);
+    }
+
+    .topbar-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.3;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    .layout {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px 28px 32px;
+      display: flex;
+      gap: 22px;
+      align-items: flex-start;
+      flex: 1;
+    }
+
+    .sidebar {
+      width: 260px;
+      flex: 0 0 260px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 18px 14px;
+      position: sticky;
+      top: 88px;
+      max-height: calc(100vh - 110px);
+      overflow: auto;
+    }
+
+    .sidebar h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .sidebar p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-item {
+      display: block;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f9fafb;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 14px;
+      transition: .2s;
+    }
+
+    .nav-item:hover,
+    .nav-item.active {
+      border-color: rgba(47, 128, 237, 0.22);
+      background: #eef5ff;
+      color: var(--primary-dark);
+    }
+
+    .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 18px;
+    }
+
+    .intro h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .intro p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tip {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e3a8a;
+      font-size: 13px;
+    }
+
+    details.api-group {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    details.api-group summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid transparent;
+    }
+
+    details.api-group[open] summary {
+      border-bottom-color: var(--border);
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    .group-title {
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .group-count {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .4px;
+    }
+    .badge.get { background: var(--get); }
+    .badge.post { background: var(--post); }
+    .badge.delete { background: var(--delete); }
+
+    .group-content {
+      padding: 18px 22px 22px;
+    }
+
+    .group-note {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    table.api-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .api-table th,
+    .api-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .api-table th {
+      background: #f8fafc;
+      color: #334155;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .api-table tr:last-child td { border-bottom: none; }
+
+    .footer {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 6px 28px 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1180px) {
+      .layout { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        flex: none;
+        position: static;
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .topbar-inner,
+      .layout,
+      .footer {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .card,
+      details.api-group summary,
+      .group-content {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .api-table th,
+      .api-table td {
+        padding: 10px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <h1>《基于大语言模型的智能新闻摘要与协同互动系统》API 接口文档</h1>
+          <p>离线版接口文档</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <h2>接口目录</h2>
+        <p>按模块展开查看。</p>
+        <nav class="nav-list" id="navList">
+          <a class="nav-item active" href="#basic">基础说明</a>
+          <a class="nav-item" href="#auth">认证模块</a>
+          <a class="nav-item" href="#news">新闻模块</a>
+          <a class="nav-item" href="#interaction">互动模块</a>
+          <a class="nav-item" href="#profile">个人中心</a>
+          <a class="nav-item" href="#timeline">Timeline</a>
+          <a class="nav-item" href="#community">社区模块</a>
+          <a class="nav-item" href="#admin">管理后台</a>
+          <a class="nav-item" href="#ai">AI 服务</a>
+        </nav>
+      </aside>
+
+      <section class="content">
+        <div class="card intro" id="basic">
+          <h2>后端 API 接口总览</h2>
+          <p>统一整理本项目后端接口，按模块分组展示。</p>
+          <div class="tip">说明：当前项目接口统一返回 <code>code / message / data</code> 结构。</div>
+        </div>
+
+        <details class="api-group" id="auth" open>
+          <summary>
+            <div class="group-title"><span class="badge get">AUTH</span>认证模块 <span class="group-count">登录、退出、权限校验</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">认证模块采用 mock token 方案。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge post">POST</span></td><td>/api/auth/login</td><td>否</td><td>账号密码登录</td><td>token、user</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/auth/logout</td><td>是</td><td>退出登录</td><td>清空登录状态</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/auth/me</td><td>是</td><td>获取当前用户信息</td><td>user、role、avatar</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/auth/check-login</td><td>是</td><td>检查是否登录</td><td>登录态校验</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/auth/check-editor</td><td>是</td><td>检查 editor 权限</td><td>401 / 403 / success</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/auth/check-admin</td><td>是</td><td>检查 admin 权限</td><td>401 / 403 / success</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="news" open>
+          <summary>
+            <div class="group-title"><span class="badge get">NEWS</span>新闻模块 <span class="group-count">列表、详情、热榜、搜索、浏览记录</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">新闻模块当前数据库优先，数据库异常时回退 mock。新闻详情与列表允许未登录访问。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news/categories</td><td>否</td><td>获取新闻分类</td><td>分类列表</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news</td><td>否</td><td>获取新闻列表</td><td>list、total、page</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news/hot</td><td>否</td><td>获取新闻热榜 Top10</td><td>rank、view_count</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news/search</td><td>否</td><td>搜索新闻</td><td>分页结果</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news/{news_id}</td><td>否</td><td>获取新闻详情</td><td>正文、相关文章、推荐阅读</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/news/{news_id}/browse</td><td>否</td><td>记录浏览行为</td><td>recorded=true</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="interaction">
+          <summary>
+            <div class="group-title"><span class="badge post">INTERACTION</span>新闻互动模块 <span class="group-count">点赞、收藏、评论、回复、评论点赞</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">互动写操作需要登录；未登录返回 401。评论列表允许未登录查看。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge post">POST</span></td><td>/api/news/{news_id}/like</td><td>是</td><td>点赞新闻</td><td>liked、like_count</td></tr>
+                <tr><td><span class="badge delete">DELETE</span></td><td>/api/news/{news_id}/like</td><td>是</td><td>取消点赞新闻</td><td>liked、like_count</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/news/{news_id}/favorite</td><td>是</td><td>收藏新闻</td><td>favorited、favorite_count</td></tr>
+                <tr><td><span class="badge delete">DELETE</span></td><td>/api/news/{news_id}/favorite</td><td>是</td><td>取消收藏新闻</td><td>favorited、favorite_count</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/news/{news_id}/comments</td><td>否</td><td>获取评论列表</td><td>list、total、replies</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/news/{news_id}/comments</td><td>是</td><td>发布一级评论</td><td>comment_count 增加</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/comments/{comment_id}/reply</td><td>是</td><td>回复评论</td><td>parent_id、news_id</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/comments/{comment_id}/like</td><td>是</td><td>点赞评论</td><td>liked、like_count</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="profile">
+          <summary>
+            <div class="group-title"><span class="badge get">PROFILE</span>个人中心模块 <span class="group-count">浏览、收藏、评论、AI 记录、订阅、阅读脉络</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">个人中心数据优先从数据库读取，数据库异常时保留 mock fallback。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/overview</td><td>是</td><td>个人中心概览</td><td>browse_count、favorite_count 等</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/browse-history</td><td>是</td><td>浏览历史</td><td>title、category_name、browse_time</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/favorites</td><td>是</td><td>收藏记录</td><td>title、summary、source</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/comments</td><td>是</td><td>评论记录</td><td>news_title、content、create_time</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/ai-records</td><td>是</td><td>AI 生成记录</td><td>source、summary_short、risk_level</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/subscriptions</td><td>是</td><td>分类订阅状态</td><td>categories、subscribed_category_ids</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/profile/subscriptions</td><td>是</td><td>更新分类订阅</td><td>更新结果</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/reading-trajectory</td><td>是</td><td>阅读脉络图</td><td>summary、nodes、edges</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/reading-timeline</td><td>是</td><td>阅读时间线</td><td>summary、items</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/profile/reading-heatmap</td><td>是</td><td>阅读热力图</td><td>x_axis、y_axis、cells、summary</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="timeline">
+          <summary>
+            <div class="group-title"><span class="badge get">TIMELINE</span>Timeline 模块 <span class="group-count">多源事件脉络</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">Timeline 当前数据库优先，ai-service 兜底；前端以抽屉方式嵌入首页、社区和新闻详情页展示。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/timeline/topics</td><td>否</td><td>话题列表</td><td>topic_id、topic_name、heat_score</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/timeline/topics/{topic_id}/news</td><td>否</td><td>话题相关新闻</td><td>按发布时间升序</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/timeline/topics/{topic_id}</td><td>否</td><td>获取时间线</td><td>timeline、source、generate_status</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/timeline/topics/{topic_id}/generate</td><td>是</td><td>生成时间线</td><td>timeline、generated_at</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="community">
+          <summary>
+            <div class="group-title"><span class="badge get">COMMUNITY</span>社区模块 <span class="group-count">帖子、评论、点赞、收藏、热搜</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">社区模块当前数据库优先，数据库不可用时回退 mock。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/community/posts</td><td>否</td><td>帖子列表</td><td>page、page_size、keyword</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/community/posts/{post_id}</td><td>否</td><td>帖子详情</td><td>post、comments</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/community/posts</td><td>是</td><td>发布帖子</td><td>id、title、content</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/community/posts/{post_id}/like</td><td>是</td><td>点赞帖子</td><td>liked、like_count</td></tr>
+                <tr><td><span class="badge delete">DELETE</span></td><td>/api/community/posts/{post_id}/like</td><td>是</td><td>取消点赞帖子</td><td>liked、like_count</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/community/posts/{post_id}/favorite</td><td>是</td><td>收藏帖子</td><td>favorited、favorite_count</td></tr>
+                <tr><td><span class="badge delete">DELETE</span></td><td>/api/community/posts/{post_id}/favorite</td><td>是</td><td>取消收藏帖子</td><td>favorited、favorite_count</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="admin">
+          <summary>
+            <div class="group-title"><span class="badge get">ADMIN</span>管理后台 <span class="group-count">概览、用户、待审核内容</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">管理后台接口数据库优先，数据库异常时可回退 mock。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/admin/ping</td><td>否</td><td>健康检查</td><td>ok</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/admin/dashboard</td><td>是</td><td>后台概览</td><td>用户数、新闻数、待审数</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/admin/users</td><td>是</td><td>用户列表</td><td>不返回 password</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/admin/pending-posts</td><td>是</td><td>待审核帖子</td><td>分页列表</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/admin/system-config</td><td>是</td><td>系统配置</td><td>配置项</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="api-group" id="ai">
+          <summary>
+            <div class="group-title"><span class="badge post">AI</span>AI 服务模块 <span class="group-count">标题摘要、记录、健康检查</span></div>
+          </summary>
+          <div class="group-content">
+            <p class="group-note">AI 服务当前以 mock 结果为主，后端优先调用 ai-service，失败时回退本地规则。</p>
+            <table class="api-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>登录</th><th>说明</th><th>返回要点</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge get">GET</span></td><td>/api/ai/health</td><td>否</td><td>AI 服务健康检查</td><td>status、service</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/ai/generate</td><td>是</td><td>生成标题与摘要</td><td>candidate_titles、summary_short、summary_long</td></tr>
+                <tr><td><span class="badge get">GET</span></td><td>/api/ai/records</td><td>是</td><td>AI 生成记录</td><td>分页记录</td></tr>
+                <tr><td><span class="badge post">POST</span></td><td>/api/ai/generate-timeline</td><td>否</td><td>Timeline 生成</td><td>timeline、topic_name</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer class="footer">离线接口文档 · 《基于大语言模型的智能新闻摘要与协同互动系统》</footer>
+  </div>
+
+  <script>
+    const navItems = Array.from(document.querySelectorAll('.nav-item'));
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(node => node.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
