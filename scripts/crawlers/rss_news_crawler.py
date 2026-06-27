@@ -245,6 +245,22 @@ BAD_IMAGE_KEYWORDS = [
     "blank",
     "spacer",
     "sprite",
+    "default",
+    "placeholder",
+    "video_default",
+    "play",
+    "app",
+]
+
+# 通用图片特征（RSS 默认图、栏目图、视频默认图）
+GENERIC_IMAGE_PATTERNS = [
+    r"U\d+P\d+T\d+D\d+F\d+DT\d+\.jpg",  # 中国新闻网通用图格式
+    r"/fileftp/",  # 备份/通用图
+    r"default",
+    r"placeholder",
+    r"video",
+    r"channel",
+    r"category",
 ]
 
 
@@ -275,6 +291,55 @@ def normalize_image_url(raw_url: str | None, base_url: str = "") -> str:
     if len(url) < 20:
         return ""
     return url
+
+
+def is_generic_image(image_url: str) -> bool:
+    """检查是否是通用/默认图片（RSS 默认图、栏目图、视频默认图等）"""
+    if not image_url:
+        return True
+
+    url_lower = image_url.lower()
+
+    # 检查关键词
+    generic_keywords = [
+        "default",
+        "placeholder",
+        "video_default",
+        "logo",
+        "icon",
+        "avatar",
+        "qr",
+        "channel",
+        "category",
+    ]
+    for keyword in generic_keywords:
+        if keyword in url_lower:
+            return True
+
+    # 检查正则模式
+    for pattern in GENERIC_IMAGE_PATTERNS:
+        if re.search(pattern, url_lower, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def is_video_news(entry: Any, title: str, html_text: str) -> bool:
+    """识别是否是视频新闻"""
+    video_keywords = ["视频", "video", "播放", "player", "iframe", "点播"]
+
+    # 检查标题
+    for keyword in video_keywords:
+        if keyword.lower() in title.lower():
+            return True
+
+    # 检查 HTML 中是否有视频播放器
+    if html_text:
+        html_lower = html_text.lower()
+        if "video" in html_lower or "player" in html_lower or "iframe" in html_lower:
+            return True
+
+    return False
 
 
 def is_noise_text(text: str) -> bool:
@@ -567,39 +632,68 @@ def extract_editor(html_text: str) -> str:
 
 
 def extract_cover_image(entry: Any, html_text: str, source_url: str) -> str:
+    """
+    优先级：
+    1. 正文区域中的有效图片
+    2. og:image（但需要通过有效性校验）
+    3. RSS media:thumbnail（但需要过滤通用图）
+    不要返回通用图或疑似默认图
+    """
+
+    # 第一步：从正文区域提取有效图片
+    if html_text:
+        soup = BeautifulSoup(html_text, "html.parser")
+
+        # 找到文章内容区域
+        article_area = None
+        for selector in ARTICLE_SELECTORS:
+            article_area = soup.select_one(selector)
+            if article_area:
+                break
+
+        if article_area:
+            # 只在正文区域查找图片
+            article_copy = BeautifulSoup(str(article_area), "html.parser")
+            remove_noise_nodes(article_copy)
+
+            for img in article_copy.find_all("img"):
+                raw_src = img.get("data-src") or img.get("data-original") or img.get("src")
+                image = normalize_image_url(raw_src, source_url)
+
+                # 过滤掉通用图
+                if image and not is_generic_image(image):
+                    logger.info(f"从正文提取真实配图：{image[:80]}")
+                    return image
+
+    # 第二步：尝试 og:image，但需要校验（og:image 可能也是通用图）
+    if html_text:
+        soup = BeautifulSoup(html_text, "html.parser")
+
+        meta = soup.find("meta", attrs={"property": "og:image"})
+        if meta and meta.get("content"):
+            image = normalize_image_url(meta.get("content"), source_url)
+            if image and not is_generic_image(image):
+                logger.info(f"从 og:image 提取配图：{image[:80]}")
+                return image
+
+    # 第三步：从 RSS 元数据提取，但过滤通用图
     media_content = getattr(entry, "media_content", None) or []
     for media in media_content:
         image = normalize_image_url(media.get("url") if isinstance(media, dict) else "", source_url)
-        if image:
+        if image and not is_generic_image(image):
+            logger.info(f"从 RSS media 提取配图：{image[:80]}")
             return image
 
     links = getattr(entry, "links", None) or []
     for item in links:
         if isinstance(item, dict) and str(item.get("type", "")).startswith("image/"):
             image = normalize_image_url(item.get("href"), source_url)
-            if image:
+            if image and not is_generic_image(image):
+                logger.info(f"从 RSS link 提取配图：{image[:80]}")
                 return image
 
-    if not html_text:
-        return ""
-    soup = BeautifulSoup(html_text, "html.parser")
-    for attrs in [
-        {"property": "og:image"},
-        {"name": "twitter:image"},
-        {"name": "twitter:image:src"},
-    ]:
-        meta = soup.find("meta", attrs=attrs)
-        if meta and meta.get("content"):
-            image = normalize_image_url(meta.get("content"), source_url)
-            if image:
-                return image
-
-    remove_noise_nodes(soup)
-    for img in soup.find_all("img"):
-        raw_src = img.get("data-src") or img.get("data-original") or img.get("src")
-        image = normalize_image_url(raw_src, source_url)
-        if image:
-            return image
+    # 都没找到有效图片，不放图片
+    logger.debug("未找到有效配图，cover_image 设置为空")
     return ""
 
 
@@ -649,11 +743,23 @@ def parse_item(
     topic_id = match_topic_id(topics, title, summary)
     topic_name = next((topic["topic_name"] for topic in topics if int(topic["id"]) == topic_id), None)
 
+    # 识别视频新闻
+    is_video = is_video_news(entry, title, html_text)
+    if is_video:
+        logger.info(f"检测到视频新闻：{title[:60]}")
+
+    # 提取封面图（过滤通用图）
+    cover_image = extract_cover_image(entry, html_text, link)
+
+    # 视频新闻不强行分配图片
+    if is_video and not cover_image:
+        logger.info(f"视频新闻无有效配图，允许 cover_image 为空：{title[:60]}")
+
     return ParsedNewsItem(
         title=title,
         summary=summary,
         content=build_content(entry, summary, link, feed_source["source_name"], html_text=html_text, fetch_content=fetch_content),
-        cover_image=extract_cover_image(entry, html_text, link),
+        cover_image=cover_image,
         category_id=category_id,
         topic_id=topic_id,
         source=feed_source["source_name"],
@@ -959,6 +1065,130 @@ def print_summary(source_name: str, stats: dict[str, Any]) -> None:
         logger.warning("失败原因：%s", error)
 
 
+def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[str, Any]:
+    """过滤重复使用的图片（通用图检测）
+
+    如果同一张图片被超过3条新闻使用，认为它是通用图，过滤掉
+    """
+    filter_stats = {
+        "duplicate_images_filtered": 0,
+        "news_updated": 0,
+        "top_images": [],
+    }
+
+    try:
+        with connection.cursor() as cursor:
+            # 1. 统计每张图片的使用次数
+            cursor.execute("""
+                SELECT cover_image, COUNT(*) as count
+                FROM news
+                WHERE cover_image != '' AND cover_image IS NOT NULL
+                GROUP BY cover_image
+                ORDER BY count DESC
+            """)
+
+            duplicate_images = {}
+            top_images = []
+
+            for row in cursor.fetchall():
+                image_url = row["cover_image"]
+                count = row["count"]
+
+                if count > 3:  # 超过3次的认为是通用图
+                    duplicate_images[image_url] = count
+                    logger.warning(
+                        "检测到重复图片（%d 次使用）：%s",
+                        count,
+                        image_url[:80],
+                    )
+
+                # 记录前10个最常用的图片
+                if len(top_images) < 10:
+                    top_images.append({"image": image_url[:80], "count": count})
+
+            filter_stats["top_images"] = top_images
+
+            # 2. 过滤掉重复图片（设为空）
+            for image_url, count in duplicate_images.items():
+                cursor.execute(
+                    "UPDATE news SET cover_image = '' WHERE cover_image = %s",
+                    (image_url,),
+                )
+                filtered_count = cursor.rowcount
+                filter_stats["duplicate_images_filtered"] += 1
+                filter_stats["news_updated"] += filtered_count
+                logger.info(
+                    "已过滤 %d 条新闻的重复图片（%s）",
+                    filtered_count,
+                    image_url[:80],
+                )
+
+            connection.commit()
+
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("过滤重复图片失败：%s", exc)
+
+    return filter_stats
+
+
+def print_image_statistics(connection: pymysql.connections.Connection) -> None:
+    """输出图片统计信息"""
+    try:
+        with connection.cursor() as cursor:
+            # 总新闻数
+            cursor.execute("SELECT COUNT(*) as count FROM news")
+            total_news = cursor.fetchone()["count"]
+
+            # 有图新闻数
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM news WHERE cover_image != '' AND cover_image IS NOT NULL"
+            )
+            news_with_image = cursor.fetchone()["count"]
+
+            # 无图新闻数
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM news WHERE cover_image = '' OR cover_image IS NULL"
+            )
+            news_without_image = cursor.fetchone()["count"]
+
+            # 唯一图片数
+            cursor.execute(
+                "SELECT COUNT(DISTINCT cover_image) as count FROM news WHERE cover_image != '' AND cover_image IS NOT NULL"
+            )
+            unique_images = cursor.fetchone()["count"]
+
+            logger.info("=" * 80)
+            logger.info("📊 爬虫图片统计")
+            logger.info("=" * 80)
+            logger.info("总新闻数：%d", total_news)
+            logger.info("有图新闻数：%d", news_with_image)
+            logger.info("无图新闻数：%d", news_without_image)
+            logger.info("唯一图片数：%d", unique_images)
+
+            if news_with_image > 0:
+                ratio = (unique_images / news_with_image) * 100
+                logger.info("图片多样性：%.1f%% (%d 个不重复图片 / %d 条有图新闻)", ratio, unique_images, news_with_image)
+
+            # 输出最常用的前10张图片
+            cursor.execute("""
+                SELECT cover_image, COUNT(*) as count
+                FROM news
+                WHERE cover_image != '' AND cover_image IS NOT NULL
+                GROUP BY cover_image
+                ORDER BY count DESC
+                LIMIT 10
+            """)
+
+            logger.info("最常用的前 10 张图片：")
+            for idx, row in enumerate(cursor.fetchall(), 1):
+                logger.info("  %d. %s（使用 %d 次）", idx, row["cover_image"][:70], row["count"])
+
+            logger.info("=" * 80)
+
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("输出统计信息失败：%s", exc)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RSS news crawler")
     parser.add_argument("--max-items", type=int, default=DEFAULT_MAX_ITEMS, help="Max items per RSS source")
@@ -1022,7 +1252,21 @@ def main(argv: list[str] | None = None) -> int:
                     status=stats["status"],
                     error_message="；".join(stats["errors"]) if stats["errors"] else None,
                 )
+
+        # 爬虫完成后，过滤重复图片和输出统计
+        if not args.dry_run:
+            logger.info("")
+            logger.info("开始过滤重复图片...")
+            filter_stats = filter_duplicate_images(connection)
+            logger.info(
+                "过滤完成：处理了 %d 张重复图片，更新了 %d 条新闻",
+                filter_stats["duplicate_images_filtered"],
+                filter_stats["news_updated"],
+            )
+
     finally:
+        # 输出最终统计
+        print_image_statistics(connection)
         connection.close()
 
     logger.info(
