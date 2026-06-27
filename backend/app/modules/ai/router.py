@@ -39,6 +39,18 @@ async def ping_ai() -> ApiResponse[str]:
     return success_response("ai module ok")
 
 
+@router.get("/health", response_model=ApiResponse[dict])
+async def health_ai() -> ApiResponse[dict]:
+    """后端 AI 代理健康检查。"""
+    return success_response(
+        {
+            "status": "ok",
+            "service": "backend-ai-proxy",
+            "upstream": "ai-service",
+        }
+    )
+
+
 @router.post("/generate", response_model=ApiResponse[AIGenerateResponse])
 async def generate_ai_content(
     request: AIGenerateRequest,

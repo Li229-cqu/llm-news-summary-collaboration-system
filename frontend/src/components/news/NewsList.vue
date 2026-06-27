@@ -23,12 +23,14 @@ export interface NewsListItem {
   summary: string
   category_name: string
   source: string
-  editor?: string
   author?: string
+  editor?: string
   publish_time: string
   view_count: number
   like_count: number
   comment_count: number
+  favorite_count?: number
+  status?: number
   cover_image?: string
   tags?: string[]
   recommendation_reason?: string
