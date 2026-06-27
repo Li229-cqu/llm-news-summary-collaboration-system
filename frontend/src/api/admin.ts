@@ -13,6 +13,7 @@ export interface UserItem {
   nickname: string
   role: string
   status: number
+  create_time?: string
 }
 
 export interface PaginationResponse<T> {

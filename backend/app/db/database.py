@@ -77,7 +77,14 @@ def get_connection() -> pymysql.connections.Connection:
 
     The returned object's close() method returns the connection to the pool.
     """
-    return _get_connection_pool().connection()
+    conn = _get_connection_pool().connection()
+    # 确保连接使用 UTF-8 编码
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci")
+    except Exception:  # noqa: BLE001
+        pass
+    return conn
 
 
 def execute_query(sql: str, params: Any | None = None) -> list[dict[str, Any]]:

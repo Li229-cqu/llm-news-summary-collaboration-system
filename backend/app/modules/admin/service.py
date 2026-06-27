@@ -94,7 +94,7 @@ def get_dashboard() -> AdminDashboard:
             pending_count=pending_count,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("管理员仪表盘读取数据库失败，回退 mock：%s", exc)
+        logger.warning("[DB FALLBACK] 管理员仪表盘读取数据库失败，回退 mock：%s", exc)
         user_count = len(MOCK_USERS)
         news_count = len([news for news in MOCK_NEWS if int(news.get("status", 1)) == 1])
         post_count = len(MOCK_COMMUNITY_POSTS)
@@ -135,7 +135,7 @@ def get_pending_posts(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         items = [_build_pending_post_item(row) for row in rows]
         return paginate(items, page=page, page_size=page_size)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("待审核帖子读取数据库失败，回退 mock：%s", exc)
+        logger.warning("[DB FALLBACK] 待审核帖子读取数据库失败，回退 mock：%s", exc)
         return paginate(_mock_pending_posts(), page=page, page_size=page_size)
 
 
@@ -150,7 +150,7 @@ def get_users(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
                 nickname,
                 role,
                 status,
-                create_time
+                created_at AS create_time
             FROM user
             ORDER BY id ASC
             """
@@ -158,7 +158,7 @@ def get_users(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         items = [_build_user_item(row) for row in rows]
         return paginate(items, page=page, page_size=page_size)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("用户列表读取数据库失败，回退 mock：%s", exc)
+        logger.warning("[DB FALLBACK] 用户列表读取数据库失败，回退 mock：%s", exc)
         items = [_build_user_item(user) for user in MOCK_USERS]
         return paginate(items, page=page, page_size=page_size)
 

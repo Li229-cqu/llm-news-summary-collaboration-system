@@ -1,7 +1,9 @@
 import logging
+import json
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.common.exceptions import AppException, register_exception_handlers
 from app.common.response import success_response
@@ -25,6 +27,19 @@ app = FastAPI(
     version="0.1.0",
     description="第 2 阶段后端基础框架与占位接口。",
 )
+
+# 自定义 JSON encoder，确保中文不被 escape
+class ChineseJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+app.default_response_class = ChineseJSONResponse
 
 app.add_middleware(
     CORSMiddleware,
