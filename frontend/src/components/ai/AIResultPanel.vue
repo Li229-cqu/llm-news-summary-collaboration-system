@@ -54,7 +54,7 @@ const hasResult = () => {
           :type="resultSource === 'llm' ? 'success' : 'info'"
           size="small"
         >
-          {{ resultSource === 'llm' ? 'AI 生成' : 'Mock 数据' }}
+          {{ resultSource === 'llm' ? '真实AI' : 'Mock演示' }}
         </el-tag>
       </div>
     </template>
