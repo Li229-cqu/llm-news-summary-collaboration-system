@@ -19,7 +19,16 @@
     </el-menu>
 
     <div class="app-header__actions">
-      <el-input class="app-header__search" placeholder="搜索新闻、话题或关键词" clearable />
+      <div class="app-header__search-wrapper">
+        <el-input
+          class="app-header__search"
+          v-model="searchKeyword"
+          placeholder="搜索新闻、话题或关键词"
+          @keyup.enter="handleSearch"
+        />
+        <el-button type="primary" :loading="searchLoading" @click="handleSearch">搜索</el-button>
+        <el-button @click="handleSearchClear">清空</el-button>
+      </div>
       <el-button
         circle
         :aria-label="themeStore.theme === 'light' ? '切换至深色模式' : '切换至浅色模式'"
@@ -52,15 +61,27 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { logoutApi } from '@/api/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const themeStore = useThemeStore()
 const userStore = useUserStore()
+const searchKeyword = ref('')
+const searchLoading = ref(false)
+
+watch(
+  () => route.query.keyword,
+  (newKeyword) => {
+    searchKeyword.value = String(newKeyword || '')
+  },
+  { immediate: true }
+)
 
 function getRoleLabel(role: string) {
   const roleLabels: Record<string, string> = {
@@ -70,6 +91,23 @@ function getRoleLabel(role: string) {
   }
 
   return roleLabels[role] ?? role
+}
+
+function handleSearch() {
+  searchLoading.value = true
+  const keyword = searchKeyword.value.trim()
+  if (keyword) {
+    router.push({ path: '/home', query: { keyword } })
+  } else {
+    router.push({ path: '/home', query: {} })
+  }
+  setTimeout(() => {
+    searchLoading.value = false
+  }, 500)
+}
+
+function handleSearchClear() {
+  router.push({ path: '/home', query: {} })
 }
 
 async function handleUserCommand(command: string) {
@@ -138,6 +176,16 @@ async function handleUserCommand(command: string) {
 
 .app-header__search {
   width: 220px;
+}
+
+.app-header__search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header__search-wrapper > :nth-child(3) {
+  margin-left: -2px;
 }
 
 .app-header__user-state {

@@ -27,15 +27,19 @@
         <el-card class="featured-section" shadow="never">
           <div class="section-header">
             <div>
-              <h2>{{ activeCategoryId ? '精选新闻' : '为你推荐' }}</h2>
-              <p>{{ activeCategoryId ? '实时更新的精选内容，点击即可查看详情' : '基于你的浏览、收藏、点赞推荐' }}</p>
+              <h2>{{ searchKeyword ? `搜索结果: ${searchKeyword}` : activeCategoryId ? '精选新闻' : '为你推荐' }}</h2>
+              <p>{{ searchKeyword ? '找到 ' + total + ' 条相关新闻' : activeCategoryId ? '实时更新的精选内容，点击即可查看详情' : '基于你的浏览、收藏、点赞推荐' }}</p>
             </div>
             <el-button text type="primary" :disabled="!hasMoreNews" @click="handleLoadMore">
               查看更多
             </el-button>
           </div>
 
-          <NewsList :list="newsList" :loading="loadingNews" empty-text="暂无新闻数据" />
+          <NewsList
+            :list="newsList"
+            :loading="loadingNews"
+            :empty-text="searchKeyword ? '未找到相关新闻，请尝试其他关键词' : '暂无新闻数据'"
+          />
 
           <div class="load-more">
             <el-button plain type="primary" :loading="loadingNews" :disabled="!hasMoreNews" @click="handleLoadMore">
@@ -121,6 +125,7 @@ const total = ref(0)
 const recentNews = computed(() => newsList.value.slice(0, 3))
 const hasMoreNews = computed(() => total.value === 0 || newsList.value.length < total.value)
 const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
+const searchKeyword = computed(() => String(route.query.keyword ?? '').trim())
 
 const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
@@ -130,11 +135,10 @@ async function loadNews() {
   loadingNews.value = true
 
   try {
-    // 如果没有 category_id，表示用户点击了左侧"推荐"，调用个性化推荐接口
-    if (!activeCategoryId.value) {
-      // 推荐：调用个性化推荐接口
+    const keyword = searchKeyword.value || undefined
+
+    if (!activeCategoryId.value && !keyword) {
       if (!userStore.isLoggedIn) {
-        // 未登录时回退到最新新闻
         const result = await getNewsList({
           page: page.value,
           page_size: pageSize.value,
@@ -144,14 +148,12 @@ async function loadNews() {
         page.value = result.page
         pageSize.value = result.page_size
       } else {
-        // 已登录，调用推荐接口
         try {
           const result = await getRecommendations(pageSize.value)
           newsList.value = result.list
           total.value = result.total
           page.value = 1
         } catch (recommendError) {
-          // 推荐接口失败，回退到最新新闻
           console.error('推荐接口失败，已切换为最新新闻:', recommendError)
           ElMessage.info('个性化推荐暂时不可用，已为你展示最新新闻')
           const result = await getNewsList({
@@ -165,9 +167,9 @@ async function loadNews() {
         }
       }
     } else {
-      // 其他分类：调用普通新闻接口
       const result = await getNewsList({
-        category_id: activeCategoryId.value,
+        category_id: activeCategoryId.value || undefined,
+        keyword,
         page: page.value,
         page_size: pageSize.value,
       })
@@ -224,6 +226,7 @@ async function handleLoadMore() {
   try {
     const result = await getNewsList({
       category_id: activeCategoryId.value || undefined,
+      keyword: searchKeyword.value || undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -269,6 +272,14 @@ onMounted(async () => {
 
 watch(
   () => route.query.category_id,
+  () => {
+    page.value = 1
+    loadNews()
+  },
+)
+
+watch(
+  () => route.query.keyword,
   () => {
     page.value = 1
     loadNews()

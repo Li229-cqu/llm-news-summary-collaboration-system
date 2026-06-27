@@ -167,12 +167,24 @@ const filteredAIRecords = computed(() => {
   return aiRecords.value.filter(
     (item) =>
       item.input_text.toLowerCase().includes(query) ||
-      item.source_title.toLowerCase().includes(query)
+      item.source_title.toLowerCase().includes(query) ||
+      item.summary_short.toLowerCase().includes(query) ||
+      (item.summary_long && item.summary_long.toLowerCase().includes(query)) ||
+      item.candidate_titles.some((t) => t.toLowerCase().includes(query))
   )
 })
 
 function goToNewsDetail(newsId: number) {
   router.push(`/news/${newsId}`)
+}
+
+function handleSearch() {
+  currentPage.value = 1
+}
+
+function handleSearchClear() {
+  searchQuery.value = ''
+  currentPage.value = 1
 }
 
 function openEditDialog() {
@@ -678,13 +690,17 @@ onMounted(() => {
 
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
-              <el-input
-                v-model="searchQuery"
-                placeholder="搜索浏览历史..."
-                :prefix-icon="Search"
-                clearable
-                class="search-input"
-              />
+              <div class="search-bar-wrapper">
+                <el-input
+                  v-model="searchQuery"
+                  placeholder="搜索浏览历史..."
+                  :prefix-icon="Search"
+                  class="search-input"
+                  @keyup.enter="handleSearch"
+                />
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-button @click="handleSearchClear">清空</el-button>
+              </div>
               <el-button type="danger" plain :disabled="browseHistory.length === 0" @click="handleClearHistory">
                 清空历史
               </el-button>
@@ -692,9 +708,9 @@ onMounted(() => {
 
             <div v-if="filteredBrowseHistory.length === 0" class="empty-state">
               <Clock :size="64" class="empty-icon" />
-              <p class="empty-text">暂无浏览历史</p>
-              <p class="empty-desc">去首页看看精彩新闻吧</p>
-              <el-button type="primary" @click="router.push('/')">返回首页</el-button>
+              <p class="empty-text">{{ searchQuery ? '未找到相关浏览历史' : '暂无浏览历史' }}</p>
+              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去首页看看精彩新闻吧' }}</p>
+              <el-button v-if="!searchQuery" type="primary" @click="router.push('/')">返回首页</el-button>
             </div>
             <div v-else class="record-list">
               <div
@@ -740,19 +756,23 @@ onMounted(() => {
 
           <template v-else-if="tab.key === 'favorites'">
             <div class="tab-toolbar">
-              <el-input
-                v-model="searchQuery"
-                placeholder="搜索收藏内容..."
-                :prefix-icon="Search"
-                clearable
-                class="search-input"
-              />
+              <div class="search-bar-wrapper">
+                <el-input
+                  v-model="searchQuery"
+                  placeholder="搜索收藏内容..."
+                  :prefix-icon="Search"
+                  class="search-input"
+                  @keyup.enter="handleSearch"
+                />
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-button @click="handleSearchClear">清空</el-button>
+              </div>
             </div>
 
             <div v-if="filteredFavorites.length === 0" class="empty-state">
               <Star :size="64" class="empty-icon" />
-              <p class="empty-text">暂无收藏记录</p>
-              <p class="empty-desc">看到喜欢的新闻就收藏起来吧</p>
+              <p class="empty-text">{{ searchQuery ? '未找到相关收藏' : '暂无收藏记录' }}</p>
+              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '看到喜欢的新闻就收藏起来吧' }}</p>
             </div>
             <div v-else class="record-list">
               <div
@@ -800,19 +820,23 @@ onMounted(() => {
 
           <template v-else-if="tab.key === 'comments'">
             <div class="tab-toolbar">
-              <el-input
-                v-model="searchQuery"
-                placeholder="搜索评论内容..."
-                :prefix-icon="Search"
-                clearable
-                class="search-input"
-              />
+              <div class="search-bar-wrapper">
+                <el-input
+                  v-model="searchQuery"
+                  placeholder="搜索评论内容..."
+                  :prefix-icon="Search"
+                  class="search-input"
+                  @keyup.enter="handleSearch"
+                />
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-button @click="handleSearchClear">清空</el-button>
+              </div>
             </div>
 
             <div v-if="filteredComments.length === 0" class="empty-state">
               <ChatDotRound :size="64" class="empty-icon" />
-              <p class="empty-text">暂无评论记录</p>
-              <p class="empty-desc">去新闻详情页发表你的看法吧</p>
+              <p class="empty-text">{{ searchQuery ? '未找到相关评论' : '暂无评论记录' }}</p>
+              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去新闻详情页发表你的看法吧' }}</p>
             </div>
             <div v-else class="record-list">
               <div
@@ -853,20 +877,24 @@ onMounted(() => {
 
           <template v-else-if="tab.key === 'ai-records'">
             <div class="tab-toolbar">
-              <el-input
-                v-model="searchQuery"
-                placeholder="搜索 AI 记录..."
-                :prefix-icon="Search"
-                clearable
-                class="search-input"
-              />
+              <div class="search-bar-wrapper">
+                <el-input
+                  v-model="searchQuery"
+                  placeholder="搜索 AI 记录..."
+                  :prefix-icon="Search"
+                  class="search-input"
+                  @keyup.enter="handleSearch"
+                />
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-button @click="handleSearchClear">清空</el-button>
+              </div>
             </div>
 
             <div v-if="filteredAIRecords.length === 0" class="empty-state">
               <MagicStick :size="64" class="empty-icon" />
-              <p class="empty-text">暂无 AI 生成记录</p>
-              <p class="empty-desc">去体验 AI 智能摘要功能吧</p>
-              <el-button type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
+              <p class="empty-text">{{ searchQuery ? '未找到相关 AI 记录' : '暂无 AI 生成记录' }}</p>
+              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去体验 AI 智能摘要功能吧' }}</p>
+              <el-button v-if="!searchQuery" type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
             </div>
             <div v-else class="record-list">
               <div v-for="item in filteredAIRecords" :key="item.id" class="ai-record-item">
@@ -1613,6 +1641,16 @@ onMounted(() => {
 
 .search-input {
   max-width: 320px;
+}
+
+.search-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-bar-wrapper > :nth-child(3) {
+  margin-left: -2px;
 }
 
 .empty-state {

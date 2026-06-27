@@ -41,12 +41,24 @@
         </el-card>
 
         <el-card class="app-card" shadow="never">
-          <h2 class="card-title">帖子流</h2>
+          <div class="section-header">
+            <h2 class="card-title">帖子流</h2>
+            <div class="search-bar-wrapper">
+              <el-input
+                v-model="searchKeyword"
+                placeholder="搜索帖子..."
+                @keyup.enter="handleSearch"
+                class="search-input"
+              />
+              <el-button type="primary" :loading="loadingPosts" @click="handleSearch">搜索</el-button>
+              <el-button @click="handleSearchClear">清空</el-button>
+            </div>
+          </div>
           <div v-if="loadingPosts" class="loading-container">
             <el-spinner />
           </div>
           <div v-else-if="posts.length === 0" class="empty-state">
-            <el-empty description="暂无帖子" />
+            <el-empty :description="searchKeyword ? '未找到相关帖子' : '暂无帖子'" />
           </div>
           <div v-else class="posts-list">
             <el-card
@@ -117,7 +129,7 @@
               v-for="item in hotSearchList"
               :key="item.id"
               class="hot-search-item"
-              @click="handleSearch(item.keyword)"
+              @click="handleHotSearch(item.keyword)"
             >
               <span :class="['rank', getRankClass(item.rank)]">{{ item.rank }}</span>
               <span class="keyword">{{ item.keyword }}</span>
@@ -265,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -315,6 +327,7 @@ const loadingPosts = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const postTotal = ref(0)
+const searchKeyword = ref('')
 
 const hotSearchList = ref<HotSearchItem[]>([])
 const loadingHotSearch = ref(false)
@@ -372,12 +385,20 @@ async function loadPosts(page = 1) {
   currentPage.value = page
   loadingPosts.value = true
   try {
-    const result = await getPostList({ page, page_size: pageSize.value })
+    const result = await getPostList({
+      page,
+      page_size: pageSize.value,
+      keyword: searchKeyword.value.trim() || undefined,
+    })
     posts.value = result.list.map((p) => ({
       ...p,
       liked: Boolean(p.liked ?? (p as { is_liked?: boolean }).is_liked ?? false),
     }))
     postTotal.value = result.total
+  } catch (error) {
+    posts.value = []
+    postTotal.value = 0
+    ElMessage.error(error instanceof Error ? error.message : '获取帖子列表失败')
   } finally {
     loadingPosts.value = false
   }
@@ -414,8 +435,32 @@ async function loadTimelineTopics() {
   }
 }
 
-function handleSearch(keyword: string) {
-  console.log('搜索:', keyword)
+function handleSearch() {
+  currentPage.value = 1
+  loadPosts(1)
+}
+
+function handleSearchClear() {
+  searchKeyword.value = ''
+  currentPage.value = 1
+  loadPosts(1)
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchKeyword, () => {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+  searchTimer = setTimeout(() => {
+    currentPage.value = 1
+    loadPosts(1)
+  }, 500)
+})
+
+function handleHotSearch(keyword: string) {
+  searchKeyword.value = keyword
+  currentPage.value = 1
+  loadPosts(1)
 }
 
 function findTimelineTopic(keyword: string) {
@@ -952,6 +997,20 @@ onMounted(() => {
 .comment-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.search-input {
+  width: 200px;
+}
+
+.search-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-bar-wrapper > :nth-child(3) {
+  margin-left: -2px;
 }
 
 @media (max-width: 768px) {
