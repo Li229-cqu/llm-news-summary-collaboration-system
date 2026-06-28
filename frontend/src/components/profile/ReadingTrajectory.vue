@@ -69,15 +69,38 @@
         </div>
       </div>
 
+      <!-- 图表控制栏 -->
+      <div class="chart-controls">
+        <div class="control-left">
+          <el-radio-group v-model="timeRange" size="small" @change="handleTimeRangeChange">
+            <el-radio-button value="7">最近7天</el-radio-button>
+            <el-radio-button value="30">最近30天</el-radio-button>
+          </el-radio-group>
+          <el-checkbox-group v-model="visibleNodeTypes" size="small" @change="handleFilterChange">
+            <el-checkbox value="category">分类</el-checkbox>
+            <el-checkbox value="topic">话题</el-checkbox>
+            <el-checkbox value="news">新闻</el-checkbox>
+          </el-checkbox-group>
+        </div>
+        <div class="control-right">
+          <el-button size="small" :icon="RefreshRight" @click="handleResetView">重置视图</el-button>
+        </div>
+      </div>
+
       <!-- 图表区域 -->
       <el-card class="chart-section" shadow="never">
         <template #header>
           <div class="card-header">
             <span>阅读脉络图</span>
-            <span class="data-scale">节点数：{{ trajectoryData.nodes.length }} | 关系数：{{ trajectoryData.edges.length }}</span>
+            <span class="data-scale">节点数：{{ filteredNodeCount }} | 关系数：{{ filteredEdgeCount }}</span>
           </div>
         </template>
-        <div ref="chartRef" class="trajectory-chart"></div>
+        <div ref="chartRef" class="trajectory-chart">
+          <div v-if="!chartContainerReady" class="chart-placeholder-inner">
+            <el-icon class="is-loading" :size="36"><Loading /></el-icon>
+            <span>图表区域准备中...</span>
+          </div>
+        </div>
         <div class="chart-hint">
           💡 可拖拽节点，滚轮缩放；点击新闻节点进入详情页
         </div>
@@ -156,8 +179,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { RefreshRight, Loading } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
@@ -169,9 +193,15 @@ const loading = ref(false)
 const error = ref('')
 const trajectoryData = ref<ReadingTrajectoryResponse | null>(null)
 const chartRef = ref<HTMLElement | null>(null)
+const chartContainerReady = ref(false)
 let chartInstance: ECharts | null = null
 let renderTimer: any = null
 let resizeObserver: ResizeObserver | null = null
+let lastChartWidth = 0
+
+// Filter state
+const timeRange = ref<7 | 30>(30)
+const visibleNodeTypes = ref<string[]>(['category', 'topic', 'news'])
 
 function getNodeColor(type: string): string {
   const colors: Record<string, string> = {
@@ -183,9 +213,15 @@ function getNodeColor(type: string): string {
 }
 
 function getNodeSize(type: string, value: number): number {
-  const baseSize = type === 'category' ? 36 : type === 'topic' ? 28 : 18
-  const extraSize = Math.min(Math.log(value + 1) * 8, 24)
-  return baseSize + extraSize
+  // More distinct node sizes per type
+  if (type === 'category') {
+    return 30 + Math.min(value * 2, 30)
+  }
+  if (type === 'topic') {
+    return 20 + Math.min(value * 1.8, 24)
+  }
+  // news nodes
+  return 10 + Math.min(value * 1.2, 16)
 }
 
 function getNodeCategory(type: string): number {
@@ -215,12 +251,29 @@ function getEdgeTypeLabel(type: string): string {
   return labels[type] || type
 }
 
+// Filtered nodes and edges
+const filteredNodes = computed(() => {
+  if (!trajectoryData.value) return []
+  return trajectoryData.value.nodes.filter(n => visibleNodeTypes.value.includes(n.type))
+})
+
+const filteredEdges = computed(() => {
+  if (!trajectoryData.value) return []
+  const visibleNodeIds = new Set(filteredNodes.value.map(n => n.id))
+  return trajectoryData.value.edges.filter(
+    e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+  )
+})
+
+const filteredNodeCount = computed(() => filteredNodes.value.length)
+const filteredEdgeCount = computed(() => filteredEdges.value.length)
+
 function setupResizeObserver(): void {
   if (!chartRef.value) {
     return
   }
 
-  // 清理旧的观察器
+  // Clean up old observer
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
@@ -232,9 +285,10 @@ function setupResizeObserver(): void {
     const width = entry.contentRect.width
     const height = entry.contentRect.height
 
-    // 容器足够大，尝试渲染
+    // Mark container as ready when valid size detected
     if (width >= 300 && height >= 300) {
-      if (trajectoryData.value && trajectoryData.value.nodes.length > 0) {
+      chartContainerReady.value = true
+      if (trajectoryData.value && filteredNodes.value.length > 0) {
         renderChart()
       }
       chartInstance?.resize()
@@ -245,7 +299,12 @@ function setupResizeObserver(): void {
 }
 
 function renderChart() {
-  if (!chartRef.value || !trajectoryData.value || trajectoryData.value.nodes.length === 0) {
+  if (!chartRef.value || !trajectoryData.value) {
+    return
+  }
+
+  const nodes = filteredNodes.value
+  if (nodes.length === 0) {
     return
   }
 
@@ -253,9 +312,18 @@ function renderChart() {
   const width = el.clientWidth
   const height = el.clientHeight
 
-  // 容器尺寸不足，不渲染，等待 ResizeObserver 触发
+  // Container too small — don't render, wait for ResizeObserver
   if (width < 300 || height < 300) {
     return
+  }
+
+  // Track last valid width
+  lastChartWidth = width
+
+  // If chart was previously initialized at a bad width (< 300), dispose and re-init
+  if (chartInstance && lastChartWidth < 300) {
+    chartInstance.dispose()
+    chartInstance = null
   }
 
   if (!chartInstance) {
@@ -267,7 +335,7 @@ function renderChart() {
     }
   }
 
-  const { nodes, edges } = trajectoryData.value
+  const edges = filteredEdges.value
 
   const graphNodes = nodes.map((node: ReadingTrajectoryNode) => ({
     id: node.id,
@@ -379,8 +447,8 @@ function renderChart() {
 }
 
 function scheduleRenderChart(retryCount = 0): void {
-  if (retryCount > 5) {
-    // 最后依赖 ResizeObserver，不输出错误
+  if (retryCount > 8) {
+    // After all retries, rely on ResizeObserver
     return
   }
 
@@ -392,18 +460,23 @@ function scheduleRenderChart(retryCount = 0): void {
   const width = el.clientWidth
   const height = el.clientHeight
 
-  // 如果宽度仍不足，延迟重试一次，然后交给 ResizeObserver
+  // If width is still too small, retry with backoff
   if (width < 200 || height < 300) {
+    chartContainerReady.value = false
     if (renderTimer !== null) {
       window.clearTimeout(renderTimer)
     }
+    const delay = Math.min(100 * Math.pow(1.5, retryCount), 800)
     renderTimer = window.setTimeout(() => {
       scheduleRenderChart(retryCount + 1)
-    }, 100)
+    }, delay)
     return
   }
 
-  // 宽度足够，执行渲染
+  // Container has valid dimensions
+  chartContainerReady.value = true
+  lastChartWidth = width
+
   renderChart()
 }
 
@@ -415,7 +488,7 @@ async function loadTrajectory() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getReadingTrajectory({ days: 30, limit: 100 })
+    const result = await getReadingTrajectory({ days: timeRange.value, limit: 200 })
     trajectoryData.value = result
     loading.value = false
     await nextTick()
@@ -430,6 +503,32 @@ async function loadTrajectory() {
 
 function handleReload() {
   loadTrajectory()
+}
+
+function handleTimeRangeChange() {
+  // Dispose old chart before reloading data
+  if (chartInstance) {
+    chartInstance.dispose()
+    chartInstance = null
+  }
+  chartContainerReady.value = false
+  lastChartWidth = 0
+  loadTrajectory()
+}
+
+function handleFilterChange() {
+  nextTick(() => {
+    renderChart()
+  })
+}
+
+function handleResetView() {
+  if (chartInstance) {
+    chartInstance.dispatchAction({
+      type: 'restore'
+    })
+    ElMessage.success('视图已重置')
+  }
 }
 
 function handleNewsClick(newsId: number) {
@@ -467,7 +566,6 @@ watch(
 
 onMounted(async () => {
   await nextTick()
-  setupResizeObserver()
   loadTrajectory()
   window.addEventListener('resize', handleResize)
 })
@@ -607,6 +705,30 @@ onBeforeUnmount(() => {
   }
 }
 
+// 图表控制栏
+.chart-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light);
+
+  .control-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .control-right {
+    flex-shrink: 0;
+  }
+}
+
 // 图表区域
 .chart-section {
   width: 100%;
@@ -642,14 +764,31 @@ onBeforeUnmount(() => {
     }
   }
 
-  .trajectory-chart {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    height: 520px;
-    box-sizing: border-box;
-  }
+	  .trajectory-chart {
+	    display: block;
+	    width: 100%;
+	    max-width: 100%;
+	    min-width: 320px;
+	    min-height: 520px;
+	    height: 520px;
+	    box-sizing: border-box;
+	    position: relative;
+	  }
+
+	  .chart-placeholder-inner {
+	    display: flex;
+	    flex-direction: column;
+	    align-items: center;
+	    justify-content: center;
+	    gap: 12px;
+	    width: 100%;
+	    height: 100%;
+	    color: var(--el-text-color-secondary);
+	    font-size: 14px;
+	    position: absolute;
+	    top: 0;
+	    left: 0;
+	  }
 
   .chart-hint {
     padding: 12px 0;

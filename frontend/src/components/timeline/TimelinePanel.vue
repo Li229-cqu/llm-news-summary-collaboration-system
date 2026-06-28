@@ -48,6 +48,22 @@
       </el-card>
     </div>
 
+    <div v-if="timelineData.relationships?.length" class="timeline-panel__graph">
+      <el-card shadow="never">
+        <template #header>
+          <div class="graph-header">
+            <h3>事件关系图</h3>
+            <span class="graph-subtitle">展示事件之间的因果关系与承接顺序</span>
+          </div>
+        </template>
+        <TimelineGraph
+          :nodes="timelineData.timeline"
+          :relationships="timelineData.relationships"
+          :phases="timelineData.phases || []"
+        />
+      </el-card>
+    </div>
+
     <div class="timeline-panel__body">
       <section class="timeline-panel__timeline">
         <div class="timeline-panel__section-header">
@@ -83,6 +99,7 @@ import { computed } from 'vue'
 import type { TimelineNewsItem, TimelineResponse } from '@/api/timeline'
 import TimelineNodeCard from './TimelineNodeCard.vue'
 import TimelineSourceNewsList from './TimelineSourceNewsList.vue'
+import TimelineGraph from './TimelineGraph.vue'
 
 const props = defineProps<{
   timelineData: TimelineResponse
@@ -209,6 +226,33 @@ const heatScore = computed(() => props.timelineData.timeline.length * 10 || 0)
 
 .phase-tag {
   font-size: 12px;
+}
+
+.timeline-panel__graph {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-card);
+  background: var(--color-bg-card);
+
+  :deep(.el-card__body) {
+    padding: 16px 20px;
+  }
+}
+
+.graph-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--color-text-primary);
+  }
+
+  .graph-subtitle {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
 }
 
 .timeline-panel__body {

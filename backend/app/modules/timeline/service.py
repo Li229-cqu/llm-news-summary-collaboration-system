@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import httpx
 
@@ -21,6 +21,8 @@ from app.modules.timeline.schema import (
     TimelineNewsItem,
     TimelineNewsListResponse,
     TimelineNode,
+    TimelinePhase,
+    TimelineRelationship,
     TimelineResponse,
     TimelineTopic,
 )
@@ -161,9 +163,9 @@ def _db_topics() -> list[TimelineTopic] | None:
         ORDER BY nt.heat_score DESC, nt.id ASC
         """,
     )
-    if not rows:
-        return None
-
+    # 数据库连接正常，即使没有话题也返回空列表（不回退 mock）
+    if rows is None:
+        return None  # execute_query 本身失败才返回 None
     return [
         TimelineTopic(
             topic_id=int(row["id"]),
@@ -344,10 +346,10 @@ def _cached_timeline(topic_id: int) -> dict[str, Any] | None:
 def _timeline_row_to_result(row: dict[str, Any], topic_name: str, source: str) -> TimelineGenerateResult:
     timeline_json = _parse_json_list(row.get("timeline_json"), [])
     timeline = [TimelineNode(**item) for item in timeline_json]
-    
+
     metadata_json = _parse_json_dict(row.get("metadata_json"), {})
     relationships_json = _parse_json_list(row.get("relationships_json"), [])
-    
+
     return TimelineGenerateResult(
         topic_id=int(row["topic_id"]),
         topic_name=topic_name,
@@ -360,11 +362,19 @@ def _timeline_row_to_result(row: dict[str, Any], topic_name: str, source: str) -
         overview=normalize_text(metadata_json.get("overview", "")),
         key_figures=[str(item) for item in metadata_json.get("key_figures", [])],
         phases=[
-            {"name": normalize_text(p.get("name")), "start_event_id": int(p.get("start_event_id", 0)), "end_event_id": int(p.get("end_event_id", 0))}
+            TimelinePhase(
+                name=normalize_text(p.get("name")),
+                start_event_id=int(p.get("start_event_id", 0)),
+                end_event_id=int(p.get("end_event_id", 0)),
+            )
             for p in metadata_json.get("phases", [])
         ],
         relationships=[
-            {"from_id": int(r.get("from_id", 0)), "to_id": int(r.get("to_id", 0)), "type": normalize_text(r.get("type", "follows"))}
+            TimelineRelationship(
+                from_id=int(r.get("from_id", 0)),
+                to_id=int(r.get("to_id", 0)),
+                type=normalize_text(r.get("type", "follows")),
+            )
             for r in relationships_json
         ],
     )
@@ -482,6 +492,13 @@ def _build_ai_payload(topic: dict[str, Any], news_rows: list[dict[str, Any]]) ->
 
 def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]) -> TimelineGenerateResult:
     topic_name = normalize_text(topic["topic_name"])
+
+    # Event type assignment based on position in timeline
+    _event_types = ["background", "policy", "reaction", "breakthrough", "outcome"]
+
+    # Collect all source names for key figures
+    source_names: list[str] = []
+
     nodes = []
     for index, row in enumerate(news_rows, start=1):
         summary = normalize_text(row.get("summary")) or normalize_text(row.get("content"))[:100]
@@ -490,6 +507,41 @@ def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]
         detail = normalize_text(row.get("content"))[:300]
         if len(detail) > 300:
             detail = f"{detail[:300]}..."
+
+        # Extract keywords from tags if available
+        tags = row.get("tags")
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        keywords = list(tags[:4]) if isinstance(tags, list) and tags else []
+
+        # Varied event type
+        event_type = _event_types[min(index - 1, len(_event_types) - 1)]
+
+        # Varied importance based on position (first and last events more important)
+        n = len(news_rows)
+        if n <= 2:
+            importance = 4
+        elif index == 1:
+            importance = 4
+        elif index == n:
+            importance = 5
+        else:
+            importance = 3
+
+        # Related events: previous and next
+        related = []
+        if index > 1:
+            related.append(index - 1)
+        if index < len(news_rows):
+            related.append(index + 1)
+
+        source_name = normalize_text(row.get("source"))
+        if source_name:
+            source_names.append(source_name)
+
         nodes.append(
             TimelineNode(
                 event_id=index,
@@ -498,29 +550,43 @@ def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]
                 event_summary=summary,
                 source_news_id=int(row["id"]),
                 source_title=normalize_text(row["title"]),
-                source_name=normalize_text(row.get("source")),
-                event_type="other",
-                importance=3,
+                source_name=source_name,
+                event_type=event_type,
+                importance=importance,
                 event_detail=detail,
-                related_event_ids=[index + 1] if index < len(news_rows) else [],
-                keywords=[],
+                related_event_ids=related,
+                keywords=keywords,
             )
         )
 
     now = _now_text()
-    
-    phases = []
-    if len(nodes) >= 3:
-        third = len(nodes) // 3
+
+    # Build phases as proper model objects
+    phases: list[TimelinePhase] = []
+    n = len(nodes)
+    if n >= 4:
+        third = max(n // 3, 1)
         phases = [
-            {"name": "前期发展", "start_event_id": 1, "end_event_id": third},
-            {"name": "中期推进", "start_event_id": third + 1, "end_event_id": third * 2},
-            {"name": "后期结果", "start_event_id": third * 2 + 1, "end_event_id": len(nodes)},
+            TimelinePhase(name="初期阶段", start_event_id=1, end_event_id=third),
+            TimelinePhase(name="发展阶段", start_event_id=third + 1, end_event_id=third * 2),
+            TimelinePhase(name="当前阶段", start_event_id=third * 2 + 1, end_event_id=n),
+        ]
+    elif n >= 2:
+        phases = [
+            TimelinePhase(name="起始阶段", start_event_id=1, end_event_id=max(1, n // 2)),
+            TimelinePhase(name="后续发展", start_event_id=max(2, n // 2 + 1), end_event_id=n),
         ]
 
-    relationships = []
-    for i in range(1, len(nodes)):
-        relationships.append({"from_id": i, "to_id": i + 1, "type": "follows"})
+    # Build relationships as proper model objects
+    relationships: list[TimelineRelationship] = []
+    for i in range(1, n):
+        edge_type: Literal["causes", "follows", "parallel"] = "follows"
+        if n >= 3 and i <= n // 3:
+            edge_type = "causes"
+        relationships.append(TimelineRelationship(from_id=i, to_id=i + 1, type=edge_type))
+
+    # Key figures from unique source names
+    key_figures = list(dict.fromkeys(source_names))[:5]
 
     return TimelineGenerateResult(
         topic_id=int(topic["id"]),
@@ -531,8 +597,8 @@ def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]
         updated_at=now,
         generate_status="mock",
         schema_version="1.0",
-        overview=f"本事件脉络涵盖了{topic_name}的主要发展过程，共包含{len(nodes)}个关键事件节点。",
-        key_figures=[],
+        overview=f"本事件脉络涵盖「{topic_name}」的主要发展过程，共包含{len(nodes)}个关键事件节点，由{len(key_figures)}个信息来源提供报道。",
+        key_figures=key_figures,
         phases=phases,
         relationships=relationships,
     )
@@ -575,14 +641,22 @@ def _build_ai_result(topic: dict[str, Any], data: dict[str, Any]) -> TimelineGen
     
     phases_data = data.get("phases", metadata.get("phases", []))
     phases = [
-        {"name": normalize_text(p.get("name")), "start_event_id": int(p.get("start_event_id", 0)), "end_event_id": int(p.get("end_event_id", 0))}
+        TimelinePhase(
+            name=normalize_text(p.get("name")),
+            start_event_id=int(p.get("start_event_id", 0)),
+            end_event_id=int(p.get("end_event_id", 0)),
+        )
         for p in phases_data
         if isinstance(p, dict)
     ]
-    
+
     relationships_data = data.get("relationships", [])
     relationships = [
-        {"from_id": int(r.get("from_id", 0)), "to_id": int(r.get("to_id", 0)), "type": normalize_text(r.get("type", "follows"))}
+        TimelineRelationship(
+            from_id=int(r.get("from_id", 0)),
+            to_id=int(r.get("to_id", 0)),
+            type=normalize_text(r.get("type", "follows")),
+        )
         for r in relationships_data
         if isinstance(r, dict)
     ]
@@ -610,6 +684,7 @@ def _fetch_topics() -> list[TimelineTopic]:
             return topics
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取 Timeline 话题数据库失败，回退 mock：%s", exc)
+    # 仅在数据库异常时才回退 mock
     return _mock_topics()
 
 
@@ -696,19 +771,13 @@ async def generate_timeline(topic_id: int, current_user: Optional[UserInfo] = No
     if len(news_rows) < 2:
         raise AppException(code=400, message="同一话题下至少需要 2 篇新闻才能生成事件脉络")
 
-    cached = _cached_timeline(topic_id)
-    if cached is not None and cached.get("timeline_json"):
-        source = "cache"
-        if cached.get("generate_status") == "mock":
-            source = "mock"
-        return _timeline_row_to_result(cached, normalize_text(topic["topic_name"]), source=source)
-
     try:
         execute_update(
             """
             INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, metadata_json, relationships_json, generate_status, generated_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
+                timeline_json = VALUES(timeline_json),
                 metadata_json = VALUES(metadata_json),
                 relationships_json = VALUES(relationships_json),
                 generate_status = VALUES(generate_status),
