@@ -50,6 +50,7 @@ class NewsDetail(NewsItem):
     recommended_news: list[NewsItem] = Field(default_factory=list)
     is_liked: bool = False
     is_favorited: bool = False
+    timeline_news_count: int = 0
 
 
 class NewsListQuery(BaseModel):

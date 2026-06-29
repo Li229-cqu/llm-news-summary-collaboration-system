@@ -488,6 +488,15 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
     if news is None:
         return None
 
+    topic_id = news.get("topic_id")
+    timeline_news_count = 0
+    if topic_id is not None:
+        count_row = execute_one(
+            "SELECT COUNT(*) AS total FROM news WHERE topic_id = %s AND status = 1",
+            [topic_id],
+        )
+        timeline_news_count = int((count_row or {}).get("total") or 0)
+
     current_user_id = _get_current_user_id(current_user)
     related_rows = execute_query(
         f"""
@@ -578,6 +587,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail["is_liked"] = liked is not None
         detail["is_favorited"] = favorited is not None
 
+    detail["timeline_news_count"] = timeline_news_count
     return detail
 
 
