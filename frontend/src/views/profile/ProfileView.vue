@@ -37,7 +37,7 @@ import {
   updateSubscriptions,
 } from '@/api/profile'
 import { unfavoriteNews } from '@/api/interaction'
-import { changePasswordApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
+import { changePasswordApi, getUserProfileApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 
@@ -66,6 +66,7 @@ const pageSize = 10
 const totalCount = ref(0)
 
 const editDialogVisible = ref(false)
+const activeEditTab = ref<'profile' | 'password'>('profile')
 const editLoading = ref(false)
 const editForm = reactive({
   nickname: '',
@@ -74,20 +75,13 @@ const editForm = reactive({
   avatar: '',
 })
 
-const accountDialogVisible = ref(false)
-const accountActiveTab = ref('profile')
-const profileForm = reactive({
-  nickname: '',
-  email: '',
-  phone: '',
-})
+// accountDialog removed — merged into editDialog
 const passwordForm = reactive({
   old_password: '',
   new_password: '',
   confirm_password: '',
 })
 const passwordLoading = ref(false)
-const profileLoading = ref(false)
 
 const aiDetailVisible = ref(false)
 const currentAIRecord = ref<AIRecordItem | null>(null)
@@ -217,50 +211,23 @@ function clearAISearch() {
   currentPage.value = 1
 }
 
-function openEditDialog() {
+async function openEditDialog(tab: 'profile' | 'password' = 'profile') {
+  activeEditTab.value = tab
+  await loadCurrentUserProfile()
   editForm.nickname = userStore.userInfo?.nickname || ''
   editForm.email = (userStore.userInfo as any)?.email || ''
   editForm.phone = (userStore.userInfo as any)?.phone || ''
   editForm.avatar = userStore.userInfo?.avatar || ''
+  passwordForm.old_password = ''
+  passwordForm.new_password = ''
+  passwordForm.confirm_password = ''
   editDialogVisible.value = true
 }
 
 function openAccountDialog() {
-  profileForm.nickname = userStore.userInfo?.nickname || ''
-  profileForm.email = (userStore.userInfo as any)?.email || ''
-  profileForm.phone = (userStore.userInfo as any)?.phone || ''
-  passwordForm.old_password = ''
-  passwordForm.new_password = ''
-  passwordForm.confirm_password = ''
-  accountActiveTab.value = 'profile'
-  accountDialogVisible.value = true
+  openEditDialog('password')
 }
 
-async function handleUpdateProfile() {
-  if (!profileForm.nickname.trim()) {
-    ElMessage.warning('昵称不能为空')
-    return
-  }
-  profileLoading.value = true
-  try {
-    const result = await updateUserProfileApi({
-      nickname: profileForm.nickname,
-      email: profileForm.email,
-      phone: profileForm.phone,
-    })
-    if (userStore.userInfo) {
-      userStore.userInfo.nickname = result.nickname
-      ;(userStore.userInfo as any).email = result.email
-      ;(userStore.userInfo as any).phone = result.phone
-      userStore.setUserInfo(userStore.userInfo)
-    }
-    ElMessage.success('资料修改成功')
-  } catch (error) {
-    console.error('更新资料失败:', error)
-  } finally {
-    profileLoading.value = false
-  }
-}
 
 async function handleChangePassword() {
   if (!passwordForm.old_password) {
@@ -287,15 +254,36 @@ async function handleChangePassword() {
       confirm_password: passwordForm.confirm_password,
     })
     ElMessage.success('密码修改成功，请重新登录')
-    accountDialogVisible.value = false
+    // 清空密码表单，但不清空资料表单
+    passwordForm.old_password = ''
+    passwordForm.new_password = ''
+    passwordForm.confirm_password = ''
+    editDialogVisible.value = false
     setTimeout(() => {
       userStore.logout()
       router.push('/login')
     }, 1000)
-  } catch (error) {
+  } catch (error: any) {
     console.error('修改密码失败:', error)
+    const errorMsg = error?.response?.data?.message || error?.message || '修改密码失败，请重试'
+    ElMessage.error(errorMsg)
   } finally {
     passwordLoading.value = false
+  }
+}
+
+async function loadCurrentUserProfile() {
+  try {
+    const profile = await getUserProfileApi()
+    if (userStore.userInfo) {
+      userStore.userInfo.nickname = profile.nickname
+      userStore.userInfo.email = profile.email
+      userStore.userInfo.phone = profile.phone
+      userStore.userInfo.avatar = profile.avatar
+      userStore.setUserInfo(userStore.userInfo)
+    }
+  } catch (error) {
+    console.error('加载用户资料失败:', error)
   }
 }
 
@@ -369,6 +357,10 @@ async function handleEditSubmit() {
     }
 
     ElMessage.success('资料保存成功')
+
+    // 重新加载完整用户资料以确保最新
+    await loadCurrentUserProfile()
+
     editDialogVisible.value = false
   } catch (error) {
     const message = error instanceof Error ? error.message : '资料保存失败'
@@ -590,7 +582,8 @@ function handleClearHistory() {
     .catch(() => {})
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadCurrentUserProfile()
   loadOverview()
 })
 </script>
@@ -605,7 +598,7 @@ onMounted(() => {
             <el-avatar :size="96" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
               {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
             </el-avatar>
-            <div class="avatar-edit" @click="openEditDialog" title="更换头像">
+            <div class="avatar-edit" @click="openEditDialog()" title="更换头像">
               <Edit :size="16" />
             </div>
           </div>
@@ -617,7 +610,7 @@ onMounted(() => {
                 :icon="Edit"
                 size="small"
                 class="edit-btn"
-                @click="openEditDialog"
+                @click="openEditDialog()"
               >
                 编辑资料
               </el-button>
@@ -1125,71 +1118,45 @@ onMounted(() => {
       </el-tabs>
     </el-card>
 
-    <el-dialog v-model="editDialogVisible" title="编辑资料" width="480px" class="edit-dialog">
-      <el-form :model="editForm" label-width="80px" class="edit-form">
-        <el-form-item label="头像">
-          <div class="avatar-upload-section">
-            <div class="avatar-preview-wrapper">
-              <el-avatar :size="80" :src="normalizeAvatarUrl(editForm.avatar)" :icon="User" class="avatar-preview">
-                {{ editForm.nickname?.charAt(0) || '用' }}
-              </el-avatar>
-            </div>
-            <el-upload
-              class="avatar-uploader"
-              :show-file-list="false"
-              :before-upload="handleAvatarChange"
-              accept="image/*"
-            >
-              <el-button type="primary" :icon="Plus" size="small">上传头像</el-button>
-              <div class="upload-tip">支持 JPG、PNG 格式，大小不超过 2MB</div>
-            </el-upload>
-          </div>
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="editForm.nickname" placeholder="请输入昵称" maxlength="20" show-word-limit />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="editForm.email" placeholder="请输入邮箱" />
-        </el-form-item>
-        <el-form-item label="手机号">
-          <el-input v-model="editForm.phone" placeholder="请输入手机号" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="accountDialogVisible" title="账号设置" width="520px" class="account-dialog" :close-on-click-modal="false">
-      <el-tabs v-model="accountActiveTab" class="account-tabs">
+    <el-dialog v-model="editDialogVisible" title="编辑资料" width="520px" class="edit-dialog" :close-on-click-modal="false">
+      <el-tabs v-model="activeEditTab" class="edit-tabs">
         <el-tab-pane label="基本资料" name="profile">
-          <el-form :model="profileForm" label-width="90px" class="account-form">
-            <el-form-item label="用户名">
-              <el-input :value="userStore.userInfo?.username" disabled />
-            </el-form-item>
-            <el-form-item label="用户角色">
-              <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark">
-                {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
-              </el-tag>
+          <el-form :model="editForm" label-width="80px" class="edit-form">
+            <el-form-item label="头像">
+              <div class="avatar-upload-section">
+                <div class="avatar-preview-wrapper">
+                  <el-avatar :size="80" :src="normalizeAvatarUrl(editForm.avatar)" :icon="User" class="avatar-preview">
+                    {{ editForm.nickname?.charAt(0) || '用' }}
+                  </el-avatar>
+                </div>
+                <el-upload
+                  class="avatar-uploader"
+                  :show-file-list="false"
+                  :before-upload="handleAvatarChange"
+                  accept="image/*"
+                >
+                  <el-button type="primary" :icon="Plus" size="small">上传头像</el-button>
+                  <div class="upload-tip">支持 JPG、PNG 格式，大小不超过 2MB</div>
+                </el-upload>
+              </div>
             </el-form-item>
             <el-form-item label="昵称">
-              <el-input v-model="profileForm.nickname" placeholder="请输入昵称" maxlength="20" show-word-limit />
+              <el-input v-model="editForm.nickname" placeholder="请输入昵称" maxlength="20" show-word-limit />
             </el-form-item>
             <el-form-item label="邮箱">
-              <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
+              <el-input v-model="editForm.email" placeholder="请输入邮箱" />
             </el-form-item>
             <el-form-item label="手机号">
-              <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
+              <el-input v-model="editForm.phone" placeholder="请输入手机号" />
             </el-form-item>
           </el-form>
           <div class="dialog-footer">
-            <el-button @click="accountDialogVisible = false">取消</el-button>
-            <el-button type="primary" :loading="profileLoading" @click="handleUpdateProfile">保存修改</el-button>
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">保存</el-button>
           </div>
         </el-tab-pane>
         <el-tab-pane label="修改密码" name="password">
-          <el-form :model="passwordForm" label-width="100px" class="account-form">
+          <el-form :model="passwordForm" label-width="100px" class="edit-form">
             <el-form-item label="原密码">
               <el-input v-model="passwordForm.old_password" type="password" placeholder="请输入原密码" show-password />
             </el-form-item>
@@ -1208,7 +1175,7 @@ onMounted(() => {
             />
           </el-form>
           <div class="dialog-footer">
-            <el-button @click="accountDialogVisible = false">取消</el-button>
+            <el-button @click="editDialogVisible = false">取消</el-button>
             <el-button type="primary" :loading="passwordLoading" @click="handleChangePassword">确认修改</el-button>
           </div>
         </el-tab-pane>
@@ -2340,20 +2307,13 @@ onMounted(() => {
   }
 }
 
-.account-dialog :deep(.el-dialog__header) {
-  padding-bottom: 0;
-}
-
-.account-dialog :deep(.el-dialog__body) {
-  padding-top: 12px;
-}
-
-.account-tabs {
+.edit-tabs {
   margin-bottom: 8px;
 }
 
-.account-form {
+.edit-form {
   padding: 8px 0;
+  margin: 0;
 }
 
 .password-tip {
