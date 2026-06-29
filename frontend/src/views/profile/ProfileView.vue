@@ -37,7 +37,7 @@ import {
   updateSubscriptions,
 } from '@/api/profile'
 import { unfavoriteNews } from '@/api/interaction'
-import { changePasswordApi, updateUserProfileApi } from '@/api/user'
+import { changePasswordApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 
@@ -270,12 +270,12 @@ async function handleChangePassword() {
   }
 }
 
-function handleAvatarChange(file: File) {
-  const isImage = file.type.startsWith('image/')
+async function handleAvatarChange(file: File) {
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
   const isLt2M = file.size / 1024 / 1024 < 2
 
-  if (!isImage) {
-    ElMessage.error('请上传图片文件')
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    ElMessage.error('仅支持 jpg/png/gif/webp 格式图片')
     return false
   }
   if (!isLt2M) {
@@ -283,11 +283,19 @@ function handleAvatarChange(file: File) {
     return false
   }
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    editForm.avatar = e.target?.result as string
+  try {
+    const result = await uploadAvatarApi(file)
+    const avatarUrl = result.avatar_url || result.avatar
+    editForm.avatar = avatarUrl
+    if (userStore.userInfo) {
+      userStore.userInfo.avatar = avatarUrl
+      userStore.setUserInfo(userStore.userInfo)
+    }
+    ElMessage.success('头像上传成功')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '头像上传失败'
+    ElMessage.error(message)
   }
-  reader.readAsDataURL(file)
   return false
 }
 
@@ -307,14 +315,21 @@ async function handleEditSubmit() {
     return
   }
 
+  const avatar = editForm.avatar || ''
+  const isValidAvatar = avatar && !avatar.startsWith('data:image/') && !avatar.includes(';base64,') && avatar.length <= 255
+
+  const payload: Record<string, string> = {
+    nickname: editForm.nickname.trim(),
+    email: editForm.email.trim() || '',
+    phone: editForm.phone.trim() || '',
+  }
+  if (isValidAvatar) {
+    payload.avatar = avatar
+  }
+
   editLoading.value = true
   try {
-    const result = await updateUserProfileApi({
-      nickname: editForm.nickname,
-      avatar: editForm.avatar || undefined,
-      email: editForm.email || undefined,
-      phone: editForm.phone || undefined,
-    })
+    const result = await updateUserProfileApi(payload)
 
     if (userStore.userInfo) {
       userStore.userInfo.nickname = result.nickname
@@ -384,6 +399,17 @@ function getCategoryIcon(code: string) {
 
 function getCategoryDesc(code: string) {
   return categoryDescs[code] || '精彩新闻内容'
+}
+
+function normalizeAvatarUrl(url?: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) {
+    return url
+  }
+  if (url.startsWith('/uploads/')) {
+    return 'http://127.0.0.1:8000' + url
+  }
+  return url
 }
 
 async function loadOverview() {
@@ -544,7 +570,7 @@ onMounted(() => {
       <div class="header-content">
         <div class="user-profile">
           <div class="avatar-wrapper">
-            <el-avatar :size="96" :src="userStore.userInfo?.avatar" :icon="User" class="user-avatar">
+            <el-avatar :size="96" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
               {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
             </el-avatar>
             <div class="avatar-edit" @click="openEditDialog" title="更换头像">
@@ -1043,7 +1069,7 @@ onMounted(() => {
         <el-form-item label="头像">
           <div class="avatar-upload-section">
             <div class="avatar-preview-wrapper">
-              <el-avatar :size="80" :src="editForm.avatar" :icon="User" class="avatar-preview">
+              <el-avatar :size="80" :src="normalizeAvatarUrl(editForm.avatar)" :icon="User" class="avatar-preview">
                 {{ editForm.nickname?.charAt(0) || '用' }}
               </el-avatar>
             </div>

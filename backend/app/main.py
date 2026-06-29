@@ -1,9 +1,11 @@
 import logging
 import json
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.common.exceptions import AppException, register_exception_handlers
 from app.common.response import success_response
@@ -92,6 +94,10 @@ async def test_error():
     """开发测试接口：主动抛出业务异常以验证统一异常处理。"""
     raise AppException(code=400, message="开发测试异常")
 
+
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
+os.makedirs(os.path.join(UPLOADS_DIR, "avatar"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.include_router(auth_router)
 app.include_router(user_router)

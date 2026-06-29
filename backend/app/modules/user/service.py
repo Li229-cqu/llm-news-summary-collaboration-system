@@ -72,8 +72,10 @@ def update_profile(current_user: Any, request: UpdateProfileRequest) -> UserInfo
         params.append(nickname)
 
     if request.avatar is not None:
-        update_fields.append("avatar = %s")
-        params.append(request.avatar)
+        avatar = request.avatar.strip() if request.avatar else ''
+        if avatar and not avatar.startswith('data:image/') and ';base64,' not in avatar and len(avatar) <= 255:
+            update_fields.append("avatar = %s")
+            params.append(avatar)
 
     if request.email is not None:
         update_fields.append("email = %s")
@@ -125,3 +127,62 @@ def change_password(current_user: Any, old_password: str, new_password: str, con
         "UPDATE user SET password = %s WHERE id = %s",
         (new_password, user_id),
     )
+
+
+ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_AVATAR_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+def upload_avatar(current_user: Any, file: Any) -> dict:
+    """上传用户头像，保存到 uploads/avatar/ 并更新 user.avatar。"""
+    import os
+    import uuid
+
+    user_id = int(getattr(current_user, "id", 0) or 0)
+    if user_id <= 0:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    # Validate file type
+    content_type = getattr(file, "content_type", "") or ""
+    if content_type not in ALLOWED_AVATAR_TYPES:
+        raise AppException(code=400, message="仅支持 jpg/png/gif/webp 格式图片")
+
+    # Validate extension
+    filename = getattr(file, "filename", "") or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_AVATAR_EXTENSIONS:
+        raise AppException(code=400, message="仅支持 jpg/png/gif/webp 格式图片")
+
+    # Read and validate size
+    file.file.seek(0, os.SEEK_END)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > MAX_AVATAR_SIZE:
+        raise AppException(code=400, message="头像图片不能超过 2MB")
+
+    # Generate safe filename
+    safe_name = f"user_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+
+    # Determine upload directory (relative to backend/)
+    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "avatar")
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    # Write file
+    file_path = os.path.join(uploads_dir, safe_name)
+    contents = file.file.read()
+    if isinstance(contents, str):
+        contents = contents.encode("utf-8")
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    avatar_url = f"/uploads/avatar/{safe_name}"
+
+    # Update user.avatar in database
+    execute_update(
+        "UPDATE user SET avatar = %s WHERE id = %s",
+        (avatar_url, user_id),
+    )
+
+    logger.info("User %d avatar uploaded: %s", user_id, avatar_url)
+    return {"avatar": avatar_url, "avatar_url": avatar_url}
