@@ -20,7 +20,7 @@
           <div class="news-detail-card__header">
             <el-button text type="primary" @click="goHome">返回首页</el-button>
             <div class="news-detail-card__header-actions">
-              <ShareButton />
+              <ShareButton target-selector=".news-detail-main" :title="newsDetail?.title || ''" />
               <el-button type="primary" plain @click="goToAiGenerate">用 AI 生成标题和摘要</el-button>
             </div>
           </div>
