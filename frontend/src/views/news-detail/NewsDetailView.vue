@@ -80,6 +80,7 @@
           :recommended-news="recommendedNews"
           :timeline-topic-id="timelineTopicId"
           :timeline-topic-name="timelineTopicName"
+          :timeline-news-count="newsDetail?.timeline_news_count ?? 0"
           @view-timeline="handleViewTimeline"
         />
       </aside>
