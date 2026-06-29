@@ -629,39 +629,35 @@ onMounted(async () => {
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="browseType" size="small" @change="browseSearchKeyword = ''; currentPage = 1">
+                <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
                 <el-input
-                  v-if="browseType === 'news'"
                   v-model="browseSearchKeyword"
                   placeholder="搜索浏览历史..."
                   :prefix-icon="Search"
                   class="search-input"
                   @keyup.enter="currentPage = 1"
                 />
-                <el-button v-if="browseType === 'news'" type="primary" @click="currentPage = 1">搜索</el-button>
-                <el-button v-if="browseType === 'news'" @click="clearBrowseSearch">清空</el-button>
+                <el-button type="primary" @click="currentPage = 1">搜索</el-button>
+                <el-button @click="clearBrowseSearch">清空</el-button>
               </div>
               <el-button type="danger" plain :disabled="browseHistory.length === 0" @click="handleClearHistory">
                 清空历史
               </el-button>
             </div>
 
-            <div v-if="browseType === 'post'" class="empty-state">
-              <Clock :size="64" class="empty-icon" />
+            <div v-if="browseType === 'post'" class="empty-state compact-empty">
               <p class="empty-text">暂无帖子浏览记录</p>
               <p class="empty-desc">浏览社区帖子后将在这里显示</p>
             </div>
-            <div v-else-if="browseHistory.length === 0" class="empty-state">
-              <Clock :size="64" class="empty-icon" />
+            <div v-else-if="browseHistory.length === 0" class="empty-state compact-empty">
               <p class="empty-text">暂无浏览历史</p>
               <p class="empty-desc">去首页看看精彩新闻吧</p>
               <el-button type="primary" @click="router.push('/')">返回首页</el-button>
             </div>
-            <div v-else-if="filteredBrowseHistory.length === 0" class="empty-state">
-              <Clock :size="64" class="empty-icon" />
+            <div v-else-if="filteredBrowseHistory.length === 0" class="empty-state compact-empty">
               <p class="empty-text">未找到匹配的浏览记录</p>
               <p class="empty-desc">请尝试其他关键词</p>
             </div>
@@ -677,7 +673,6 @@ onMounted(async () => {
                   <h3 class="record-title">{{ item.title }}</h3>
                 </div>
                 <div class="record-meta">
-                  <Clock :size="14" />
                   <span>{{ item.browse_time }}</span>
                 </div>
                 <div class="record-actions">
@@ -710,7 +705,7 @@ onMounted(async () => {
           <template v-else-if="tab.key === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="favoriteType" size="small" @change="favoriteSearchKeyword = ''; currentPage = 1; loadFavorites()">
+                <el-radio-group v-model="favoriteType" size="small" class="segmented-control" @change="favoriteSearchKeyword = ''; currentPage = 1; loadFavorites()">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
@@ -726,13 +721,11 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="favorites.length === 0" class="empty-state">
-              <Star :size="64" class="empty-icon" />
+            <div v-if="favorites.length === 0" class="empty-state compact-empty">
               <p class="empty-text">{{ favoriteType === 'news' ? '暂无新闻收藏记录' : '暂无帖子收藏记录' }}</p>
               <p class="empty-desc">看到喜欢的就收藏起来吧</p>
             </div>
-            <div v-else-if="filteredFavorites.length === 0" class="empty-state">
-              <Star :size="64" class="empty-icon" />
+            <div v-else-if="filteredFavorites.length === 0" class="empty-state compact-empty">
               <p class="empty-text">未找到匹配的收藏记录</p>
               <p class="empty-desc">请尝试其他关键词</p>
             </div>
@@ -762,10 +755,8 @@ onMounted(async () => {
                 </div>
                 <div class="record-meta">
                   <span class="record-source">{{ item.source }}</span>
-                  <Clock :size="14" />
                   <span>收藏于 {{ item.favorited_at || item.publish_time }}</span>
                 </div>
-                <ArrowRight :size="18" class="record-arrow" />
               </div>
             </div>
 
@@ -795,13 +786,11 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="comments.length === 0" class="empty-state">
-              <ChatDotRound :size="64" class="empty-icon" />
+            <div v-if="comments.length === 0" class="empty-state compact-empty">
               <p class="empty-text">暂无评论记录</p>
               <p class="empty-desc">去新闻详情页发表你的看法吧</p>
             </div>
-            <div v-else-if="filteredComments.length === 0" class="empty-state">
-              <ChatDotRound :size="64" class="empty-icon" />
+            <div v-else-if="filteredComments.length === 0" class="empty-state compact-empty">
               <p class="empty-text">未找到匹配的评论记录</p>
               <p class="empty-desc">请尝试其他关键词</p>
             </div>
@@ -821,7 +810,6 @@ onMounted(async () => {
                   </div>
                 </div>
                 <div class="record-meta">
-                  <Clock :size="14" />
                   <span>{{ item.create_time }}</span>
                   <span class="like-count">
                     <Star :size="14" />
@@ -857,11 +845,14 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="filteredAIRecords.length === 0" class="empty-state">
-              <MagicStick :size="64" class="empty-icon" />
-              <p class="empty-text">{{ aiSearchKeyword ? '未找到匹配的 AI 记录' : '暂无 AI 生成记录' }}</p>
-              <p class="empty-desc">{{ aiSearchKeyword ? '请尝试其他关键词' : '去体验 AI 智能摘要功能吧' }}</p>
-              <el-button v-if="!aiSearchKeyword" type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
+            <div v-if="aiRecords.length === 0" class="empty-state compact-empty">
+              <p class="empty-text">暂无 AI 生成记录</p>
+              <p class="empty-desc">去体验 AI 智能摘要功能吧</p>
+              <el-button type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
+            </div>
+            <div v-else-if="filteredAIRecords.length === 0" class="empty-state compact-empty">
+              <p class="empty-text">未找到匹配的 AI 记录</p>
+              <p class="empty-desc">请尝试其他关键词</p>
             </div>
             <div v-else class="record-list">
               <div v-for="item in filteredAIRecords" :key="item.id" class="ai-record-item">
@@ -908,7 +899,6 @@ onMounted(async () => {
                 <div class="ai-record-footer">
                   <span class="source-tag">{{ item.source === 'news' ? '新闻导入' : '手动输入' }}</span>
                   <span class="record-time">
-                    <Clock :size="14" />
                     {{ item.create_time || '暂无时间' }}
                   </span>
                 </div>
@@ -1262,8 +1252,14 @@ onMounted(async () => {
 }
 
 .content-card {
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
+  border-color: #e5e7eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.content-card :deep(.el-card__body) {
+  padding: 0 8px 8px;
 }
 
 .profile-tabs :deep(.el-tabs__header) {
@@ -1279,6 +1275,24 @@ onMounted(async () => {
 .profile-tabs :deep(.el-tabs__item) {
   height: 56px;
   font-size: 15px;
+  color: var(--el-text-color-secondary);
+}
+
+.profile-tabs :deep(.el-tabs__item.is-active) {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.profile-tabs :deep(.el-tabs__item:hover) {
+  color: #2563eb;
+}
+
+.profile-tabs :deep(.el-tabs__active-bar) {
+  background-color: #2563eb;
+}
+
+.profile-tabs :deep(.el-tab-pane) {
+  padding-top: 4px;
 }
 
 .profile-tabs :deep(.el-tab-pane) {
@@ -1301,23 +1315,32 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 20px;
-  padding: 0 4px;
+  padding: 12px 16px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-lighter);
 }
 
 .search-input {
+  width: 280px;
   max-width: 320px;
 }
 
 .search-bar-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.search-bar-wrapper > :nth-child(3) {
-  margin-left: -2px;
+.compact-empty {
+  padding: 48px 16px;
+}
+
+.compact-empty :deep(.el-empty__image) {
+  display: none;
 }
 
 .empty-state {
@@ -1343,32 +1366,68 @@ onMounted(async () => {
   font-size: 14px;
 }
 
+.segmented-control {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.segmented-control :deep(.el-radio-button) {
+  margin: 0;
+}
+
+.segmented-control :deep(.el-radio-button__inner) {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  box-shadow: none;
+}
+
+.segmented-control :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.16);
+}
+
+.segmented-control :deep(.el-radio-button__inner:hover) {
+  color: #2563eb;
+}
+
 .record-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .record-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
-  border-radius: 12px;
-  background: var(--el-bg-color-page);
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
 
 .record-item:hover {
-  background: var(--el-fill-color-light);
-  transform: translateX(4px);
+  background: #f8fafc;
+  border-color: #2563eb;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.10);
+  transform: translateY(-2px);
 }
 
 .record-item-detailed {
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
+  padding: 10px 14px;
 }
 
 .record-main {
@@ -1378,15 +1437,15 @@ onMounted(async () => {
 }
 
 .record-tag {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .record-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--el-text-color-primary);
-  line-height: 1.5;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -1404,10 +1463,10 @@ onMounted(async () => {
 }
 
 .record-summary {
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   color: var(--el-text-color-secondary);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -1432,12 +1491,12 @@ onMounted(async () => {
 .record-arrow {
   color: var(--el-text-color-placeholder);
   flex-shrink: 0;
-  transition: transform 0.3s ease;
+  transition: transform 0.25s ease, color 0.25s ease;
 }
 
 .record-item:hover .record-arrow {
   transform: translateX(4px);
-  color: var(--el-color-primary);
+  color: #2563eb;
 }
 
 .comment-box {
@@ -1463,13 +1522,16 @@ onMounted(async () => {
 
 .ai-record-item {
   padding: 20px;
-  border-radius: 12px;
-  background: var(--el-bg-color-page);
-  transition: all 0.3s ease;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  transition: all 0.25s ease;
 }
 
 .ai-record-item:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-color: #2563eb;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.10);
+  transform: translateY(-2px);
 }
 
 .ai-record-header {
@@ -1549,7 +1611,8 @@ onMounted(async () => {
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 28px;
+  margin-top: 32px;
+  padding-bottom: 8px;
 }
 
 .edit-dialog :deep(.el-dialog__header) {
