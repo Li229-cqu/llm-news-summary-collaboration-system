@@ -31,6 +31,7 @@ export interface NewsItem {
   source_url?: string
   recommendation_score?: number
   recommendation_reason?: string
+  recommend_source?: 'related' | 'hot'
 }
 
 export interface NewsDetail extends NewsItem {

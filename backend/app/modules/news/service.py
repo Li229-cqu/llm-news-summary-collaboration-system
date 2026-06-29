@@ -527,8 +527,8 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         """,
         [news.get("category_id"), news_id],
     )
-    recommended_rows = execute_query(
-        f"""
+    # Build recommended_news with 3-tier fallback: same topic → same category → hot
+    _RECOMMEND_SELECT = f"""
         SELECT
             n.id,
             n.title,
@@ -550,17 +550,61 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE n.status = 1 AND n.id <> %s
-        ORDER BY n.view_count DESC, n.comment_count DESC, n.like_count DESC, n.publish_time DESC, n.id DESC
-        LIMIT 5
-        """,
-        [news_id],
-    )
+        WHERE n.status = 1
+    """
+    _RECOMMEND_ORDER = "ORDER BY n.view_count DESC, n.comment_count DESC, n.like_count DESC, n.publish_time DESC, n.id DESC"
+
+    recommended_news: list[dict[str, Any]] = []
+    used_ids: set[int] = {news_id}
+
+    category_id = news.get("category_id")
+    if topic_id is not None:
+        topic_rows = execute_query(
+            _RECOMMEND_SELECT + " AND n.topic_id = %s AND n.id <> %s " + _RECOMMEND_ORDER + " LIMIT 5",
+            [topic_id, news_id],
+        )
+        for row in topic_rows:
+            row_id = int(row["id"])
+            if row_id not in used_ids:
+                item = _format_news_row(row)
+                item["recommend_source"] = "related"
+                recommended_news.append(item)
+                used_ids.add(row_id)
+        logger.info("[recommended_news] same topic_id=%d: got %d items", topic_id, len(recommended_news))
+
+    if len(recommended_news) < 5 and category_id is not None:
+        remaining = 5 - len(recommended_news)
+        exclude_ids = list(used_ids)
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        category_rows = execute_query(
+            _RECOMMEND_SELECT + f" AND n.category_id = %s AND n.id NOT IN ({placeholders}) " + _RECOMMEND_ORDER + f" LIMIT {remaining}",
+            [category_id] + exclude_ids,
+        )
+        for row in category_rows:
+            item = _format_news_row(row)
+            item["recommend_source"] = "related"
+            recommended_news.append(item)
+            used_ids.add(int(row["id"]))
+        logger.info("[recommended_news] same category_id=%d: got %d items (total=%d)", category_id, len(category_rows), len(recommended_news))
+
+    if len(recommended_news) < 5:
+        remaining = 5 - len(recommended_news)
+        exclude_ids = list(used_ids)
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        hot_rows = execute_query(
+            _RECOMMEND_SELECT + f" AND n.id NOT IN ({placeholders}) " + _RECOMMEND_ORDER + f" LIMIT {remaining}",
+            exclude_ids,
+        )
+        for row in hot_rows:
+            item = _format_news_row(row)
+            item["recommend_source"] = "hot"
+            recommended_news.append(item)
+        logger.info("[recommended_news] hot fallback: got %d items (total=%d)", len(hot_rows), len(recommended_news))
 
     detail = _format_news_row(news)
     detail["content"] = normalize_text(news.get("content"))
     detail["related_news"] = [_format_news_row(row) for row in related_rows]
-    detail["recommended_news"] = [_format_news_row(row) for row in recommended_rows]
+    detail["recommended_news"] = recommended_news
 
     if current_user_id is None:
         detail["is_liked"] = False

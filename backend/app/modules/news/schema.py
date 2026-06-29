@@ -40,6 +40,7 @@ class NewsItem(BaseModel):
     status: int
     tags: list[str] = Field(default_factory=list)
     source_url: str = ""
+    recommend_source: Optional[str] = None
 
 
 class NewsDetail(NewsItem):
