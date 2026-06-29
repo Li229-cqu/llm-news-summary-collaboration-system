@@ -24,6 +24,7 @@ export interface FavoriteItem {
   source: string
   publish_time: string
   favorited_at?: string
+  target_type?: 'news' | 'post'
 }
 
 export interface CommentRecordItem {
@@ -84,10 +85,11 @@ export async function getBrowseHistory(
 
 export async function getFavorites(
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  type?: 'news' | 'post'
 ): Promise<PaginationResponse<FavoriteItem>> {
   return request.get('/api/profile/favorites', {
-    params: { page, page_size: pageSize },
+    params: { page, page_size: pageSize, type: type || 'news' },
   })
 }
 

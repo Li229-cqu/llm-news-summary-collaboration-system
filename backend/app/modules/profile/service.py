@@ -877,12 +877,57 @@ def _mock_favorites(
 
 
 def _db_favorites(
-    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10
+    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10,
+    target_type: str = "news",
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
         return paginate([], page=page, page_size=page_size)
 
+    if target_type not in ("news", "post"):
+        return paginate([], page=page, page_size=page_size)
+
+    if target_type == "post":
+        rows = execute_query(
+            """
+            SELECT
+                p.id AS post_id,
+                p.title,
+                LEFT(p.content, 80) AS summary,
+                '' AS category_name,
+                '社区帖子' AS source,
+                COALESCE(p.created_at, p.create_time) AS publish_time,
+                COALESCE(f.created_at, f.create_time) AS favorited_at
+            FROM favorite f
+            LEFT JOIN community_post p ON p.id = f.target_id
+            WHERE f.user_id = %s
+              AND f.target_type = 'post'
+              AND p.status = 1
+            ORDER BY favorited_at DESC, f.id DESC
+            """,
+            [user_id],
+        )
+        if not rows:
+            return None
+
+        favorite_items = []
+        for row in rows:
+            favorite_items.append(
+                FavoriteItem(
+                    news_id=int(row["post_id"]),
+                    title=normalize_text(row["title"]),
+                    summary=normalize_text(row["summary"]),
+                    category_name=normalize_text(row["category_name"]),
+                    source=normalize_text(row["source"]) or "社区帖子",
+                    publish_time=format_datetime(row["publish_time"]),
+                    favorited_at=format_datetime(row.get("favorited_at")),
+                    target_type="post",
+                ).dict()
+            )
+
+        return paginate(favorite_items, page=page, page_size=page_size)
+
+    # target_type = 'news'
     rows = execute_query(
         """
         SELECT
@@ -917,6 +962,7 @@ def _db_favorites(
                 source=normalize_text(row["source"]),
                 publish_time=format_datetime(row["publish_time"]),
                 favorited_at=format_datetime(row.get("favorited_at")),
+                target_type="news",
             ).dict()
         )
 
@@ -924,16 +970,19 @@ def _db_favorites(
 
 
 def get_favorites(
-    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10
+    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10,
+    target_type: str = "news",
 ) -> Dict[str, Any]:
-    """获取用户收藏列表。"""
+    """获取用户收藏列表，支持 target_type=news 或 post。"""
 
     try:
-        result = _db_favorites(current_user, page=page, page_size=page_size)
+        result = _db_favorites(current_user, page=page, page_size=page_size, target_type=target_type)
         if result is not None:
             return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取收藏列表失败，回退 mock：%s", exc)
+    if target_type != "news":
+        return paginate([], page=page, page_size=page_size)
     return _mock_favorites(current_user, page=page, page_size=page_size)
 
 

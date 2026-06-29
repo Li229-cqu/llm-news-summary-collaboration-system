@@ -47,6 +47,9 @@ const userStore = useUserStore()
 const activeTab = ref('overview')
 const loadingTab = ref('')
 
+const browseType = ref<'news' | 'post'>('news')
+const favoriteType = ref<'news' | 'post'>('news')
+
 const profileOverview = ref<ProfileOverview | null>(null)
 const browseHistory = ref<BrowseHistoryItem[]>([])
 const favorites = ref<FavoriteItem[]>([])
@@ -177,6 +180,14 @@ const filteredAIRecords = computed(() => {
 
 function goToNewsDetail(newsId: number) {
   router.push(`/news/${newsId}`)
+}
+
+function handleFavoriteClick(item: FavoriteItem) {
+  if (item.target_type === 'post') {
+    ElMessage.info('帖子详情页暂未开放')
+    return
+  }
+  router.push(`/news/${item.news_id}`)
 }
 
 function handleSearch() {
@@ -442,7 +453,7 @@ async function loadBrowseHistory(page = 1) {
 async function loadFavorites(page = 1) {
   loadingTab.value = 'favorites'
   try {
-    const result = await getFavorites(page, pageSize)
+    const result = await getFavorites(page, pageSize, favoriteType.value)
     favorites.value = result.list
     totalCount.value = result.total
     currentPage.value = page
@@ -745,7 +756,12 @@ onMounted(() => {
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
+                <el-radio-group v-model="browseType" size="small" @change="searchQuery = ''; currentPage = 1">
+                  <el-radio-button value="news">新闻</el-radio-button>
+                  <el-radio-button value="post">帖子</el-radio-button>
+                </el-radio-group>
                 <el-input
+                  v-if="browseType === 'news'"
                   v-model="searchQuery"
                   placeholder="搜索浏览历史..."
                   :prefix-icon="Search"
@@ -760,7 +776,12 @@ onMounted(() => {
               </el-button>
             </div>
 
-            <div v-if="filteredBrowseHistory.length === 0" class="empty-state">
+            <div v-if="browseType === 'post'" class="empty-state">
+              <Clock :size="64" class="empty-icon" />
+              <p class="empty-text">暂无帖子浏览记录</p>
+              <p class="empty-desc">浏览社区帖子后将在这里显示</p>
+            </div>
+            <div v-else-if="filteredBrowseHistory.length === 0" class="empty-state">
               <Clock :size="64" class="empty-icon" />
               <p class="empty-text">{{ searchQuery ? '未找到相关浏览历史' : '暂无浏览历史' }}</p>
               <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去首页看看精彩新闻吧' }}</p>
@@ -811,6 +832,10 @@ onMounted(() => {
           <template v-else-if="tab.key === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
+                <el-radio-group v-model="favoriteType" size="small" @change="searchQuery = ''; currentPage = 1; loadFavorites()">
+                  <el-radio-button value="news">新闻</el-radio-button>
+                  <el-radio-button value="post">帖子</el-radio-button>
+                </el-radio-group>
                 <el-input
                   v-model="searchQuery"
                   placeholder="搜索收藏内容..."
@@ -833,7 +858,7 @@ onMounted(() => {
                 v-for="item in filteredFavorites"
                 :key="item.news_id"
                 class="record-item record-item-detailed"
-                @click="goToNewsDetail(item.news_id)"
+                @click="handleFavoriteClick(item)"
               >
                 <div class="record-main">
                   <div class="record-header-row">

@@ -32,6 +32,7 @@ class FavoriteItem(BaseModel):
     source: str
     publish_time: str
     favorited_at: Optional[str] = None
+    target_type: Optional[str] = "news"
 
 
 class CommentRecordItem(BaseModel):
