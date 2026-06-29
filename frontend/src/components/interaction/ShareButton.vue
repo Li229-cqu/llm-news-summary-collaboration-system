@@ -1,21 +1,12 @@
 <template>
-  <div class="share-button-wrapper">
-    <el-button
-      class="interaction-button"
-      plain
-      :loading="loading"
-      @click="handleScreenshot"
-    >
-      {{ loading ? '生成截图中...' : '截图分享' }}
-    </el-button>
-    <el-button
-      class="interaction-button"
-      plain
-      @click="handleCopyLink"
-    >
-      复制链接
-    </el-button>
-  </div>
+  <el-button
+    class="interaction-button"
+    plain
+    :loading="loading"
+    @click="handleScreenshot"
+  >
+    {{ loading ? '生成截图中...' : '截图分享' }}
+  </el-button>
 </template>
 
 <script setup lang="ts">
@@ -114,7 +105,7 @@ async function handleScreenshot() {
 
     canvas.toBlob((blob) => {
       if (!blob) {
-        ElMessage.error('截图生成失败，已保留复制链接分享方式')
+        ElMessage.error('截图生成失败，请稍后重试')
         return
       }
       const url = URL.createObjectURL(blob)
@@ -124,61 +115,20 @@ async function handleScreenshot() {
     }, 'image/png')
   } catch (error) {
     console.error('截图失败:', error)
-    ElMessage.error('截图生成失败，已保留复制链接分享方式')
+    ElMessage.error('截图生成失败，请稍后重试')
   } finally {
     loading.value = false
-  }
-}
-
-async function copyText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-
-  const textArea = document.createElement('textarea')
-  textArea.value = text
-  textArea.setAttribute('readonly', 'true')
-  textArea.style.position = 'absolute'
-  textArea.style.left = '-9999px'
-  document.body.appendChild(textArea)
-  textArea.select()
-  const success = document.execCommand('copy')
-  document.body.removeChild(textArea)
-
-  if (!success) {
-    throw new Error('copy failed')
-  }
-}
-
-async function handleCopyLink() {
-  try {
-    await copyText(window.location.href)
-    ElMessage.success('链接已复制')
-  } catch {
-    ElMessage.warning('复制失败，请手动复制地址')
   }
 }
 </script>
 
 <style scoped>
-.share-button-wrapper {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .interaction-button {
   display: inline-flex;
   align-items: center;
 }
 
 @media (max-width: 640px) {
-  .share-button-wrapper {
-    flex-direction: column;
-    width: 100%;
-  }
-
   .interaction-button {
     width: 100%;
   }

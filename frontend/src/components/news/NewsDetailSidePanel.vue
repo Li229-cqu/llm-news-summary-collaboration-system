@@ -17,10 +17,6 @@
     </el-card>
 
     <el-card class="news-detail-side-panel__card" shadow="never">
-      <RelatedNewsList title="相关文章" :list="relatedNews" />
-    </el-card>
-
-    <el-card class="news-detail-side-panel__card" shadow="never">
       <RelatedNewsList title="推荐阅读" :list="recommendedNews" />
     </el-card>
   </aside>
@@ -31,7 +27,6 @@ import { computed } from 'vue'
 import RelatedNewsList, { type RelatedNewsItem } from './RelatedNewsList.vue'
 
 const props = defineProps<{
-  relatedNews: RelatedNewsItem[]
   recommendedNews: RelatedNewsItem[]
   timelineTopicId?: number | null
   timelineTopicName?: string

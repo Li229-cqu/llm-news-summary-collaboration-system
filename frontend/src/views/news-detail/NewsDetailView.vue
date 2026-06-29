@@ -76,7 +76,6 @@
 
       <aside class="news-detail-aside">
         <NewsDetailSidePanel
-          :related-news="relatedNews"
           :recommended-news="recommendedNews"
           :timeline-topic-id="timelineTopicId"
           :timeline-topic-name="timelineTopicName"
@@ -147,7 +146,6 @@ const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 const newsId = computed(() => String(route.params.id ?? '').trim())
 
-const relatedNews = computed<NewsItem[]>(() => newsDetail.value?.related_news ?? [])
 const recommendedNews = computed<NewsItem[]>(() => newsDetail.value?.recommended_news ?? [])
 const timelineTopicId = computed(() => newsDetail.value?.topic_id ?? null)
 const timelineTopicName = computed(
