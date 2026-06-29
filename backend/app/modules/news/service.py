@@ -589,15 +589,15 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
     if news is None:
         return None
 
-    execute_update("UPDATE news SET view_count = view_count + 1, update_time = NOW() WHERE id = %s", [news_id])
+    execute_update("UPDATE news SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s", [news_id])
 
     current_user_id = _get_current_user_id(current_user)
     if current_user_id is not None:
         try:
             execute_update(
                 """
-                INSERT INTO browse_history (user_id, news_id, browse_time, create_time)
-                VALUES (%s, %s, NOW(), NOW())
+                INSERT INTO browse_history (user_id, news_id, browse_time)
+                VALUES (%s, %s, NOW())
                 """,
                 [current_user_id, news_id],
             )

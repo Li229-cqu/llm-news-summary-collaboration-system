@@ -988,12 +988,12 @@ def _db_comments(
             c.content,
             c.like_count,
             c.status,
-            c.create_time
+            c.created_at AS create_time
         FROM news_comment c
         LEFT JOIN news n ON n.id = c.news_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
         WHERE c.user_id = %s AND c.status <> 4
-        ORDER BY c.create_time DESC, c.id DESC
+        ORDER BY c.created_at DESC, c.id DESC
         """,
         [user_id],
     )

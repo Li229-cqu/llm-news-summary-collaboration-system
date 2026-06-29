@@ -72,8 +72,6 @@ CREATE TABLE IF NOT EXISTS `news` (
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_news_source_url` (`source_url`),
   KEY `idx_news_category` (`category_id`),
@@ -89,17 +87,16 @@ CREATE TABLE IF NOT EXISTS `news_comment` (
   `user_id` BIGINT UNSIGNED NOT NULL,
   `parent_id` BIGINT UNSIGNED DEFAULT NULL,
   `content` TEXT NOT NULL,
+  `media_json` JSON DEFAULT NULL COMMENT '评论媒体信息',
   `like_count` INT NOT NULL DEFAULT 0,
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_news_comment_news` (`news_id`),
   KEY `idx_news_comment_user` (`user_id`),
   KEY `idx_news_comment_parent` (`parent_id`),
-  KEY `idx_news_comment_status_time` (`status`, `create_time`)
+  KEY `idx_news_comment_status_time` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `user_like` (
@@ -108,7 +105,6 @@ CREATE TABLE IF NOT EXISTS `user_like` (
   `target_type` VARCHAR(64) NOT NULL,
   `target_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_like_target` (`user_id`, `target_type`, `target_id`),
   KEY `idx_user_like_target` (`target_type`, `target_id`),
@@ -121,7 +117,6 @@ CREATE TABLE IF NOT EXISTS `favorite` (
   `target_type` VARCHAR(64) NOT NULL,
   `target_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_favorite_target` (`user_id`, `target_type`, `target_id`),
   KEY `idx_favorite_target` (`target_type`, `target_id`),
@@ -162,8 +157,6 @@ CREATE TABLE IF NOT EXISTS `ai_generate_record` (
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_ai_record_user_time` (`user_id`, `created_at`),
   KEY `idx_ai_record_source_news` (`source_news_id`),
@@ -201,14 +194,12 @@ CREATE TABLE IF NOT EXISTS `community_post` (
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_community_post_user` (`user_id`),
   KEY `idx_community_post_news` (`related_news_id`),
   KEY `idx_community_post_topic` (`topic_id`),
   KEY `idx_community_post_status_heat` (`status`, `heat_score`),
-  KEY `idx_community_post_time` (`create_time`)
+  KEY `idx_community_post_time` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `post_comment` (
@@ -217,17 +208,16 @@ CREATE TABLE IF NOT EXISTS `post_comment` (
   `user_id` BIGINT UNSIGNED NOT NULL,
   `parent_id` BIGINT UNSIGNED DEFAULT NULL,
   `content` TEXT NOT NULL,
+  `media_json` LONGTEXT NULL,
   `like_count` INT NOT NULL DEFAULT 0,
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_post_comment_post` (`post_id`),
   KEY `idx_post_comment_user` (`user_id`),
   KEY `idx_post_comment_parent` (`parent_id`),
-  KEY `idx_post_comment_status_time` (`status`, `create_time`)
+  KEY `idx_post_comment_status_time` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `user_block` (
@@ -235,7 +225,6 @@ CREATE TABLE IF NOT EXISTS `user_block` (
   `user_id` BIGINT UNSIGNED NOT NULL,
   `blocked_user_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_block` (`user_id`, `blocked_user_id`),
   KEY `idx_user_block_user` (`user_id`),
@@ -253,8 +242,6 @@ CREATE TABLE IF NOT EXISTS `hot_topic` (
   `status` TINYINT NOT NULL DEFAULT 1,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_hot_topic_rank` (`rank_no`, `heat_score`),
   KEY `idx_hot_topic_target` (`target_type`, `target_id`),
@@ -271,8 +258,6 @@ CREATE TABLE IF NOT EXISTS `event_timeline` (
   `generated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_event_timeline_topic` (`topic_id`),
   KEY `idx_event_timeline_status` (`generate_status`),

@@ -995,8 +995,8 @@ def insert_news(connection: pymysql.connections.Connection, item: ParsedNewsItem
         "favorite_count",
         "status",
         "tags",
-        "create_time",
-        "update_time",
+        "created_at",
+        "updated_at",
     ]
     values: list[Any] = [
         item.title,
@@ -1044,7 +1044,7 @@ def update_news(
         "`publish_time` = %s",
         "`status` = %s",
         "`tags` = %s",
-        "`update_time` = %s",
+        "`updated_at` = %s",
     ]
     values: list[Any] = [
         item.title,
@@ -1075,7 +1075,7 @@ def archive_old_news(connection: pymysql.connections.Connection, cleanup_days: i
     cutoff = datetime.now() - timedelta(days=cleanup_days)
     with connection.cursor() as cursor:
         cursor.execute(
-            "UPDATE news SET status = 0, update_time = NOW() WHERE status = 1 AND publish_time < %s",
+            "UPDATE news SET status = 0, updated_at = NOW() WHERE status = 1 AND publish_time < %s",
             (cutoff.strftime("%Y-%m-%d %H:%M:%S"),),
         )
         return cursor.rowcount
@@ -1393,7 +1393,7 @@ def clean_existing_news_text(connection: pymysql.connections.Connection) -> int:
                        content = %s,
                        source = %s,
                        editor = %s,
-                       update_time = NOW()
+                       updated_at = NOW()
                  WHERE id = %s
                 """,
                 (
@@ -1515,3 +1515,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -10,3 +10,5 @@ DBUtils
 beautifulsoup4
 python-dateutil
 python-multipart
+python-docx
+
