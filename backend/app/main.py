@@ -59,9 +59,6 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
-
-
 @app.options("/{full_path:path}")
 async def preflight_handler(full_path: str):
     return success_response(message="OK")
