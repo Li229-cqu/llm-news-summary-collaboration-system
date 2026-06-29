@@ -649,7 +649,7 @@ def _db_create_news_comment(
 ) -> CommentItem | None:
     user = require_current_user(current_user)
     user_id = _get_current_user_id(user)
-    content = _validate_comment_content(request.content)
+    content = _validate_comment_content(request.content, request.media_json)
     media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     connection = get_connection()
@@ -714,7 +714,7 @@ def _db_reply_comment(
     if parent_comment is None:
         return None
 
-    content = _validate_comment_content(request.content)
+    content = _validate_comment_content(request.content, request.media_json)
     media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     connection = get_connection()
@@ -1090,7 +1090,7 @@ def _mock_reply_comment(
     if parent_comment is None:
         raise AppException(code=404, message="评论不存在")
 
-    content = _validate_comment_content(request.content)
+    content = _validate_comment_content(request.content, request.media_json)
     reply_id = get_next_comment_id()
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     reply = {

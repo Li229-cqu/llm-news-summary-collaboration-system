@@ -1,7 +1,7 @@
 <template>
   <div class="comment-item" :class="{ 'comment-item--folded': isFolded, 'comment-item--child': level > 0 }">
     <div class="comment-item__avatar-col">
-      <el-avatar :size="40" class="comment-item__avatar">{{ avatarText }}</el-avatar>
+      <el-avatar :size="40" class="comment-item__avatar" :src="normalizedAvatar">{{ avatarText }}</el-avatar>
       <div v-if="level > 0" class="comment-item__branch-line"></div>
     </div>
 
@@ -22,45 +22,25 @@
         {{ displayContent }}
       </div>
 
-      <div v-if="mediaImages.length || mediaEmojis.length || mediaFiles.length" class="comment-item__media">
-        <div v-if="mediaImages.length" class="comment-item__media-section">
-          <span class="comment-item__media-label">图片</span>
-          <div class="comment-item__image-grid">
-            <a
-              v-for="(image, index) in mediaImages"
-              :key="`${comment.id}-image-${index}`"
-              class="comment-item__image-link"
-              :href="image"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <img :src="image" alt="评论图片" />
-            </a>
-          </div>
+      <div v-if="mediaImages.length || isolatedEmojis.length" class="comment-item__media">
+        <div v-if="mediaImages.length" class="comment-item__image-grid">
+          <el-image
+            v-for="(image, index) in mediaImages"
+            :key="`${comment.id}-image-${index}`"
+            :src="normalizeCommentImageUrl(image)"
+            :preview-src-list="mediaImages.map(normalizeCommentImageUrl)"
+            fit="cover"
+            class="comment-image-thumb"
+            preview-teleported
+          >
+            <template #error>
+              <div class="comment-image-error">加载失败</div>
+            </template>
+          </el-image>
         </div>
 
-        <div v-if="mediaEmojis.length" class="comment-item__media-section">
-          <span class="comment-item__media-label">表情</span>
-          <div class="comment-item__emoji-list">
-            <el-tag v-for="(emoji, index) in mediaEmojis" :key="`${comment.id}-emoji-${index}`" size="small" effect="plain">
-              {{ emoji }}
-            </el-tag>
-          </div>
-        </div>
-
-        <div v-if="mediaFiles.length" class="comment-item__media-section">
-          <span class="comment-item__media-label">附件</span>
-          <div class="comment-item__file-list">
-            <el-tag
-              v-for="(file, index) in mediaFiles"
-              :key="`${comment.id}-file-${index}`"
-              size="small"
-              type="info"
-              effect="plain"
-            >
-              {{ file.name || file.url || '文件' }}
-            </el-tag>
-          </div>
+        <div v-if="isolatedEmojis.length" class="comment-emoji-inline">
+          <span v-for="(emoji, index) in isolatedEmojis" :key="index">{{ emoji }}</span>
         </div>
       </div>
 
@@ -212,9 +192,23 @@ const normalizedMedia = computed<CommentMediaJson>(() => {
 
 const mediaImages = computed(() => normalizedMedia.value.images ?? [])
 const mediaEmojis = computed(() => normalizedMedia.value.emojis ?? [])
-const mediaFiles = computed(() => normalizedMedia.value.files ?? [])
 const avatarText = computed(() => props.comment.nickname?.slice(0, 1) || 'U')
 const displayNickname = computed(() => props.comment.nickname || props.comment.username || '用户')
+
+const normalizedAvatar = computed(() => normalizeCommentImageUrl(props.comment.avatar))
+
+/** true when content is empty but media_json.emojis exists — show emojis inline */
+const isolatedEmojis = computed(() => {
+  const hasContent = (props.comment.content || '').trim().length > 0
+  return !hasContent && mediaEmojis.value.length > 0 ? mediaEmojis.value : []
+})
+
+function normalizeCommentImageUrl(url: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  return `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+}
 const displayContent = computed(() => {
   if (isDeleted.value) {
     return '该评论已删除'
@@ -225,9 +219,6 @@ const displayContent = computed(() => {
   const text = (props.comment.content || '').trim()
   if (text) {
     return text
-  }
-  if (mediaImages.value.length || mediaEmojis.value.length || mediaFiles.value.length) {
-    return '该评论仅包含富媒体内容'
   }
   return ''
 })
@@ -366,19 +357,7 @@ function handleDeleteEvent(comment: CommentItemData) {
 }
 
 .comment-item__media {
-  display: grid;
-  gap: 10px;
-  padding: 12px 0 0;
-}
-
-.comment-item__media-section {
-  display: grid;
-  gap: 8px;
-}
-
-.comment-item__media-label {
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  padding: 8px 0 0;
 }
 
 .comment-item__image-grid {
@@ -387,19 +366,31 @@ function handleDeleteEvent(comment: CommentItemData) {
   gap: 8px;
 }
 
-.comment-item__image-link img {
+.comment-image-thumb {
   width: 96px;
   height: 96px;
-  object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-lighter);
+  cursor: pointer;
 }
 
-.comment-item__emoji-list,
-.comment-item__file-list {
+.comment-image-error {
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+
+.comment-emoji-inline {
+  display: flex;
+  gap: 6px;
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 .comment-item__actions {
@@ -476,9 +467,9 @@ function handleDeleteEvent(comment: CommentItemData) {
     flex-wrap: wrap;
   }
 
-  .comment-item__image-link img {
-    width: 84px;
-    height: 84px;
+  .comment-image-thumb {
+    width: 80px;
+    height: 80px;
   }
 
   .comment-item__replies {
