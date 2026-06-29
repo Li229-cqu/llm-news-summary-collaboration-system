@@ -29,6 +29,7 @@ from app.modules.community.service import (
     ai_news_helper,
     block_user,
     create_comment,
+    delete_comment,
     create_post,
     get_comments,
     get_comments_summary,
@@ -158,6 +159,14 @@ async def like_comment(
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[LikeResponse]:
     return success_response(toggle_comment_like(comment_id, current_user=current_user))
+
+
+@router.delete("/comments/{comment_id}", response_model=ApiResponse[dict])
+async def delete_comment_route(
+    comment_id: int = Path(..., ge=1, description="璇勮ID"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[dict]:
+    return success_response(delete_comment(comment_id, current_user=current_user))
 
 
 @router.post("/users/{user_id}/block", response_model=ApiResponse[BlockResponse])

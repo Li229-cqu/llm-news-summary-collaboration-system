@@ -10,6 +10,7 @@ export interface CommunityPost {
   updated_at: string
   likes: number
   comments: number
+  comment_count?: number
   views: number
   tags: string[]
   liked?: boolean
@@ -33,15 +34,27 @@ export interface PostListResponse {
 export interface CommentItem {
   id: number
   post_id: number
+  user_id: number
+  username: string
+  nickname: string
+  avatar: string
+  parent_id: number | null
   content: string
-  author: string
-  author_id: number
-  created_at: string
-  likes: number
+  like_count: number
+  status: number
+  create_time: string
+  is_liked: boolean
+  replies: CommentItem[]
+  media_json?: CommentMediaJson | null
+  author?: string
+  author_id?: number
+  created_at?: string
+  likes?: number
 }
 
 export interface CreateCommentRequest {
   content: string
+  media_json?: CommentMediaJson | null
 }
 
 export interface CommentListResponse {
@@ -78,6 +91,23 @@ export interface LikeResponse {
   count: number
 }
 
+export interface CommentDeleteResponse {
+  comment_id: number
+  deleted: boolean
+  post_id: number
+  comment_count: number
+}
+
+export interface CommentMediaJson {
+  images?: string[]
+  emojis?: string[]
+  files?: Array<{
+    name?: string
+    url?: string
+    type?: string
+  }>
+}
+
 export interface PostListParams {
   page?: number
   page_size?: number
@@ -105,12 +135,24 @@ export function createComment(postId: number | string, data: CreateCommentReques
   return request.post<CommentItem, CommentItem>(`/api/community/posts/${postId}/comments`, data)
 }
 
+export function replyComment(commentId: number | string, data: CreateCommentRequest) {
+  return request.post<CommentItem, CommentItem>(`/api/community/comments/${commentId}/reply`, data)
+}
+
 export function getComments(postId: number | string, params: CommentListParams = {}) {
   return request.get<CommentListResponse, CommentListResponse>(`/api/community/posts/${postId}/comments`, { params })
 }
 
 export function toggleLike(postId: number | string) {
   return request.post<LikeResponse, LikeResponse>(`/api/community/posts/${postId}/like`)
+}
+
+export function likeComment(commentId: number | string) {
+  return request.post<LikeResponse, LikeResponse>(`/api/community/comments/${commentId}/like`)
+}
+
+export function deleteComment(commentId: number | string) {
+  return request.delete<CommentDeleteResponse, CommentDeleteResponse>(`/api/community/comments/${commentId}`)
 }
 
 export function getHotSearch(params: { limit?: number } = {}) {

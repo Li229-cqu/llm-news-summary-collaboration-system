@@ -2,43 +2,89 @@
   <main class="page-container">
     <div class="community-layout">
       <div class="community-main">
-        <el-card class="app-card post-form-card" shadow="never">
-          <h2 class="card-title">发帖</h2>
-          <el-form :model="postForm" label-width="0">
-            <el-input
-              v-model="postForm.title"
-              placeholder="输入帖子标题"
-              class="post-title-input"
-            />
-            <el-textarea
-              v-model="postForm.content"
-              placeholder="分享你的想法..."
-              :rows="4"
-              class="post-content-input"
-            />
-            <div class="post-tags">
-              <el-tag
-                v-for="tag in postForm.tags"
-                :key="tag"
-                closable
-                @close="removeTag(tag)"
-              >
-                {{ tag }}
-              </el-tag>
-              <el-input
-                v-model="newTag"
-                placeholder="添加标签"
-                class="tag-input"
-                @keyup.enter="addTag"
-              />
+        <el-card class="app-card post-entry-card" shadow="never">
+          <div class="post-entry">
+            <div class="post-entry-text">
+              <h2 class="card-title">社区交流</h2>
+              <p class="post-entry-desc">分享观点、讨论新闻、参与互动</p>
             </div>
-            <div class="post-actions">
-              <el-button type="primary" @click="submitPost" :loading="submitting">
-                发布帖子
+            <el-button type="primary" class="post-entry-button" @click="openPostDialog">
+              发布帖子
+            </el-button>
+          </div>
+        </el-card>
+
+        <el-dialog
+          v-model="postDialogVisible"
+          title="发布新帖子"
+          width="640px"
+          class="post-dialog"
+          :close-on-click-modal="false"
+          @close="closePostDialog"
+        >
+          <el-form :model="postForm" label-width="0" @submit.prevent="submitPost">
+            <el-form-item>
+              <el-input
+                v-model="postForm.title"
+                placeholder="请输入帖子标题"
+                maxlength="80"
+                show-word-limit
+                class="post-title-input"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-input
+                v-model="postForm.content"
+                type="textarea"
+                placeholder="分享你的观点、问题或发现..."
+                :rows="6"
+                maxlength="2000"
+                show-word-limit
+                class="post-content-input"
+              />
+            </el-form-item>
+            <el-form-item>
+              <div class="post-tags">
+                <el-tag
+                  v-for="tag in postForm.tags"
+                  :key="tag"
+                  closable
+                  @close="removeTag(tag)"
+                >
+                  {{ tag }}
+                </el-tag>
+                <el-input
+                  v-model="newTag"
+                  placeholder="添加标签"
+                  class="tag-input"
+                  @keyup.enter.prevent="addTag"
+                />
+              </div>
+              <div v-if="suggestedTags.length" class="suggested-tags-wrap">
+                <div class="suggested-tags-title">推荐标签</div>
+                <div class="suggested-tags">
+                  <el-tag
+                    v-for="tag in suggestedTags"
+                    :key="tag"
+                    class="suggested-tag"
+                    effect="plain"
+                    @click="addSuggestedTag(tag)"
+                  >
+                    + {{ tag }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <div class="dialog-footer">
+              <el-button @click="closePostDialog">取消</el-button>
+              <el-button type="primary" :loading="submitting" :disabled="submitting" @click="submitPost">
+                发布
               </el-button>
             </div>
-          </el-form>
-        </el-card>
+          </template>
+        </el-dialog>
 
         <el-card class="app-card" shadow="never">
           <div class="section-header">
@@ -54,15 +100,36 @@
               <el-button @click="handleSearchClear">清空</el-button>
             </div>
           </div>
+          <div class="tag-filter-bar">
+            <span class="tag-filter-title">热门标签：</span>
+            <el-tag
+              :type="!selectedTag ? 'primary' : 'info'"
+              effect="light"
+              class="filter-tag"
+              @click="selectedTag = ''"
+            >
+              全部
+            </el-tag>
+            <el-tag
+              v-for="tag in hotTags"
+              :key="tag.name"
+              :type="selectedTag === tag.name ? 'primary' : 'info'"
+              effect="light"
+              class="filter-tag"
+              @click="selectedTag = tag.name"
+            >
+              {{ tag.name }} {{ tag.count }}
+            </el-tag>
+          </div>
           <div v-if="loadingPosts" class="loading-container">
             <el-spinner />
           </div>
-          <div v-else-if="posts.length === 0" class="empty-state">
-            <el-empty :description="searchKeyword ? '未找到相关帖子' : '暂无帖子'" />
+          <div v-else-if="filteredPosts.length === 0" class="empty-state">
+            <el-empty :description="selectedTag ? '暂无该标签下的帖子' : searchKeyword ? '未找到相关帖子' : '暂无帖子'" />
           </div>
           <div v-else class="posts-list">
             <el-card
-              v-for="post in posts"
+              v-for="post in filteredPosts"
               :key="post.id"
               class="post-card"
               hover
@@ -131,15 +198,23 @@
               class="hot-search-item"
               @click="handleHotSearch(item.keyword)"
             >
-              <span :class="['rank', getRankClass(item.rank)]">{{ item.rank }}</span>
-              <span class="keyword">{{ item.keyword }}</span>
-              <el-icon :class="['trend', item.trend]">
-                <ArrowUp v-if="item.trend === 'up'" />
-                <ArrowDown v-else-if="item.trend === 'down'" />
-                <Minus v-else />
-              </el-icon>
+              <div :class="['rank', getRankClass(item.rank)]">{{ item.rank }}</div>
+              <div class="hot-search-content">
+                <div class="keyword-row">
+                  <span class="keyword">{{ item.keyword }}</span>
+                  <el-icon :class="['trend', item.trend]">
+                    <ArrowUp v-if="item.trend === 'up'" />
+                    <ArrowDown v-else-if="item.trend === 'down'" />
+                    <Minus v-else />
+                  </el-icon>
+                </div>
+                <div class="hot-search-meta">
+                  <span>热度 {{ item.search_count }}</span>
+                  <span>排名 {{ item.rank }}</span>
+                </div>
+              </div>
               <el-button class="timeline-link" type="primary" link @click.stop="openTimelineForHotSearch(item)">
-                查看事件脉络
+                查看脉络
               </el-button>
             </div>
           </div>
@@ -244,32 +319,40 @@
             </el-tag>
           </div>
         </div>
-        <h4>评论 ({{ comments.length }})</h4>
+        <div class="comments-header">
+          <h4>评论 ({{ comments.length }})</h4>
+          <span class="comments-hint">支持图片和表情</span>
+        </div>
+
+        <CommentBox
+          placeholder="写下你的评论..."
+          button-text="发表评论"
+          :loading="submittingComment"
+          class="community-comment-box"
+          @submit="handleCreateComment"
+        />
+
         <div v-if="loadingComments" class="loading-container">
           <el-spinner />
         </div>
+        <div v-else-if="comments.length === 0" class="empty-state">
+          <el-empty description="暂无评论，快来发第一条吧" />
+        </div>
         <div v-else class="comments-list">
-          <div
+          <CommentItem
             v-for="comment in comments"
             :key="comment.id"
-            class="comment-item"
-          >
-            <el-avatar :text="comment.author.slice(0, 1)" />
-            <div class="comment-content">
-              <span class="comment-author">{{ comment.author }}</span>
-              <p>{{ comment.content }}</p>
-              <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
-            </div>
-          </div>
-        </div>
-        <el-input
-          v-model="newComment"
-          placeholder="写下你的评论..."
-          @keyup.enter="submitComment"
-          class="comment-input"
-        />
-        <div class="comment-actions">
-          <el-button type="primary" @click="submitComment">发表评论</el-button>
+            :comment="comment"
+            :replying-id="replyingCommentId"
+            :loading-like="commentLikeLoadingId === comment.id"
+            :loading-reply="commentReplyLoadingId === comment.id"
+            :deleting-id="commentDeleteLoadingId"
+            :current-user-id="userStore.userInfo?.id ?? null"
+            :current-user-role="userStore.role"
+            @like="handleCommentLike"
+            @reply="handleCommentReply"
+            @delete="handleCommentDelete"
+          />
         </div>
       </div>
     </el-dialog>
@@ -277,9 +360,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Star,
   StarFilled,
@@ -299,17 +382,26 @@ import {
   getPostDetail,
   getComments,
   createComment,
+  replyComment,
+  deleteComment,
+  likeComment,
   toggleLike,
   getHotSearch,
   aiNewsHelper,
   getCommentsSummary,
   type CommunityPost,
+  type CommentItem as CommunityCommentItem,
   type HotSearchItem,
   type CommentsSummaryResponse,
 } from '@/api/community'
 import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 import { useUserStore } from '@/stores/user'
 import TimelineDrawer from '@/components/timeline/TimelineDrawer.vue'
+import CommentBox from '@/components/interaction/CommentBox.vue'
+import CommentItem, {
+  type CommentItemData as RichCommentItemData,
+  type CommentMediaJson,
+} from '@/components/interaction/CommentItem.vue'
 
 const postForm = ref({
   title: '',
@@ -328,6 +420,32 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const postTotal = ref(0)
 const searchKeyword = ref('')
+const selectedTag = ref('')
+
+const hotTags = computed(() => {
+  const counter = new Map<string, number>()
+
+  posts.value.forEach((post) => {
+    ;(post.tags || []).forEach((tag) => {
+      const normalizedTag = String(tag || '').trim()
+      if (!normalizedTag) return
+      counter.set(normalizedTag, (counter.get(normalizedTag) || 0) + 1)
+    })
+  })
+
+  return Array.from(counter.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+})
+
+const filteredPosts = computed(() => {
+  if (!selectedTag.value) {
+    return posts.value
+  }
+
+  return posts.value.filter((post) => (post.tags || []).includes(selectedTag.value))
+})
 
 const hotSearchList = ref<HotSearchItem[]>([])
 const loadingHotSearch = ref(false)
@@ -341,19 +459,77 @@ const aiQuestion = ref('')
 const aiMessages = ref<{ type: 'user' | 'ai'; content: string }[]>([])
 const aiLoading = ref(false)
 
+const postDialogVisible = ref(false)
 const showPostModal = ref(false)
 const selectedPost = ref<CommunityPost | null>(null)
-const comments = ref<any[]>([])
+const comments = ref<CommunityCommentItem[]>([])
 const loadingComments = ref(false)
+const submittingComment = ref(false)
 const newComment = ref('')
+const replyingCommentId = ref<number | null>(null)
+const commentLikeLoadingId = ref<number | null>(null)
+const commentReplyLoadingId = ref<number | null>(null)
+const commentDeleteLoadingId = ref<number | null>(null)
 const commentsSummary = ref<CommentsSummaryResponse | null>(null)
 const loadingCommentsSummary = ref(false)
 
-function addTag() {
-  if (newTag.value && !postForm.value.tags.includes(newTag.value)) {
-    postForm.value.tags.push(newTag.value)
-    newTag.value = ''
+const tagRules = [
+  {
+    tag: 'AI生成',
+    keywords: ['AI', '大模型', '生成', '标题生成', '摘要生成', '智能生成'],
+  },
+  {
+    tag: '摘要',
+    keywords: ['摘要', '总结', '概括', '长摘要', '短摘要'],
+  },
+  {
+    tag: '新闻推荐',
+    keywords: ['推荐', '个性化', '首页', '推送', '阅读偏好'],
+  },
+  {
+    tag: '社区反馈',
+    keywords: ['社区', '帖子', '发帖', '互动', '讨论'],
+  },
+  {
+    tag: '评论审核',
+    keywords: ['评论', '审核', '删除', '举报', '拉黑', '管理'],
+  },
+  {
+    tag: '时间线',
+    keywords: ['时间线', '脉络', '事件脉络', 'timeline', '发展过程'],
+  },
+  {
+    tag: '爬虫数据',
+    keywords: ['爬虫', '采集', 'RSS', '新闻源', '数据源'],
+  },
+  {
+    tag: '系统问题',
+    keywords: ['bug', '报错', '失败', '无法', '问题', '异常'],
+  },
+  {
+    tag: '功能建议',
+    keywords: ['建议', '优化', '希望', '能不能', '增加', '改进'],
+  },
+] as const
+
+const suggestedTags = computed(() => {
+  const text = `${postForm.value.title || ''} ${postForm.value.content || ''}`.toLowerCase()
+  const currentTags = postForm.value.tags
+
+  if (!text.trim()) {
+    return [] as string[]
   }
+
+  return tagRules
+    .filter((rule) => rule.keywords.some((keyword) => text.includes(keyword.toLowerCase())))
+    .map((rule) => rule.tag)
+    .filter((tag) => !currentTags.includes(tag))
+    .slice(0, 5)
+})
+
+function addTag() {
+  addSuggestedTag(newTag.value)
+  newTag.value = ''
 }
 
 function removeTag(tag: string) {
@@ -363,19 +539,62 @@ function removeTag(tag: string) {
   }
 }
 
-async function submitPost() {
-  if (!postForm.value.title || !postForm.value.content) {
+function addSuggestedTag(tag: string) {
+  const normalizedTag = tag.trim()
+  if (!normalizedTag) {
     return
   }
+
+  if (postForm.value.tags.includes(normalizedTag)) {
+    return
+  }
+
+  if (postForm.value.tags.length >= 5) {
+    ElMessage.warning('最多添加 5 个标签')
+    return
+  }
+
+  postForm.value.tags.push(normalizedTag)
+}
+
+function openPostDialog() {
+  postDialogVisible.value = true
+}
+
+function closePostDialog() {
+  if (submitting.value) {
+    return
+  }
+  postDialogVisible.value = false
+}
+
+async function submitPost() {
+  const title = postForm.value.title.trim()
+  const content = postForm.value.content.trim()
+
+  if (!title || !content) {
+    if (!title) {
+      ElMessage.warning('请输入帖子标题')
+    } else {
+      ElMessage.warning('请输入帖子内容')
+    }
+    return
+  }
+
   submitting.value = true
   try {
     await createPost({
-      title: postForm.value.title,
-      content: postForm.value.content,
+      title,
+      content,
       tags: postForm.value.tags,
     })
+    ElMessage.success('发布成功')
     postForm.value = { title: '', content: '', tags: [] }
+    newTag.value = ''
+    postDialogVisible.value = false
     await loadPosts(1)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '发帖失败，请稍后重试')
   } finally {
     submitting.value = false
   }
@@ -523,6 +742,7 @@ async function sendAIQuestion() {
 
 async function showPostDetail(post: CommunityPost) {
   selectedPost.value = post
+  replyingCommentId.value = null
   showPostModal.value = true
   await loadComments(post.id)
   await loadCommentsSummary(post.id)
@@ -544,9 +764,106 @@ async function loadComments(postId: number) {
   loadingComments.value = true
   try {
     const result = await getComments(postId)
-    comments.value = result.list
+    comments.value = result.list || []
   } finally {
     loadingComments.value = false
+  }
+}
+
+async function handleCreateComment(content: string, mediaJson: CommentMediaJson | null) {
+  if (!selectedPost.value) return
+
+  const normalizedContent = content.trim()
+  if (!normalizedContent && !mediaJson) return
+
+  submittingComment.value = true
+  try {
+    await createComment(selectedPost.value.id, {
+      content: normalizedContent || ' ',
+      media_json: mediaJson,
+    })
+    await loadComments(selectedPost.value.id)
+    selectedPost.value.comment_count = (selectedPost.value.comment_count || 0) + 1
+    selectedPost.value.comments = (selectedPost.value.comments || 0) + 1
+  } catch (e) {
+    console.error('评论失败', e)
+    ElMessage.error(e instanceof Error ? e.message : '评论失败，请稍后重试')
+  } finally {
+    submittingComment.value = false
+  }
+}
+
+async function handleCommentLike(comment: RichCommentItemData) {
+  if (!selectedPost.value) return
+
+  commentLikeLoadingId.value = comment.id
+  try {
+    await likeComment(comment.id)
+    await loadComments(selectedPost.value.id)
+  } catch (e) {
+    console.error('评论点赞失败', e)
+    ElMessage.error(e instanceof Error ? e.message : '评论点赞失败，请稍后重试')
+  } finally {
+    commentLikeLoadingId.value = null
+  }
+}
+
+async function handleCommentReply(comment: RichCommentItemData, content: string, mediaJson?: CommentMediaJson | null) {
+  if (!selectedPost.value) return
+
+  if (content === '__toggle__') {
+    replyingCommentId.value = replyingCommentId.value === comment.id ? null : comment.id
+    return
+  }
+
+  if (!content.trim()) {
+    replyingCommentId.value = null
+    return
+  }
+
+  commentReplyLoadingId.value = comment.id
+  try {
+    await replyComment(comment.id, {
+      content,
+      media_json: mediaJson,
+    })
+    replyingCommentId.value = null
+    await loadComments(selectedPost.value.id)
+    selectedPost.value.comment_count = (selectedPost.value.comment_count || 0) + 1
+    selectedPost.value.comments = (selectedPost.value.comments || 0) + 1
+  } catch (e) {
+    console.error('回复评论失败', e)
+    ElMessage.error(e instanceof Error ? e.message : '回复评论失败，请稍后重试')
+  } finally {
+    commentReplyLoadingId.value = null
+  }
+}
+
+async function handleCommentDelete(comment: RichCommentItemData) {
+  if (!selectedPost.value) return
+
+  try {
+    await ElMessageBox.confirm('确定删除这条评论吗？', '删除评论', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+
+  commentDeleteLoadingId.value = comment.id
+  try {
+    const result = await deleteComment(comment.id)
+    await loadComments(selectedPost.value.id)
+    selectedPost.value.comment_count = result.comment_count ?? Math.max(0, (selectedPost.value.comment_count || 0) - 1)
+    selectedPost.value.comments = selectedPost.value.comment_count || 0
+    ElMessage.success('评论已删除')
+  } catch (e) {
+    console.error('删除评论失败', e)
+    ElMessage.error(e instanceof Error ? e.message : '删除评论失败')
+  } finally {
+    commentDeleteLoadingId.value = null
   }
 }
 
@@ -631,8 +948,30 @@ onMounted(() => {
   gap: 8px;
 }
 
-.post-form-card {
+.post-entry-card {
   margin-bottom: 24px;
+}
+
+.post-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 96px;
+}
+
+.post-entry-text {
+  min-width: 0;
+}
+
+.post-entry-desc {
+  margin: 8px 0 0;
+  color: #909399;
+  font-size: 14px;
+}
+
+.post-entry-button {
+  flex-shrink: 0;
 }
 
 .post-title-input {
@@ -651,12 +990,68 @@ onMounted(() => {
 }
 
 .tag-input {
-  width: 120px;
+  width: 160px;
+}
+
+.tag-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tag-filter-title {
+  font-weight: 600;
+  color: #374151;
+}
+
+.filter-tag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.suggested-tags-wrap {
+  margin-top: 8px;
+}
+
+.suggested-tags-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #909399;
+}
+
+.suggested-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggested-tag {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-style: dashed;
+}
+
+.suggested-tag:hover {
+  color: #409eff;
+  border-color: #409eff;
+  background: rgba(64, 158, 255, 0.08);
 }
 
 .post-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.post-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
 }
 
 .loading-container {
@@ -749,55 +1144,96 @@ onMounted(() => {
 }
 
 .hot-search-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .hot-search-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: var(--color-bg-card, #fff);
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.3s;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .hot-search-item:hover {
-  background-color: #f5f7fa;
+  border-color: color-mix(in srgb, var(--color-primary) 30%, #e5e7eb);
+  box-shadow: 0 8px 16px rgb(15 23 42 / 8%);
+  transform: translateY(-1px);
 }
 
 .rank {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: #999;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-primary-soft, #e8f1ff);
+  color: var(--color-primary, #409eff);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .rank.top-three {
-  background-color: #fff2e8;
-  color: #ff9800;
-}
-
-.rank:nth-child(1) {
-  background-color: #fff2e8;
-  color: #f56c6c;
+  background: color-mix(in srgb, var(--color-primary) 14%, white);
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 14%, white);
 }
 
 .keyword {
-  flex: 1;
   font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #1f2937);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hot-search-content {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.keyword-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.keyword-row .keyword {
+  flex: 1;
+}
+
+.hot-search-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 12px;
+}
+
+.hot-search-item .trend {
+  margin-left: 2px;
 }
 
 .timeline-link {
   flex-shrink: 0;
+  justify-self: end;
+  padding: 0;
 }
 
 .trend {
@@ -814,6 +1250,37 @@ onMounted(() => {
 
 .trend.stable {
   color: #999;
+}
+
+@media (max-width: 768px) {
+  .hot-search-item {
+    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-areas:
+      'rank content'
+      'rank action';
+  }
+
+  .rank {
+    grid-area: rank;
+  }
+
+  .hot-search-content {
+    grid-area: content;
+    min-width: 0;
+  }
+
+  .keyword-row {
+    justify-content: space-between;
+  }
+
+  .hot-search-item .trend {
+    justify-self: end;
+  }
+
+  .timeline-link {
+    grid-area: action;
+    justify-self: start;
+  }
 }
 
 .ai-helper-card {
@@ -965,6 +1432,23 @@ onMounted(() => {
 .summary-tags {
   display: flex;
   gap: 8px;
+}
+
+.comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 12px;
+}
+
+.comments-hint {
+  font-size: 12px;
+  color: #909399;
+}
+
+.community-comment-box {
+  margin-bottom: 16px;
 }
 
 .comments-list {

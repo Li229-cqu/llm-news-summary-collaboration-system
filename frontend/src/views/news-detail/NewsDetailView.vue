@@ -64,8 +64,12 @@
             :replying-id="replyingId"
             :loading-like="actionLoading === 'comment-like'"
             :loading-reply="submittingComment"
+            :deleting-id="deletingCommentId"
+            :current-user-id="userStore.userInfo?.id ?? null"
+            :current-user-role="userStore.role"
             @like="handleLikeComment"
             @reply="handleReplyComment"
+            @delete="handleDeleteComment"
           />
         </el-card>
       </section>
@@ -92,10 +96,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getNewsDetail, recordBrowse, type NewsDetail, type NewsItem } from '@/api/news'
 import {
   createNewsComment,
+  deleteNewsComment,
   favoriteNews,
   getNewsComments,
   likeComment,
@@ -103,7 +108,6 @@ import {
   replyComment,
   unfavoriteNews,
   unlikeNews,
-  type CommentItem,
 } from '@/api/interaction'
 import { useUserStore } from '@/stores/user'
 import { useAIDraftStore } from '@/stores/aiDraft'
@@ -116,6 +120,7 @@ import FavoriteButton from '@/components/interaction/FavoriteButton.vue'
 import ShareButton from '@/components/interaction/ShareButton.vue'
 import CommentBox from '@/components/interaction/CommentBox.vue'
 import CommentList from '@/components/interaction/CommentList.vue'
+import type { CommentItemData as RichCommentItemData, CommentMediaJson } from '@/components/interaction/CommentItem.vue'
 
 type ActionType = 'like' | 'unlike' | 'favorite' | 'unfavorite' | 'comment-like' | ''
 
@@ -127,11 +132,12 @@ const aiDraft = useAIDraftStore()
 type NewsDetailWithTopic = NewsDetail & { topic_id?: number | null }
 
 const newsDetail = ref<NewsDetailWithTopic | null>(null)
-const comments = ref<CommentItem[]>([])
+const comments = ref<RichCommentItemData[]>([])
 const loading = ref(false)
 const loadingComments = ref(false)
 const submittingComment = ref(false)
 const actionLoading = ref<ActionType>('')
+const deletingCommentId = ref<number | null>(null)
 const error = ref('')
 const commentTotal = ref(0)
 const replyingId = ref<number | null>(null)
@@ -344,7 +350,7 @@ async function handleCreateComment(content: string) {
   }
 }
 
-async function handleReplyComment(comment: CommentItem, content: string) {
+async function handleReplyComment(comment: RichCommentItemData, content: string, mediaJson?: CommentMediaJson | null) {
   if (!requireLogin() || !newsDetail.value) {
     return
   }
@@ -362,7 +368,7 @@ async function handleReplyComment(comment: CommentItem, content: string) {
   submittingComment.value = true
 
   try {
-    await replyComment(comment.id, { content })
+    await replyComment(comment.id, { content, media_json: mediaJson ?? null })
     replyingId.value = null
     await loadComments()
     newsDetail.value = {
@@ -376,7 +382,7 @@ async function handleReplyComment(comment: CommentItem, content: string) {
   }
 }
 
-async function handleLikeComment(comment: CommentItem) {
+async function handleLikeComment(comment: RichCommentItemData) {
   if (!requireLogin()) {
     return
   }
@@ -390,6 +396,37 @@ async function handleLikeComment(comment: CommentItem) {
     ElMessage.error(requestError instanceof Error ? requestError.message : '评论点赞失败')
   } finally {
     actionLoading.value = ''
+  }
+}
+
+async function handleDeleteComment(comment: RichCommentItemData) {
+  if (!requireLogin() || !newsDetail.value) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('确定删除这条评论吗？', '删除评论', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+
+  deletingCommentId.value = comment.id
+  try {
+    const result = await deleteNewsComment(comment.id)
+    await loadComments()
+    newsDetail.value = {
+      ...newsDetail.value,
+      comment_count: result.comment_count ?? Math.max(0, newsDetail.value.comment_count - 1),
+    }
+    ElMessage.success('评论已删除')
+  } catch (requestError) {
+    ElMessage.error(requestError instanceof Error ? requestError.message : '删除评论失败')
+  } finally {
+    deletingCommentId.value = null
   }
 }
 

@@ -48,6 +48,50 @@ def _format_datetime(value: Any) -> str:
     return format_datetime(value) or _now_text()
 
 
+@lru_cache(maxsize=1)
+def _db_post_comment_has_media_json() -> bool:
+    try:
+        row = execute_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'post_comment'
+              AND column_name = 'media_json'
+            """,
+        )
+        return bool(int(row.get("cnt") or 0)) if row else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _normalize_media_json(value: Any) -> Any:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+    return value
+
+
+def _serialize_media_json(value: Any) -> Optional[str]:
+    normalized = _normalize_media_json(value)
+    if normalized is None:
+        return None
+    if isinstance(normalized, str):
+        return normalized
+    return json.dumps(normalized, ensure_ascii=False)
+
+
 def _parse_json_list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -86,6 +130,20 @@ def _current_user_name(current_user: Optional[Any]) -> str:
     if isinstance(current_user, dict):
         return normalize_text(current_user.get("nickname") or current_user.get("username"))
     return normalize_text(getattr(current_user, "nickname", "") or getattr(current_user, "username", ""))
+
+
+def _can_delete_comment(current_user: Any, comment_user_id: int) -> bool:
+    current_user_id = _current_user_id(current_user)
+    if current_user_id is None:
+        return False
+    if current_user_id == comment_user_id:
+        return True
+    role = ""
+    if isinstance(current_user, dict):
+        role = str(current_user.get("role", "") or "").lower()
+    else:
+        role = str(getattr(current_user, "role", "") or "").lower()
+    return role in {"admin", "editor"}
 
 
 def _db_has_posts() -> bool:
@@ -218,6 +276,13 @@ def _comment_row_to_item(
         normalize_text(row.get("author")),
     )
     like_count = int(row.get("like_count") or 0)
+    status = int(row.get("status") or 0)
+    if status == 4:
+        content = "该评论已删除"
+    elif status == 2:
+        content = "该评论已被折叠"
+    else:
+        content = normalize_text(row.get("content"))
     item = {
         "id": int(row.get("id") or 0),
         "post_id": int(row.get("post_id") or 0),
@@ -226,10 +291,11 @@ def _comment_row_to_item(
         "nickname": normalize_text(row.get("nickname")),
         "avatar": normalize_text(row.get("avatar")),
         "parent_id": row.get("parent_id"),
-        "content": normalize_text(row.get("content")),
+        "content": content,
         "like_count": like_count,
-        "status": int(row.get("status") or 0),
+        "status": status,
         "create_time": _format_datetime(row.get("create_time")),
+        "media_json": _normalize_media_json(row.get("media_json")),
         "author": author_name,
         "author_id": int(row.get("author_id") or row.get("user_id") or 0),
         "created_at": _format_datetime(row.get("create_time")),
@@ -275,7 +341,11 @@ def _mock_news_title_map() -> dict[int, str]:
 
 
 def _mock_comments_for_post(post_id: int) -> list[dict[str, Any]]:
-    comments = [deepcopy(item) for item in MOCK_COMMUNITY_COMMENTS if int(item.get("post_id") or 0) == post_id and int(item.get("status") or 0) == 1]
+    comments = [
+        deepcopy(item)
+        for item in MOCK_COMMUNITY_COMMENTS
+        if int(item.get("post_id") or 0) == post_id and int(item.get("status") or 0) in (1, 2, 4)
+    ]
     comments.sort(
         key=lambda item: (
             _format_datetime(item.get("create_time")),
@@ -552,8 +622,9 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
     if post_exists is None:
         return None
 
+    media_json_column = "pc.media_json" if _db_post_comment_has_media_json() else "NULL AS media_json"
     rows = execute_query(
-        """
+        f"""
         SELECT
             pc.id,
             pc.post_id,
@@ -565,10 +636,11 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
             pc.content,
             pc.like_count,
             pc.status,
-            pc.create_time
+            pc.create_time,
+            {media_json_column}
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
-        WHERE pc.post_id = %s AND pc.status = 1
+        WHERE pc.post_id = %s AND pc.status IN (1, 2, 4)
         ORDER BY pc.create_time ASC, pc.id ASC
         """,
         [post_id],
@@ -1159,6 +1231,67 @@ def _db_comment_post_id(comment_id: int) -> Optional[int]:
     return int(row["post_id"])
 
 
+def _db_delete_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any] | None:
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, post_id, user_id
+                FROM post_comment
+                WHERE id = %s AND status <> 4
+                LIMIT 1
+                """,
+                [comment_id],
+            )
+            comment = cursor.fetchone()
+            if comment is None:
+                return None
+
+            if not _can_delete_comment(current_user, int(comment["user_id"] or 0)):
+                raise AppException(code=403, message="当前账号无权限访问该资源")
+
+            cursor.execute(
+                """
+                UPDATE post_comment
+                SET status = 4, update_time = NOW()
+                WHERE id = %s
+                """,
+                [comment_id],
+            )
+            cursor.execute(
+                """
+                UPDATE community_post
+                SET comment_count = GREATEST(comment_count - 1, 0),
+                    heat_score = GREATEST(heat_score - 1, 0),
+                    update_time = NOW()
+                WHERE id = %s
+                """,
+                [int(comment["post_id"] or 0)],
+            )
+            cursor.execute(
+                "SELECT comment_count FROM community_post WHERE id = %s LIMIT 1",
+                [int(comment["post_id"] or 0)],
+            )
+            updated = cursor.fetchone()
+        connection.commit()
+        return {
+            "comment_id": comment_id,
+            "deleted": True,
+            "post_id": int(comment["post_id"] or 0),
+            "comment_count": int(updated["comment_count"]) if updated else 0,
+        }
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user: Optional[Any]) -> CommentItem:
     user_id = _current_user_id(current_user)
     if user_id is None:
@@ -1170,13 +1303,24 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
-                VALUES (%s, %s, NULL, %s, 0, 1, NOW(), NOW())
-                """,
-                [post_id, user_id, request.content],
-            )
+            params: list[Any] = [post_id, user_id, request.content]
+            media_json_value = _serialize_media_json(getattr(request, "media_json", None))
+            if _db_post_comment_has_media_json():
+                cursor.execute(
+                    """
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    VALUES (%s, %s, NULL, %s, %s, 0, 1, NOW(), NOW())
+                    """,
+                    [post_id, user_id, request.content, media_json_value],
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    VALUES (%s, %s, NULL, %s, 0, 1, NOW(), NOW())
+                    """,
+                    params,
+                )
             cursor.execute(
                 "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
                 [post_id],
@@ -1194,8 +1338,9 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
     finally:
         connection.close()
 
+    media_json_column = "pc.media_json" if _db_post_comment_has_media_json() else "NULL AS media_json"
     row = execute_one(
-        """
+        f"""
         SELECT
             pc.id,
             pc.post_id,
@@ -1207,7 +1352,8 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
             pc.content,
             pc.like_count,
             pc.status,
-            pc.create_time
+            pc.create_time,
+            {media_json_column}
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
         WHERE pc.id = %s
@@ -1228,6 +1374,7 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
             like_count=0,
             status=1,
             create_time=_now_text(),
+            media_json=_normalize_media_json(getattr(request, "media_json", None)),
             author=_current_user_name(current_user),
             author_id=user_id,
             created_at=_now_text(),
@@ -1267,13 +1414,24 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
-                VALUES (%s, %s, %s, %s, 0, 1, NOW(), NOW())
-                """,
-                [post_id, user_id, comment_id, request.content],
-            )
+            params: list[Any] = [post_id, user_id, comment_id, request.content]
+            media_json_value = _serialize_media_json(getattr(request, "media_json", None))
+            if _db_post_comment_has_media_json():
+                cursor.execute(
+                    """
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    VALUES (%s, %s, %s, %s, %s, 0, 1, NOW(), NOW())
+                    """,
+                    [post_id, user_id, comment_id, request.content, media_json_value],
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    VALUES (%s, %s, %s, %s, 0, 1, NOW(), NOW())
+                    """,
+                    params,
+                )
             cursor.execute(
                 "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
                 [post_id],
@@ -1325,6 +1483,7 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             like_count=0,
             status=1,
             create_time=_now_text(),
+            media_json=_normalize_media_json(getattr(request, "media_json", None)),
             author=_current_user_name(current_user),
             author_id=user_id,
             created_at=_now_text(),
@@ -1727,6 +1886,7 @@ def _mock_create_comment(post_id: int, request: CreateCommentRequest, current_us
         "like_count": 0,
         "status": 1,
         "create_time": now,
+        "media_json": _normalize_media_json(getattr(request, "media_json", None)),
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -1760,6 +1920,7 @@ def _mock_reply_comment(comment_id: int, request: CreateCommentRequest, current_
         "like_count": 0,
         "status": 1,
         "create_time": now,
+        "media_json": _normalize_media_json(getattr(request, "media_json", None)),
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -1851,6 +2012,40 @@ def _mock_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> L
     return LikeResponse(success=True, liked=True, count=int(comment.get("like_count") or 0))
 
 
+def _mock_delete_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any]:
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="鏈櫥褰曟垨鐧诲綍鐘舵€佸凡澶辨晥")
+    comment = None
+    for item in FALLBACK_COMMENTS:
+        if int(item.get("id") or 0) == comment_id and int(item.get("status") or 0) != 4:
+            comment = item
+            break
+    if comment is None:
+        raise AppException(code=404, message="璇勮涓嶅瓨鍦?")
+
+    if not _can_delete_comment(current_user, int(comment.get("user_id") or 0)):
+        raise AppException(code=403, message="当前账号无权限访问该资源")
+
+    comment["status"] = 4
+    post_id = int(comment.get("post_id") or 0)
+    new_count = 0
+    for post in FALLBACK_POSTS:
+        if int(post.get("id") or 0) == post_id:
+            post["comment_count"] = max(0, int(post.get("comment_count") or 0) - 1)
+            post["heat_score"] = max(0, int(post.get("heat_score") or 0) - 1)
+            post["update_time"] = _now_text()
+            post["updated_at"] = post["update_time"]
+            new_count = int(post.get("comment_count") or 0)
+            break
+    return {
+        "comment_id": comment_id,
+        "deleted": True,
+        "post_id": post_id,
+        "comment_count": new_count,
+    }
+
+
 def _mock_block_user(blocked_user_id: int, current_user: Optional[Any]) -> BlockResponse:
     user_id = _current_user_id(current_user)
     if user_id is None:
@@ -1901,6 +2096,7 @@ def _mock_get_post_comments(post_id: int, current_user: Optional[Any] = None) ->
                 "like_count": int(item.get("like_count") or 0),
                 "status": int(item.get("status") or 0),
                 "create_time": _format_datetime(item.get("create_time")),
+                "media_json": _normalize_media_json(item.get("media_json")),
                 "author": normalize_text(item.get("author")),
                 "author_id": author_id,
                 "created_at": _format_datetime(item.get("create_time")),
@@ -2069,6 +2265,17 @@ def toggle_comment_like(comment_id: int, current_user: Optional[Any] = None) -> 
     except Exception as exc:  # noqa: BLE001
         logger.warning("切换社区评论点赞失败，回退 mock：%s", exc)
     return _mock_toggle_comment_like(comment_id, current_user)
+
+
+def delete_comment(comment_id: int, current_user: Optional[Any] = None) -> dict[str, Any]:
+    try:
+        if _db_has_posts():
+            result = _db_delete_comment(comment_id, current_user)
+            if result is not None:
+                return result
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("鍒犻櫎绀惧尯璇勮澶辫触锛屽洖閫€ mock锛?s", exc)
+    return _mock_delete_comment(comment_id, current_user)
 
 
 def block_user(blocked_user_id: int, current_user: Optional[Any] = None) -> BlockResponse:

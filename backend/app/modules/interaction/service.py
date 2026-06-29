@@ -62,6 +62,13 @@ def _comment_row_to_item_payload(
     else:
         is_liked = comment_id in liked_comment_ids
 
+    if status == 4:
+        content = "该评论已删除"
+    elif status == 2:
+        content = "该评论已被折叠"
+    else:
+        content = normalize_text(row.get("content"))
+
     return {
         "id": comment_id,
         "news_id": int(row.get("news_id") or 0),
@@ -70,7 +77,7 @@ def _comment_row_to_item_payload(
         "nickname": normalize_text(row.get("nickname")),
         "avatar": normalize_text(row.get("avatar")),
         "parent_id": None if row.get("parent_id") is None else int(row.get("parent_id") or 0),
-        "content": "该评论已被折叠" if status == 2 else normalize_text(row.get("content")),
+        "content": content,
         "like_count": int(row.get("like_count") or 0),
         "status": status,
         "create_time": format_datetime(row.get("create_time")),
@@ -128,6 +135,16 @@ def require_current_user(current_user: Optional[Any]) -> Any:
     if current_user is None or user_id is None:
         raise AppException(code=401, message="未登录或登录状态已失效")
     return current_user
+
+
+def _can_delete_comment(current_user: Any, comment_user_id: int) -> bool:
+    current_user_id = _get_current_user_id(current_user)
+    if current_user_id is None:
+        return False
+    if current_user_id == comment_user_id:
+        return True
+    role = str(_get_current_user_value(current_user, "role", "") or "").lower()
+    return role in {"admin", "editor"}
 
 
 def get_news_by_id(news_id: int) -> Dict[str, Any]:
@@ -287,7 +304,7 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
             c.create_time
         FROM news_comment c
         LEFT JOIN user u ON u.id = c.user_id
-        WHERE c.news_id = %s AND c.status <> 4
+        WHERE c.news_id = %s AND c.status IN (1, 2, 4)
         ORDER BY c.create_time ASC, c.id ASC
         """,
         [news_id],
@@ -769,6 +786,89 @@ def _db_like_comment(comment_id: int, current_user: Optional[Any]) -> CommentLik
         connection.close()
 
 
+def _db_delete_news_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any] | None:
+    user = require_current_user(current_user)
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, news_id, user_id, status
+                FROM news_comment
+                WHERE id = %s AND status <> 4
+                LIMIT 1
+                """,
+                [comment_id],
+            )
+            comment = cursor.fetchone()
+            if comment is None:
+                return None
+
+            if not _can_delete_comment(user, int(comment["user_id"] or 0)):
+                raise AppException(code=403, message="当前账号无权限访问该资源")
+
+            cursor.execute(
+                """
+                UPDATE news_comment
+                SET status = 4, update_time = NOW()
+                WHERE id = %s
+                """,
+                [comment_id],
+            )
+            cursor.execute(
+                """
+                UPDATE news
+                SET comment_count = GREATEST(comment_count - 1, 0), update_time = NOW()
+                WHERE id = %s
+                """,
+                [int(comment["news_id"] or 0)],
+            )
+            cursor.execute("SELECT comment_count FROM news WHERE id = %s LIMIT 1", [int(comment["news_id"] or 0)])
+            updated = cursor.fetchone()
+        connection.commit()
+        return {
+            "comment_id": comment_id,
+            "deleted": True,
+            "news_id": int(comment["news_id"] or 0),
+            "comment_count": int(updated["comment_count"]) if updated else 0,
+        }
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def _mock_delete_news_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any]:
+    user = require_current_user(current_user)
+    comment = None
+    for item in MOCK_NEWS_COMMENTS:
+        if int(item.get("id") or 0) == comment_id and int(item.get("status") or 0) != 4:
+            comment = item
+            break
+    if comment is None:
+        raise AppException(code=404, message="评论不存在")
+
+    if not _can_delete_comment(user, int(comment.get("user_id") or 0)):
+        raise AppException(code=403, message="当前账号无权限访问该资源")
+
+    comment["status"] = 4
+    news_id = int(comment.get("news_id") or 0)
+    new_count = 0
+    for news in MOCK_NEWS:
+        if int(news.get("id") or 0) == news_id:
+            news["comment_count"] = max(0, int(news.get("comment_count") or 0) - 1)
+            news["update_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            new_count = int(news["comment_count"] or 0)
+            break
+    return {
+        "comment_id": comment_id,
+        "deleted": True,
+        "news_id": news_id,
+        "comment_count": new_count,
+    }
+
+
 def _mock_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResult:
     user = require_current_user(current_user)
     news = _mock_news_row(news_id)
@@ -889,7 +989,7 @@ def _mock_get_news_comments(news_id: int, current_user: Optional[Any] = None) ->
     rows = [
         dict(comment)
         for comment in MOCK_NEWS_COMMENTS
-        if int(comment.get("news_id") or 0) == news_id and int(comment.get("status") or 0) != 4
+        if int(comment.get("news_id") or 0) == news_id and int(comment.get("status") or 0) in (1, 2, 4)
     ]
     return _assemble_comment_tree(rows, current_user=current_user, liked_comment_ids=None)
 
@@ -981,6 +1081,18 @@ def _mock_like_comment(comment_id: int, current_user: Optional[Any]) -> CommentL
     return CommentLikeResult(comment_id=comment_id, liked=True, like_count=comment["like_count"])
 
 
+def delete_news_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any]:
+    """鍒犻櫎鏂伴椈璇勮锛涙暟鎹簱浼樺厛锛屽け璐ュ悗鍥為€€鍒?mock銆?"""
+
+    try:
+        result = _db_delete_news_comment(comment_id=comment_id, current_user=current_user)
+        if result is not None:
+            return result
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("鏁版嵁搴撳垹闄よ瘎璁哄け璐ワ紝鍥為€€ mock锛?s", exc)
+    return _mock_delete_news_comment(comment_id=comment_id, current_user=current_user)
+
+
 def like_news(news_id: int, current_user: Optional[Any]) -> InteractionResult:
     """点赞新闻；数据库优先，失败后回退到 mock。"""
 
@@ -1035,7 +1147,7 @@ def build_comment_tree(news_id: int, current_user: Optional[Any] = None) -> Comm
     visible_comments = [
         dict(comment)
         for comment in MOCK_NEWS_COMMENTS
-        if int(comment.get("news_id") or 0) == news_id and int(comment.get("status") or 0) != 4
+        if int(comment.get("news_id") or 0) == news_id and int(comment.get("status") or 0) in (1, 2, 4)
     ]
     return _assemble_comment_tree(visible_comments, current_user=current_user, liked_comment_ids=None)
 

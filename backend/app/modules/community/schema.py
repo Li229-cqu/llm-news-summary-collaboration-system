@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -71,6 +71,7 @@ class CommentItem(BaseModel):
     like_count: int = 0
     status: int = 1
     create_time: str | datetime
+    media_json: Any | None = None
 
     # 前端兼容字段
     author: str = ""
@@ -83,6 +84,7 @@ class CommentItem(BaseModel):
 
 class CreateCommentRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=1000, description="评论内容")
+    media_json: Any | None = Field(default=None, description="评论富媒体数据")
 
 
 class CommentListResponse(BaseModel):

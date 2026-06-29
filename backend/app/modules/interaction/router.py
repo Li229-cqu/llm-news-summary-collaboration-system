@@ -20,6 +20,7 @@ from app.modules.interaction.schema import (
 )
 from app.modules.interaction.service import (
     create_news_comment,
+    delete_news_comment,
     favorite_news,
     get_news_comments,
     like_comment,
@@ -122,6 +123,15 @@ async def like_comment_route(
 ) -> ApiResponse[Any]:
     """点赞评论，需要登录。"""
     return success_response(like_comment(comment_id=comment_id, current_user=current_user))
+
+
+@router.delete("/api/comments/{comment_id}")
+async def delete_comment_route(
+    comment_id: int,
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[Any]:
+    """鍒犻櫎璇勮锛岄渶瑕佺櫥褰曘€?"""
+    return success_response(delete_news_comment(comment_id=comment_id, current_user=current_user))
 
 
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB

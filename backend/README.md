@@ -120,6 +120,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 - 当前社区模块已经切换为数据库优先、mock 兜底。
 - `community_post`、`post_comment`、`user_like`、`favorite`、`user_block`、`hot_topic` 优先从 MySQL 读取与写入。
 - 数据库暂时为空或异常时，会自动回退到 `backend/app/mock/community.py` 的 mock 数据，便于课程项目演示。
+- 社区评论接口当前支持 `media_json` 富媒体字段，可用于保存评论中的图片、表情等内容。
 - 社区页面仍然通过 backend 访问，不直接连接数据库。
 ## DB10 登录鉴权数据库优先说明
 

@@ -1,5 +1,9 @@
 <template>
   <div class="comment-box">
+    <div class="comment-box__header">
+      <div class="comment-box__title">{{ titleText }}</div>
+      <div class="comment-box__hint">{{ hintText }}</div>
+    </div>
     <el-input
       ref="textareaRef"
       v-model="content"
@@ -55,7 +59,7 @@
         />
       </div>
 
-      <el-button type="primary" :loading="loading" @click="handleSubmit">
+      <el-button type="primary" class="comment-box__submit" :loading="loading" @click="handleSubmit">
         {{ buttonText }}
       </el-button>
     </div>
@@ -63,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { Close, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'emoji-picker-element'
@@ -74,11 +78,15 @@ const props = withDefaults(
     placeholder?: string
     loading?: boolean
     buttonText?: string
+    title?: string
+    hint?: string
   }>(),
   {
     placeholder: '写下你的评论',
     loading: false,
     buttonText: '提交评论',
+    title: '发表评论',
+    hint: '支持图片和表情，写下你的想法',
   },
 )
 
@@ -89,6 +97,8 @@ const emit = defineEmits<{
 const content = ref('')
 const textareaRef = ref<InstanceType<typeof import('element-plus').ElInput> | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const titleText = computed(() => props.title || '发表评论')
+const hintText = computed(() => props.hint || '')
 
 // 图片上传状态
 const uploadingImage = ref(false)
@@ -195,10 +205,29 @@ function handleSubmit() {
 .comment-box {
   display: grid;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  background: var(--color-bg-card);
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 8%, var(--color-border));
+  border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 4%, var(--color-bg-card)), var(--color-bg-card));
+  box-shadow: 0 1px 0 rgb(15 23 42 / 3%);
+}
+
+.comment-box__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comment-box__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.comment-box__hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .comment-box__preview {
@@ -224,21 +253,31 @@ function handleSubmit() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .comment-box__tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .emoji-picker-wrapper {
   margin: -12px;
 }
 
+.comment-box__submit {
+  min-width: 110px;
+}
+
 @media (max-width: 640px) {
   .comment-box {
     padding: 12px;
+  }
+
+  .comment-box__header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .comment-box__actions {

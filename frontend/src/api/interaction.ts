@@ -61,6 +61,13 @@ export interface CommentLikeResult {
   like_count: number
 }
 
+export interface CommentDeleteResult {
+  comment_id: number
+  deleted: boolean
+  news_id: number
+  comment_count: number
+}
+
 /** 点赞新闻，需要登录。 */
 export function likeNews(newsId: number | string) {
   return request.post<InteractionResult, InteractionResult>(`/api/news/${newsId}/like`)
@@ -102,6 +109,11 @@ export function replyComment(commentId: number | string, payload: CommentReplyPa
 /** 点赞评论，需要登录。 */
 export function likeComment(commentId: number | string) {
   return request.post<CommentLikeResult, CommentLikeResult>(`/api/comments/${commentId}/like`)
+}
+
+/** 删除新闻评论，需要登录。*/
+export function deleteNewsComment(commentId: number | string) {
+  return request.delete<CommentDeleteResult, CommentDeleteResult>(`/api/comments/${commentId}`)
 }
 
 /** 上传评论富媒体图片，需要登录。 */

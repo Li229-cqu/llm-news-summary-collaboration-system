@@ -198,3 +198,89 @@ export async function getReadingTrajectory(
     params: { days: 30, limit: 100, ...params },
   })
 }
+
+export interface ReadingTimelineParams {
+  days?: number
+  group_by?: string
+}
+
+export interface ReadingTimelineSummary {
+  total_days: number
+  total_reads: number
+  most_active_date: string
+  most_active_category: string
+}
+
+export interface ReadingTimelineCategoryItem {
+  category_id?: number | null
+  category_name: string
+  read_count: number
+}
+
+export interface ReadingTimelineTopicItem {
+  topic_id?: number | null
+  topic_name: string
+  read_count: number
+}
+
+export interface ReadingTimelineNewsItem {
+  news_id: number
+  title: string
+  category_name: string
+  topic_name: string
+  browse_time: string
+}
+
+export interface ReadingTimelineDateItem {
+  date: string
+  total_reads: number
+  categories: ReadingTimelineCategoryItem[]
+  topics: ReadingTimelineTopicItem[]
+  news: ReadingTimelineNewsItem[]
+}
+
+export interface ReadingTimelineResponse {
+  summary: ReadingTimelineSummary
+  items: ReadingTimelineDateItem[]
+}
+
+export async function getReadingTimeline(
+  params?: ReadingTimelineParams
+): Promise<ReadingTimelineResponse> {
+  return request.get('/api/profile/reading-timeline', {
+    params: { days: 30, group_by: 'day', ...params },
+  })
+}
+
+export interface ReadingHeatmapParams {
+  days?: number
+  dimension?: string
+}
+
+export interface ReadingHeatmapCell {
+  x: string
+  y: string
+  value: number
+  news_count: number
+}
+
+export interface ReadingHeatmapSummary {
+  max_value: number
+  most_active_category: string
+  most_active_date: string
+}
+
+export interface ReadingHeatmapResponse {
+  x_axis: string[]
+  y_axis: string[]
+  cells: ReadingHeatmapCell[]
+  summary: ReadingHeatmapSummary
+}
+
+export async function getReadingHeatmap(
+  params?: ReadingHeatmapParams
+): Promise<ReadingHeatmapResponse> {
+  return request.get('/api/profile/reading-heatmap', {
+    params: { days: 30, dimension: 'category', ...params },
+  })
+}
