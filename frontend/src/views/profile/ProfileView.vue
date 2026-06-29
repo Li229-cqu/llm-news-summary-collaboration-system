@@ -552,28 +552,17 @@ onMounted(async () => {
     <div class="profile-header">
       <div class="header-bg"></div>
       <div class="header-content">
-        <div class="user-profile">
-          <div class="avatar-wrapper">
-            <el-avatar :size="96" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
-              {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
-            </el-avatar>
-            <div class="avatar-edit" @click="openEditDialog()" title="更换头像">
-              <Edit :size="16" />
+        <div class="header-top-row">
+          <div class="user-profile">
+            <div class="avatar-wrapper">
+              <el-avatar :size="80" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
+                {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
+              </el-avatar>
             </div>
-          </div>
-          <div class="user-info">
-            <div class="user-name-row">
-              <h1 class="user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
-              <el-button
-                type="primary"
-                :icon="Edit"
-                size="small"
-                class="edit-btn"
-                @click="openEditDialog()"
-              >
-                编辑资料
-              </el-button>
-            </div>
+            <div class="user-info">
+              <div class="user-name-row">
+                <h1 class="user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
+              </div>
             <div class="user-tags">
               <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round>
                 {{
@@ -589,7 +578,19 @@ onMounted(async () => {
             <p class="user-desc">欢迎回来，继续探索精彩内容</p>
           </div>
         </div>
-        <div class="quick-stats">
+        <div class="header-actions">
+          <el-button
+            type="primary"
+            :icon="Edit"
+            size="default"
+            class="header-edit-btn"
+            @click="openEditDialog()"
+          >
+            编辑资料
+          </el-button>
+        </div>
+      </div>
+      <div class="quick-stats">
           <div class="quick-stat-item">
             <span class="quick-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
             <span class="quick-stat-label">浏览</span>
@@ -1093,8 +1094,8 @@ onMounted(async () => {
   top: 0;
   left: 0;
   right: 0;
-  height: 180px;
-  background: linear-gradient(135deg, #4a5fc9 0%, #5a3580 50%, #c95ed6 100%);
+  height: 140px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 45%, #38bdf8 100%);
   opacity: 1;
 }
 
@@ -1115,8 +1116,7 @@ onMounted(async () => {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-  animation: float 20s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
 }
 
 @keyframes float {
@@ -1127,14 +1127,44 @@ onMounted(async () => {
 .header-content {
   position: relative;
   z-index: 1;
-  padding: 40px 32px 32px;
+  padding: 28px 28px 20px;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.header-edit-btn {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+}
+
+.header-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.32) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  color: #fff !important;
 }
 
 .user-profile {
   display: flex;
   align-items: center;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 20px;
+  flex: 1;
+  min-width: 0;
 }
 
 .avatar-wrapper {
@@ -1145,29 +1175,6 @@ onMounted(async () => {
 .user-avatar {
   border: 4px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-}
-
-.avatar-edit {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 32px;
-  height: 32px;
-  background: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #667eea;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-}
-
-.avatar-edit:hover {
-  transform: scale(1.1);
-  background: #667eea;
-  color: #fff;
 }
 
 .user-info {
@@ -1188,21 +1195,6 @@ onMounted(async () => {
   font-weight: 700;
   color: #fff;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-}
-
-.edit-btn {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.4);
-  color: #fff;
-  backdrop-filter: blur(10px);
-  font-weight: 500;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.edit-btn:hover {
-  background: rgba(255, 255, 255, 0.35) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
-  color: #fff !important;
 }
 
 .user-tags {
@@ -1229,37 +1221,44 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding: 20px 32px;
-  background: rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(20px);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
 }
 
 .quick-stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding: 4px 16px;
+  border-radius: 10px;
+  transition: background 0.25s ease, transform 0.25s ease;
+  cursor: default;
+}
+
+.quick-stat-item:hover {
+  background: rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
 }
 
 .quick-stat-num {
   font-size: 28px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  color: #2563eb;
 }
 
 .quick-stat-label {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  color: #64748b;
 }
 
 .divider {
   width: 1px;
   height: 40px;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(148, 163, 184, 0.30);
 }
 
 .content-card {
@@ -1752,6 +1751,15 @@ onMounted(async () => {
     text-align: center;
   }
 
+  .header-top-row {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header-actions {
+    padding-top: 0;
+  }
+
   .user-name-row {
     justify-content: center;
     flex-wrap: wrap;
@@ -1769,17 +1777,6 @@ onMounted(async () => {
     font-size: 22px;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .entry-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .subscription-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
   .tab-toolbar {
     flex-direction: column;
@@ -1792,17 +1789,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
 
-  .entry-grid {
-    grid-template-columns: 1fr;
-  }
 
-  .subscription-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .edit-tabs {
