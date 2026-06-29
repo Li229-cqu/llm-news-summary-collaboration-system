@@ -194,4 +194,8 @@ const handleFileChange = async (event: Event) => {
 .action-buttons :deep(.el-button) {
   flex: 1;
 }
+
+.hidden-file-input {
+  display: none;
+}
 </style>

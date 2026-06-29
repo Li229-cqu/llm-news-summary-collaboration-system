@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAIDraftStore } from '@/stores/aiDraft'
 import {
@@ -104,9 +104,18 @@ const formatDate = (dateString: string) => {
   }
 }
 
+function getFirstTitle(record: any): string {
+  if (Array.isArray(record.candidate_titles) && record.candidate_titles.length > 0) {
+    return record.candidate_titles[0]
+  }
+  return ''
+}
+
 onMounted(() => {
   loadHistory()
 })
+
+defineExpose({ loadHistory })
 </script>
 
 <template>
@@ -130,6 +139,11 @@ onMounted(() => {
     <div v-else class="history-list">
       <div v-for="record in historyRecords" :key="record.id" class="history-item">
         <div class="item-main">
+          <!-- 生成标题预览（置顶） -->
+          <div v-if="getFirstTitle(record)" class="history-title">
+            {{ getFirstTitle(record) }}
+          </div>
+
           <div class="item-header">
             <div class="item-title">{{ record.source_title }}</div>
             <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
@@ -284,7 +298,7 @@ onMounted(() => {
   border-radius: 4px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   transition: all 0.3s;
 
   &:hover {
@@ -310,6 +324,18 @@ onMounted(() => {
   color: var(--color-text-primary);
   flex: 1;
   word-break: break-word;
+}
+
+.history-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .item-meta {

@@ -279,6 +279,8 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
                 "title_count": row["title_count"],
                 "risk_level": row["risk_level"] or "low",
                 "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
+                "candidate_titles": _load_json(row.get("candidate_titles"), []),
+                "summary_short": str(row.get("summary_short") or ""),
             }
         )
     return records
@@ -398,6 +400,8 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
                 title_count=row["title_count"],
                 risk_level=row["risk_level"],
                 created_at=row["created_at"],
+                candidate_titles=row.get("candidate_titles", []),
+                summary_short=row.get("summary_short", ""),
             )
             for row in rows
         ]
@@ -416,6 +420,8 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
             title_count=record["title_count"],
             risk_level=record["risk_level"],
             created_at=record["created_at"],
+            candidate_titles=record.get("result", {}).get("candidate_titles", []),
+            summary_short=record.get("result", {}).get("summary_short", ""),
         )
         for record in all_records
     ]

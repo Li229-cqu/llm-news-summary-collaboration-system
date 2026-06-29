@@ -55,6 +55,8 @@ class AIGenerateRecordItem(BaseModel):
     title_count: int
     risk_level: Literal["low", "medium", "high"]
     created_at: str
+    candidate_titles: list[str] = []
+    summary_short: str = ""
 
 
 class AIGenerateRecordDetail(BaseModel):

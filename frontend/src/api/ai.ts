@@ -60,6 +60,8 @@ export interface AIGenerateRecordItem {
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
   created_at: string
+  candidate_titles?: string[]
+  summary_short?: string
 }
 
 export interface AIGenerateRecordDetail {
