@@ -44,7 +44,7 @@ import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('overview')
+const activeTab = ref('history')
 const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
@@ -125,13 +125,11 @@ const categoryDescs: Record<string, string> = {
 }
 
 const tabs = [
-  { key: 'overview', label: '概览', icon: Grid },
   { key: 'history', label: '浏览历史', icon: Clock },
   { key: 'favorites', label: '收藏记录', icon: Star },
   { key: 'comments', label: '评论记录', icon: ChatDotRound },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick },
   { key: 'trajectory', label: '阅读脉络', icon: View },
-  { key: 'subscriptions', label: '订阅管理', icon: SwitchButton },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -433,18 +431,6 @@ function normalizeAvatarUrl(url?: string): string {
   return url
 }
 
-async function loadOverview() {
-  loadingTab.value = 'overview'
-  try {
-    profileOverview.value = await getProfileOverview()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('加载个人中心概览失败，请稍后重试')
-  } finally {
-    loadingTab.value = ''
-  }
-}
-
 async function loadBrowseHistory(page = 1) {
   loadingTab.value = 'history'
   try {
@@ -505,34 +491,6 @@ async function loadAIRecords(page = 1) {
   }
 }
 
-async function loadSubscriptions() {
-  loadingTab.value = 'subscriptions'
-  try {
-    const result = await getSubscriptions()
-    subscriptions.value = result.categories
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('加载订阅信息失败，请稍后重试')
-  } finally {
-    loadingTab.value = ''
-  }
-}
-
-async function handleSubscriptionChange(category: SubscriptionCategory) {
-  try {
-    const subscribedIds = subscriptions.value
-      .filter((c) => c.subscribed)
-      .map((c) => c.id)
-    await updateSubscriptions(subscribedIds)
-    ElMessage.success(
-      category.subscribed ? `已订阅 ${category.name}` : `已取消订阅 ${category.name}`
-    )
-  } catch (error) {
-    console.error(error)
-    category.subscribed = !category.subscribed
-    ElMessage.error('更新订阅失败，请稍后重试')
-  }
-}
 
 function handlePageChange(page: number) {
   if (activeTab.value === 'history') {
@@ -553,9 +511,7 @@ function handleTabChange(key: string) {
   commentSearchKeyword.value = ''
   aiSearchKeyword.value = ''
   currentPage.value = 1
-  if (key === 'overview') {
-    loadOverview()
-  } else if (key === 'history') {
+  if (key === 'history') {
     loadBrowseHistory()
   } else if (key === 'favorites') {
     loadFavorites()
@@ -563,8 +519,6 @@ function handleTabChange(key: string) {
     loadComments()
   } else if (key === 'ai-records') {
     loadAIRecords()
-  } else if (key === 'subscriptions') {
-    loadSubscriptions()
   }
 }
 
@@ -584,7 +538,12 @@ function handleClearHistory() {
 
 onMounted(async () => {
   await loadCurrentUserProfile()
-  loadOverview()
+  // Load overview stats for quick stats display in header (not for overview tab)
+  try {
+    profileOverview.value = await getProfileOverview()
+  } catch (error) {
+    console.error('加载概览统计失败:', error)
+  }
 })
 </script>
 
@@ -665,107 +624,6 @@ onMounted(async () => {
           <div v-if="loadingTab === tab.key" class="loading-container">
             <el-skeleton :rows="6" animated />
           </div>
-
-          <template v-else-if="tab.key === 'overview'">
-            <div class="overview-content">
-              <div class="overview-welcome">
-                <h2 class="welcome-title">
-                  你好，{{ userStore.userInfo?.nickname || '用户' }} 👋
-                </h2>
-                <p class="welcome-desc">
-                  这里是你的个人中心，可以查看你的浏览历史、收藏记录、评论和 AI 生成记录。
-                </p>
-              </div>
-
-              <div class="stats-grid">
-                <div class="stat-card stat-history" @click="handleTabChange('history')">
-                  <div class="stat-icon-wrapper">
-                    <Clock :size="28" class="stat-icon" />
-                  </div>
-                  <div class="stat-info">
-                    <span class="stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
-                    <span class="stat-label">浏览记录</span>
-                  </div>
-                  <ArrowRight :size="20" class="stat-arrow" />
-                </div>
-
-                <div class="stat-card stat-star" @click="handleTabChange('favorites')">
-                  <div class="stat-icon-wrapper">
-                    <Star :size="28" class="stat-icon" />
-                  </div>
-                  <div class="stat-info">
-                    <span class="stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
-                    <span class="stat-label">收藏记录</span>
-                  </div>
-                  <ArrowRight :size="20" class="stat-arrow" />
-                </div>
-
-                <div class="stat-card stat-comment" @click="handleTabChange('comments')">
-                  <div class="stat-icon-wrapper">
-                    <ChatDotRound :size="28" class="stat-icon" />
-                  </div>
-                  <div class="stat-info">
-                    <span class="stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
-                    <span class="stat-label">评论记录</span>
-                  </div>
-                  <ArrowRight :size="20" class="stat-arrow" />
-                </div>
-
-                <div class="stat-card stat-ai" @click="handleTabChange('ai-records')">
-                  <div class="stat-icon-wrapper">
-                    <MagicStick :size="28" class="stat-icon" />
-                  </div>
-                  <div class="stat-info">
-                    <span class="stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
-                    <span class="stat-label">AI 生成</span>
-                  </div>
-                  <ArrowRight :size="20" class="stat-arrow" />
-                </div>
-              </div>
-
-              <div class="function-entries">
-                <h3 class="section-title">功能入口</h3>
-                <div class="entry-grid">
-                  <div class="entry-card" @click="handleTabChange('subscriptions')">
-                    <div class="entry-icon entry-icon-subscribe">
-                      <SwitchButton :size="24" />
-                    </div>
-                    <div class="entry-info">
-                      <span class="entry-title">订阅管理</span>
-                      <span class="entry-desc">管理你的新闻分类订阅</span>
-                    </div>
-                  </div>
-                  <div class="entry-card" @click="openAccountDialog">
-                    <div class="entry-icon entry-icon-setting">
-                      <Setting :size="24" />
-                    </div>
-                    <div class="entry-info">
-                      <span class="entry-title">账号设置</span>
-                      <span class="entry-desc">修改密码和账号安全</span>
-                    </div>
-                  </div>
-                  <div class="entry-card" @click="router.push('/ai/title-summary')">
-                    <div class="entry-icon entry-icon-ai">
-                      <MagicStick :size="24" />
-                    </div>
-                    <div class="entry-info">
-                      <span class="entry-title">AI 摘要</span>
-                      <span class="entry-desc">使用 AI 生成新闻摘要</span>
-                    </div>
-                  </div>
-                  <div class="entry-card" @click="router.push('/community')">
-                    <div class="entry-icon entry-icon-community">
-                      <Files :size="24" />
-                    </div>
-                    <div class="entry-info">
-                      <span class="entry-title">社区动态</span>
-                      <span class="entry-desc">查看和发布社区帖子</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
 
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
@@ -1071,49 +929,6 @@ onMounted(async () => {
             <ReadingTrajectory />
           </template>
 
-          <template v-else-if="tab.key === 'subscriptions'">
-            <div class="subscriptions-content">
-              <div class="subscriptions-header">
-                <h3 class="section-title">新闻分类订阅</h3>
-                <p class="section-desc">选择你感兴趣的新闻分类，获取个性化推荐</p>
-              </div>
-
-              <div class="subscription-grid">
-                <div
-                  v-for="category in subscriptions"
-                  :key="category.id"
-                  class="subscription-card"
-                  :class="{ active: category.subscribed }"
-                  @click="category.subscribed = !category.subscribed; handleSubscriptionChange(category)"
-                >
-                  <div class="subscription-icon">{{ getCategoryIcon(category.code) }}</div>
-                  <div class="subscription-info">
-                    <span class="subscription-name">{{ category.name }}</span>
-                    <span class="subscription-desc">{{ getCategoryDesc(category.code) }}</span>
-                  </div>
-                  <el-switch
-                    v-model="category.subscribed"
-                    active-color="var(--el-color-primary)"
-                    @click.stop
-                    @change="handleSubscriptionChange(category)"
-                  />
-                </div>
-              </div>
-
-              <div class="subscription-tip">
-                <el-alert
-                  title="订阅提示"
-                  type="info"
-                  :closable="false"
-                  show-icon
-                >
-                  <template #default>
-                    订阅你感兴趣的分类后，首页将优先展示相关分类的新闻内容。
-                  </template>
-                </el-alert>
-              </div>
-            </div>
-          </template>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -1483,235 +1298,6 @@ onMounted(async () => {
   padding: 24px;
 }
 
-.overview-content {
-  padding: 8px 4px 24px;
-}
-
-.overview-welcome {
-  margin-bottom: 32px;
-}
-
-.welcome-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.welcome-desc {
-  margin: 0;
-  color: var(--el-text-color-secondary);
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 36px;
-}
-
-.stat-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border-radius: 12px;
-  background: var(--el-bg-color-page);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  border-radius: 12px 12px 0 0;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.stat-card:hover::before {
-  opacity: 1;
-}
-
-.stat-history::before {
-  background: linear-gradient(90deg, #409eff, #66b1ff);
-}
-
-.stat-star::before {
-  background: linear-gradient(90deg, #e6a23c, #f5dab1);
-}
-
-.stat-comment::before {
-  background: linear-gradient(90deg, #67c23a, #95d475);
-}
-
-.stat-ai::before {
-  background: linear-gradient(90deg, #8b5cf6, #c4b5fd);
-}
-
-.stat-icon-wrapper {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-history .stat-icon-wrapper {
-  background: linear-gradient(135deg, #ecf5ff, #d9ecff);
-  color: #409eff;
-}
-
-.stat-star .stat-icon-wrapper {
-  background: linear-gradient(135deg, #fdf6ec, #faecd8);
-  color: #e6a23c;
-}
-
-.stat-comment .stat-icon-wrapper {
-  background: linear-gradient(135deg, #f0f9eb, #e1f3d8);
-  color: #67c23a;
-}
-
-.stat-ai .stat-icon-wrapper {
-  background: linear-gradient(135deg, #f4f1ff, #e9d8fd);
-  color: #8b5cf6;
-}
-
-.stat-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-num {
-  display: block;
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--el-text-color-primary);
-  line-height: 1.2;
-}
-
-.stat-label {
-  display: block;
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
-}
-
-.stat-arrow {
-  color: var(--el-text-color-placeholder);
-  transition: transform 0.3s ease;
-}
-
-.stat-card:hover .stat-arrow {
-  transform: translateX(4px);
-  color: var(--el-color-primary);
-}
-
-.function-entries {
-  margin-top: 8px;
-}
-
-.section-title {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.section-desc {
-  margin: 0 0 20px;
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
-}
-
-.entry-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.entry-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 12px;
-  border: 1px solid var(--el-border-color-lighter);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.entry-card:hover {
-  border-color: var(--el-color-primary-light-5);
-  background: var(--el-color-primary-light-9);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.1);
-}
-
-.entry-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: #fff;
-}
-
-.entry-icon-subscribe {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-}
-
-.entry-icon-setting {
-  background: linear-gradient(135deg, #f093fb, #f5576c);
-}
-
-.entry-icon-ai {
-  background: linear-gradient(135deg, #4facfe, #00f2fe);
-}
-
-.entry-icon-community {
-  background: linear-gradient(135deg, #43e97b, #38f9d7);
-}
-
-.entry-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.entry-title {
-  display: block;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin-bottom: 2px;
-}
-
-.entry-desc {
-  display: block;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .tab-toolbar {
   display: flex;
   align-items: center;
@@ -1967,62 +1553,6 @@ onMounted(async () => {
   margin-top: 28px;
 }
 
-.subscriptions-content {
-  padding: 8px 4px 24px;
-}
-
-.subscriptions-header {
-  margin-bottom: 24px;
-}
-
-.subscription-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.subscription-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px;
-  border-radius: 12px;
-  border: 2px solid var(--el-border-color-lighter);
-  background: var(--el-bg-color-page);
-  transition: all 0.3s ease;
-}
-
-.subscription-card:hover {
-  border-color: var(--el-color-primary-light-5);
-}
-
-.subscription-card.active {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-.subscription-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.subscription-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.subscription-code {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.subscription-tip {
-  max-width: 600px;
-}
-
 .edit-dialog :deep(.el-dialog__header) {
   padding: 20px 24px;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -2117,38 +1647,6 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-}
-
-.subscription-card {
-  cursor: pointer;
-}
-
-.subscription-icon {
-  font-size: 32px;
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--el-fill-color-light);
-  border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-.subscription-card:hover .subscription-icon {
-  transform: scale(1.1);
-  background: var(--el-color-primary-light-8);
-}
-
-.subscription-card.active .subscription-icon {
-  background: var(--el-color-primary-light-8);
-}
-
-.subscription-desc {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.4;
 }
 
 .ai-detail-dialog :deep(.el-dialog__header) {
