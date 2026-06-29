@@ -457,3 +457,54 @@ def delete_ai_record(record_id: Union[int, str], current_user: Optional[Any] = N
     except Exception as exc:  # noqa: BLE001
         logger.warning("删除 AI 生成记录失败，回退 mock：%s", exc)
     return delete_record(record_id)
+
+
+def extract_text_from_file(file_content: bytes, filename: str) -> str:
+    """从上传的文件中提取文本内容。"""
+    lower_name = filename.lower()
+    
+    if lower_name.endswith(".txt") or lower_name.endswith(".md"):
+        try:
+            return file_content.decode("utf-8")
+        except UnicodeDecodeError:
+            return file_content.decode("gbk", errors="ignore")
+    
+    elif lower_name.endswith(".docx"):
+        try:
+            from docx import Document
+            from io import BytesIO
+            doc = Document(BytesIO(file_content))
+            return "\n".join([para.text for para in doc.paragraphs])
+        except ImportError:
+            logger.warning("python-docx 未安装，无法解析 docx 文件")
+            return "无法解析 docx 文件，请安装 python-docx 依赖"
+        except Exception as exc:
+            logger.warning("解析 docx 文件失败：%s", exc)
+            return "docx 文件解析失败"
+    
+    elif lower_name.endswith(".pdf"):
+        try:
+            from PyPDF2 import PdfReader
+            from io import BytesIO
+            reader = PdfReader(BytesIO(file_content))
+            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+        except ImportError:
+            logger.warning("PyPDF2 未安装，无法解析 pdf 文件")
+            return "无法解析 pdf 文件，请安装 PyPDF2 依赖"
+        except Exception as exc:
+            logger.warning("解析 pdf 文件失败：%s", exc)
+            return "pdf 文件解析失败"
+    
+    else:
+        raise AppException(code=400, message=f"不支持的文件格式：{filename}")
+
+
+def handle_file_upload(file_content: bytes, filename: str) -> dict[str, Any]:
+    """处理文件上传，提取文本内容。"""
+    content = extract_text_from_file(file_content, filename)
+    return {
+        "success": True,
+        "message": "文件上传成功",
+        "content": content,
+        "filename": filename,
+    }

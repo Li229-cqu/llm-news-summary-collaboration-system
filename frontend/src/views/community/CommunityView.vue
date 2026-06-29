@@ -186,7 +186,7 @@
         <el-card class="app-card" shadow="never">
           <h2 class="card-title">
             <el-icon><BarChart3 /></el-icon>
-            热搜 Top10
+            热门帖子 Top10
           </h2>
           <div v-if="loadingHotSearch" class="loading-container">
             <el-spinner />
@@ -213,8 +213,8 @@
                   <span>排名 {{ item.rank }}</span>
                 </div>
               </div>
-              <el-button class="timeline-link" type="primary" link @click.stop="openTimelineForHotSearch(item)">
-                查看脉络
+              <el-button class="timeline-link" type="primary" link @click.stop="openPostDetail(item)">
+                查看帖子详情
               </el-button>
             </div>
           </div>
@@ -389,10 +389,12 @@ import {
   getHotSearch,
   aiNewsHelper,
   getCommentsSummary,
+  getHotTags,
   type CommunityPost,
   type CommentItem as CommunityCommentItem,
   type HotSearchItem,
   type CommentsSummaryResponse,
+  type TagCount,
 } from '@/api/community'
 import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 import { useUserStore } from '@/stores/user'
@@ -422,22 +424,8 @@ const postTotal = ref(0)
 const searchKeyword = ref('')
 const selectedTag = ref('')
 
-const hotTags = computed(() => {
-  const counter = new Map<string, number>()
-
-  posts.value.forEach((post) => {
-    ;(post.tags || []).forEach((tag) => {
-      const normalizedTag = String(tag || '').trim()
-      if (!normalizedTag) return
-      counter.set(normalizedTag, (counter.get(normalizedTag) || 0) + 1)
-    })
-  })
-
-  return Array.from(counter.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-})
+const hotTags = ref<TagCount[]>([])
+const loadingHotTags = ref(false)
 
 const filteredPosts = computed(() => {
   if (!selectedTag.value) {
@@ -642,6 +630,17 @@ async function loadHotSearch() {
   }
 }
 
+async function loadHotTags() {
+  loadingHotTags.value = true
+  try {
+    hotTags.value = await getHotTags({ limit: 10 })
+  } catch (error) {
+    hotTags.value = []
+  } finally {
+    loadingHotTags.value = false
+  }
+}
+
 async function loadTimelineTopics() {
   loadingTimelineTopics.value = true
   try {
@@ -716,6 +715,15 @@ function openTimelineForHotSearch(item: HotSearchItem) {
   selectedTopicId.value = topic.topic_id
   selectedTopicName.value = topic.topic_name
   timelineDrawerVisible.value = true
+}
+
+async function openPostDetail(item: HotSearchItem) {
+  try {
+    const post = await getPostDetail(item.target_id)
+    showPostDetail(post)
+  } catch (error) {
+    ElMessage.error('获取帖子详情失败')
+  }
 }
 
 function getRankClass(rank: number) {
@@ -916,6 +924,7 @@ onMounted(() => {
 
   loadPosts()
   loadHotSearch()
+  loadHotTags()
   loadTimelineTopics()
 })
 </script>

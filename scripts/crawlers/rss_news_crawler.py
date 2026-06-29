@@ -350,17 +350,34 @@ def is_generic_image(image_url: str) -> bool:
 
 def is_video_news(entry: Any, title: str, html_text: str) -> bool:
     """识别是否是视频新闻"""
-    video_keywords = ["视频", "video", "播放", "player", "iframe", "点播"]
+    video_keywords_in_title = ["视频", "video", "播放", "点播"]
 
-    # 检查标题
-    for keyword in video_keywords:
+    # 检查标题中是否有明确的视频关键词
+    for keyword in video_keywords_in_title:
         if keyword.lower() in title.lower():
             return True
 
-    # 检查 HTML 中是否有视频播放器
+    # 检查 HTML 中是否有视频播放器（更严格的判断）
     if html_text:
         html_lower = html_text.lower()
-        if "video" in html_lower or "player" in html_lower or "iframe" in html_lower:
+        
+        # 需要同时满足多个条件才认为是视频新闻
+        video_indicators = 0
+        
+        # 有 video 标签或 video 播放器
+        if "<video" in html_lower or "video.js" in html_lower or "videojs" in html_lower:
+            video_indicators += 1
+        
+        # 有明确的视频播放器容器
+        if "player" in html_lower and ("video" in html_lower or "vjs" in html_lower):
+            video_indicators += 1
+        
+        # 有视频时长或播放按钮
+        if "duration" in html_lower and ("video" in html_lower or "player" in html_lower):
+            video_indicators += 1
+        
+        # 需要至少两个指标才判断为视频新闻
+        if video_indicators >= 2:
             return True
 
     return False
@@ -1118,7 +1135,7 @@ def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[
                 image_url = row["cover_image"]
                 count = row["count"]
 
-                if count > 3:  # 超过3次的认为是通用图
+                if count > 10:  # 超过10次的认为是通用图
                     duplicate_images[image_url] = count
                     logger.warning(
                         "检测到重复图片（%d 次使用）：%s",
