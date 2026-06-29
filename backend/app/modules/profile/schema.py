@@ -31,6 +31,7 @@ class FavoriteItem(BaseModel):
     category_name: str
     source: str
     publish_time: str
+    favorited_at: Optional[str] = None
 
 
 class CommentRecordItem(BaseModel):

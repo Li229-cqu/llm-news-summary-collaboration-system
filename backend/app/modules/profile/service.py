@@ -868,10 +868,11 @@ def _mock_favorites(
                     category_name=news["category_name"],
                     source=news["source"],
                     publish_time=news["publish_time"],
+                    favorited_at=format_datetime(record.get("favorited_at") or record.get("create_time")),
                 ).dict()
             )
 
-    favorite_items.sort(key=lambda x: x["publish_time"], reverse=True)
+    favorite_items.sort(key=lambda x: x.get("favorited_at") or x["publish_time"], reverse=True)
     return paginate(favorite_items, page=page, page_size=page_size)
 
 
@@ -890,14 +891,15 @@ def _db_favorites(
             n.summary,
             COALESCE(nc.name, '未分类') AS category_name,
             n.source,
-            n.publish_time
+            n.publish_time,
+            COALESCE(f.created_at, f.create_time) AS favorited_at
         FROM favorite f
         LEFT JOIN news n ON n.id = f.target_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
         WHERE f.user_id = %s
           AND f.target_type = 'news'
           AND n.status = 1
-        ORDER BY n.publish_time DESC, f.id DESC
+        ORDER BY favorited_at DESC, f.id DESC
         """,
         [user_id],
     )
@@ -914,6 +916,7 @@ def _db_favorites(
                 category_name=normalize_text(row["category_name"]),
                 source=normalize_text(row["source"]),
                 publish_time=format_datetime(row["publish_time"]),
+                favorited_at=format_datetime(row.get("favorited_at")),
             ).dict()
         )
 

@@ -23,6 +23,7 @@ export interface FavoriteItem {
   category_name: string
   source: string
   publish_time: string
+  favorited_at?: string
 }
 
 export interface CommentRecordItem {

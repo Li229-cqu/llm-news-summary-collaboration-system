@@ -855,7 +855,7 @@ onMounted(() => {
                 <div class="record-meta">
                   <span class="record-source">{{ item.source }}</span>
                   <Clock :size="14" />
-                  <span>{{ item.publish_time }}</span>
+                  <span>收藏于 {{ item.favorited_at || item.publish_time }}</span>
                 </div>
                 <ArrowRight :size="18" class="record-arrow" />
               </div>
