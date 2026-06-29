@@ -30,10 +30,11 @@
       <div class="comment-box__tools">
         <!-- 表情按钮 -->
         <el-popover
-          placement="top-start"
+          placement="bottom-start"
           :width="360"
           trigger="click"
           :show-arrow="false"
+          :popper-style="{ maxHeight: '260px', overflow: 'auto' }"
         >
           <template #reference>
             <el-button text :disabled="loading" title="插入表情">
