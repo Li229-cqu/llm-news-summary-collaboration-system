@@ -60,6 +60,8 @@ export interface AIGenerateRecordItem {
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
   created_at: string
+  candidate_titles?: string[]
+  summary_short?: string
 }
 
 export interface AIGenerateRecordDetail {
@@ -96,4 +98,22 @@ export function getAIRecordDetail(recordId: number | string) {
 /** 删除 AI 生成历史。 */
 export function deleteAIRecord(recordId: number | string) {
   return request.delete<DeleteAIRecordResult, DeleteAIRecordResult>(`/api/ai/records/${recordId}`)
+}
+
+export interface FileUploadResponse {
+  success: boolean
+  message: string
+  content: string
+  filename: string
+}
+
+/** 上传文件并提取文本内容。 */
+export function uploadFile(formData: FormData) {
+  return request.post<FileUploadResponse, FileUploadResponse, FormData>(
+    '/api/ai/upload',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }
+  )
 }

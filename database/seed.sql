@@ -187,20 +187,20 @@ ON DUPLICATE KEY UPDATE
   `browse_time` = VALUES(`browse_time`);
 
 -- 收藏记录
-INSERT INTO `favorite` (`id`, `user_id`, `target_type`, `target_id`, `create_time`)
+INSERT INTO `favorite` (`id`, `user_id`, `target_type`, `target_id`, `created_at`)
 VALUES
   (1, 1, 'news', 1, '2026-01-15 10:45:00'),
   (2, 1, 'news', 3, '2026-01-16 09:30:00'),
   (3, 2, 'news', 2, '2026-01-15 12:00:00')
 ON DUPLICATE KEY UPDATE
-  `create_time` = VALUES(`create_time`);
+  `created_at` = VALUES(`created_at`);
 
 -- AI生成记录
 INSERT INTO `ai_generate_record` (
   `id`, `user_id`, `source`, `source_news_id`, `source_title`,
   `input_text`, `title_count`, `summary_type`, `summary_style`,
   `candidate_titles`, `summary_short`, `summary_long`,
-  `summary_points`, `keywords`, `risk_level`, `status`, `create_time`
+  `summary_points`, `keywords`, `risk_level`, `status`, `created_at`
 )
 VALUES
   (
@@ -274,7 +274,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `community_post` (
   `id`, `user_id`, `title`, `content`, `related_news_id`, `topic_id`, `tags`,
   `like_count`, `comment_count`, `favorite_count`, `heat_score`, `status`,
-  `create_time`, `update_time`
+  `created_at`, `updated_at`
 )
 VALUES
   (
@@ -324,11 +324,11 @@ ON DUPLICATE KEY UPDATE
   `favorite_count` = VALUES(`favorite_count`),
   `heat_score` = VALUES(`heat_score`),
   `status` = VALUES(`status`),
-  `update_time` = VALUES(`update_time`);
+  `updated_at` = VALUES(`updated_at`);
 
 -- 社区评论演示数据：包含一级评论和回复评论
 INSERT INTO `post_comment` (
-  `id`, `post_id`, `user_id`, `parent_id`, `content`, `like_count`, `status`, `create_time`, `update_time`
+  `id`, `post_id`, `user_id`, `parent_id`, `content`, `like_count`, `status`, `created_at`, `updated_at`
 )
 VALUES
   (1, 1, 2, NULL, '我更倾向先看短摘要，再决定是否阅读全文。尤其是长篇科技新闻，摘要能帮我快速抓重点。', 4, 1, '2026-06-20 09:35:00', '2026-06-20 09:35:00'),
@@ -345,10 +345,10 @@ ON DUPLICATE KEY UPDATE
   `content` = VALUES(`content`),
   `like_count` = VALUES(`like_count`),
   `status` = VALUES(`status`),
-  `update_time` = VALUES(`update_time`);
+  `updated_at` = VALUES(`updated_at`);
 
 -- 社区点赞、收藏、拉黑演示数据
-INSERT INTO `user_like` (`user_id`, `target_id`, `target_type`, `create_time`)
+INSERT INTO `user_like` (`user_id`, `target_id`, `target_type`, `created_at`)
 VALUES
   (1, 2, 'community_post', '2026-06-20 12:10:00'),
   (1, 3, 'community_post', '2026-06-21 15:10:00'),
@@ -359,26 +359,26 @@ VALUES
   (2, 6, 'post_comment', '2026-06-21 15:05:00'),
   (3, 8, 'post_comment', '2026-06-22 09:10:00')
 ON DUPLICATE KEY UPDATE
-  `create_time` = VALUES(`create_time`);
+  `created_at` = VALUES(`created_at`);
 
-INSERT INTO `favorite` (`user_id`, `target_id`, `target_type`, `create_time`)
+INSERT INTO `favorite` (`user_id`, `target_id`, `target_type`, `created_at`)
 VALUES
   (1, 2, 'community_post', '2026-06-20 12:20:00'),
   (1, 3, 'community_post', '2026-06-21 15:20:00'),
   (2, 1, 'community_post', '2026-06-20 10:00:00'),
   (3, 2, 'community_post', '2026-06-20 12:25:00')
 ON DUPLICATE KEY UPDATE
-  `create_time` = VALUES(`create_time`);
+  `created_at` = VALUES(`created_at`);
 
-INSERT INTO `user_block` (`user_id`, `blocked_user_id`, `create_time`)
+INSERT INTO `user_block` (`user_id`, `blocked_user_id`, `created_at`)
 VALUES
   (2, 3, '2026-06-22 18:00:00')
 ON DUPLICATE KEY UPDATE
-  `create_time` = VALUES(`create_time`);
+  `created_at` = VALUES(`created_at`);
 
 -- 社区热搜与话题入口演示数据
 INSERT INTO `hot_topic` (
-  `id`, `title`, `target_type`, `target_id`, `heat_score`, `rank_no`, `tag`, `status`, `update_time`, `create_time`
+  `id`, `title`, `target_type`, `target_id`, `heat_score`, `rank_no`, `tag`, `status`, `updated_at`, `created_at`
 )
 VALUES
   (4, 'AI 摘要如何改变新闻阅读', 'community_post', 1, 980, 4, '讨论', 1, '2026-06-20 10:10:00', '2026-06-20 10:10:00'),
@@ -394,5 +394,5 @@ ON DUPLICATE KEY UPDATE
   `rank_no` = VALUES(`rank_no`),
   `tag` = VALUES(`tag`),
   `status` = VALUES(`status`),
-  `update_time` = VALUES(`update_time`),
-  `create_time` = VALUES(`create_time`);
+  `updated_at` = VALUES(`updated_at`),
+  `created_at` = VALUES(`created_at`);

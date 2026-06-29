@@ -16,6 +16,8 @@
         <div class="related-news-list__title">{{ item.title }}</div>
         <div class="related-news-list__meta">
           <span>{{ item.source }}</span>
+          <span class="related-news-list__tag" v-if="item.recommend_source === 'related'">相关推荐</span>
+          <span class="related-news-list__tag related-news-list__tag--hot" v-if="item.recommend_source === 'hot'">热门推荐</span>
           <span>阅读 {{ item.view_count }}</span>
         </div>
       </article>
@@ -31,6 +33,7 @@ export interface RelatedNewsItem {
   title: string
   source: string
   view_count: number
+  recommend_source?: 'related' | 'hot'
 }
 
 defineProps<{
@@ -98,5 +101,22 @@ function handleClick(newsId: number) {
   gap: 8px 12px;
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+.related-news-list__tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #409eff;
+  background: #ecf5ff;
+  border: 1px solid #d9ecff;
+}
+
+.related-news-list__tag--hot {
+  color: #e6a23c;
+  background: #fdf6ec;
+  border-color: #faecd8;
 }
 </style>

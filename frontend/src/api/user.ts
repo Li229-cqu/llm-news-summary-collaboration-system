@@ -35,3 +35,14 @@ export function updateUserProfileApi(params: UpdateProfileParams) {
 export function changePasswordApi(params: ChangePasswordParams) {
   return request.post<null, null>('/api/user/change-password', params)
 }
+
+export interface UploadAvatarResponse {
+  avatar: string
+  avatar_url: string
+}
+
+export function uploadAvatarApi(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<UploadAvatarResponse, UploadAvatarResponse>('/api/user/avatar', formData)
+}

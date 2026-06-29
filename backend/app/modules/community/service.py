@@ -39,6 +39,18 @@ from app.modules.community.schema import (
 
 logger = logging.getLogger(__name__)
 
+VALID_COMMUNITY_TAGS = {"时政", "经济", "科技", "教育", "军事", "社会", "国际", "体育", "娱乐", "健康"}
+
+
+def _validate_tags(tags: list[str]) -> list[str]:
+    if not tags:
+        return []
+    return [tag for tag in tags if tag in VALID_COMMUNITY_TAGS]
+
+
+def get_available_tags() -> list[dict[str, Any]]:
+    return [{"name": tag, "count": 0} for tag in sorted(VALID_COMMUNITY_TAGS)]
+
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -484,14 +496,14 @@ def _db_get_posts(
             cp.favorite_count,
             cp.heat_score,
             cp.status,
-            cp.create_time,
-            cp.update_time,
+            cp.created_at AS create_time,
+            cp.updated_at AS update_time,
             { 'cp.tags' if _community_post_has_tags_column() else 'NULL' } AS tags
         FROM community_post cp
         LEFT JOIN `user` u ON u.id = cp.user_id
         LEFT JOIN news n ON n.id = cp.related_news_id
         WHERE {" AND ".join(clauses)}
-        ORDER BY cp.heat_score DESC, cp.create_time DESC, cp.id DESC
+        ORDER BY cp.heat_score DESC, cp.created_at DESC, cp.id DESC
         LIMIT %s OFFSET %s
         """,
         params + [normalized_page_size, (normalized_page - 1) * normalized_page_size],
@@ -555,8 +567,8 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
             cp.favorite_count,
             cp.heat_score,
             cp.status,
-            cp.create_time,
-            cp.update_time,
+            cp.created_at AS create_time,
+            cp.updated_at AS update_time,
             {tags_expr} AS tags
         FROM community_post cp
         LEFT JOIN `user` u ON u.id = cp.user_id
@@ -640,7 +652,7 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
             pc.content,
             pc.like_count,
             pc.status,
-            pc.create_time,
+            pc.created_at AS create_time,
             {media_json_column},
             COALESCE(ru.id, NULL) AS reply_to_user_id,
             COALESCE(ru.username, '') AS reply_to_username,
@@ -651,7 +663,7 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
         LEFT JOIN post_comment parent_pc ON parent_pc.id = pc.parent_id
         LEFT JOIN `user` ru ON ru.id = parent_pc.user_id
         WHERE pc.post_id = %s AND pc.status IN (1, 2, 4)
-        ORDER BY pc.create_time ASC, pc.id ASC
+        ORDER BY pc.created_at ASC, pc.id ASC
         """,
         [post_id],
     )
@@ -684,26 +696,23 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     rows = execute_query(
         """
         SELECT
-            ht.id,
-            ht.title,
-            ht.target_type,
-            ht.target_id,
-            ht.rank_no,
-            ht.tag,
-            ht.update_time,
-            ht.create_time,
+            p.id,
+            p.title,
+            'community_post' AS target_type,
+            p.id AS target_id,
+            0 AS rank_no,
+            p.tags AS tags_json,
+            p.updated_at AS update_time,
+            p.created_at AS create_time,
             (
-                COALESCE(SUM(n.view_count), 0)
-                + COALESCE(SUM(n.like_count), 0) * 3
-                + COALESCE(SUM(n.comment_count), 0) * 5
-                + COALESCE(SUM(n.favorite_count), 0) * 4
+                COALESCE(p.heat_score, 0)
+                + COALESCE(p.like_count, 0) * 3
+                + COALESCE(p.comment_count, 0) * 5
+                + COALESCE(p.favorite_count, 0) * 4
             ) AS heat_score
-        FROM hot_topic ht
-        LEFT JOIN news n ON n.topic_id = ht.target_id AND n.status = 1
-        WHERE ht.status = 1
-        GROUP BY ht.id, ht.title, ht.target_type, ht.target_id,
-                 ht.rank_no, ht.tag, ht.update_time, ht.create_time
-        ORDER BY heat_score DESC, ht.rank_no ASC, ht.id ASC
+        FROM community_post p
+        WHERE p.status = 1
+        ORDER BY heat_score DESC, p.created_at DESC
         LIMIT %s
         """,
         [max(limit, 0)],
@@ -714,6 +723,15 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     items = []
     for index, row in enumerate(rows, start=1):
         heat = int(row.get("heat_score") or 0)
+        tags_json = row.get("tags_json")
+        tag_str = ""
+        if tags_json:
+            try:
+                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+                if isinstance(tags, list):
+                    tag_str = ", ".join(str(t) for t in tags)
+            except Exception:
+                tag_str = ""
         items.append(
             {
                 "id": int(row.get("id") or 0),
@@ -722,9 +740,9 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
                 "search_count": heat,
                 "trend": "up" if index <= 3 else "stable" if index <= 6 else "down",
                 "title": normalize_text(row.get("title")),
-                "target_type": normalize_text(row.get("target_type")),
+                "target_type": "community_post",
                 "target_id": int(row.get("target_id") or 0),
-                "tag": normalize_text(row.get("tag")),
+                "tag": tag_str,
                 "update_time": _format_datetime(row.get("update_time")),
                 "create_time": _format_datetime(row.get("create_time")),
             }
@@ -793,7 +811,7 @@ def _increment_post_heat_score(post_id: int, delta: int) -> None:
         return
     if delta > 0:
         execute_update(
-            "UPDATE community_post SET heat_score = heat_score + %s, update_time = NOW() WHERE id = %s",
+            "UPDATE community_post SET heat_score = heat_score + %s, updated_at = NOW() WHERE id = %s",
             [delta, post_id],
         )
         return
@@ -801,7 +819,7 @@ def _increment_post_heat_score(post_id: int, delta: int) -> None:
         """
         UPDATE community_post
         SET heat_score = GREATEST(heat_score + %s, 0),
-            update_time = NOW()
+            updated_at = NOW()
         WHERE id = %s
         """,
         [delta, post_id],
@@ -814,7 +832,7 @@ def _update_post_counter(post_id: int, field: str, delta: int) -> None:
     sql = f"""
         UPDATE community_post
         SET {field} = GREATEST({field} + %s, 0),
-            update_time = NOW()
+            updated_at = NOW()
         WHERE id = %s
     """
     execute_update(sql, [delta, post_id])
@@ -826,7 +844,7 @@ def _update_comment_like_count(comment_id: int, delta: int) -> None:
     sql = """
         UPDATE post_comment
         SET like_count = GREATEST(like_count + %s, 0),
-            update_time = NOW()
+            updated_at = NOW()
         WHERE id = %s
     """
     execute_update(sql, [delta, comment_id])
@@ -1051,6 +1069,8 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
     if user_id is None:
         raise AppException(code=401, message="未登录或登录状态已失效")
 
+    validated_tags = _validate_tags(request.tags or [])
+
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
@@ -1060,7 +1080,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                     INSERT INTO community_post (
                         user_id, title, content, related_news_id, topic_id,
                         like_count, comment_count, favorite_count, heat_score,
-                        status, create_time, update_time, tags
+                        status, created_at, updated_at, tags
                     ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
                     """,
                     [
@@ -1069,7 +1089,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                         request.content,
                         request.related_news_id,
                         request.topic_id,
-                        json.dumps(request.tags or [], ensure_ascii=False),
+                        json.dumps(validated_tags, ensure_ascii=False),
                     ],
                 )
             else:
@@ -1078,7 +1098,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                     INSERT INTO community_post (
                         user_id, title, content, related_news_id, topic_id,
                         like_count, comment_count, favorite_count, heat_score,
-                        status, create_time, update_time
+                        status, created_at, updated_at
                     ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW())
                     """,
                     [
@@ -1166,7 +1186,7 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
             post = _db_get_post(post_id, current_user=current_user)
             if post is not None:
                 execute_update(
-                    "UPDATE community_post SET heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
+                    "UPDATE community_post SET heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
                     [post_id],
                 )
                 post["heat_score"] = int(post.get("heat_score") or 0) + 1
@@ -1285,7 +1305,7 @@ def _db_delete_comment(comment_id: int, current_user: Optional[Any]) -> dict[str
             cursor.execute(
                 """
                 UPDATE post_comment
-                SET status = 4, update_time = NOW()
+                SET status = 4, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [comment_id],
@@ -1295,7 +1315,7 @@ def _db_delete_comment(comment_id: int, current_user: Optional[Any]) -> dict[str
                 UPDATE community_post
                 SET comment_count = GREATEST(comment_count - 1, 0),
                     heat_score = GREATEST(heat_score - 1, 0),
-                    update_time = NOW()
+                    updated_at = NOW()
                 WHERE id = %s
                 """,
                 [int(comment["post_id"] or 0)],
@@ -1335,7 +1355,7 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
             if _db_post_comment_has_media_json():
                 cursor.execute(
                     """
-                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, NULL, %s, %s, 0, 1, NOW(), NOW())
                     """,
                     [post_id, user_id, request.content, media_json_value],
@@ -1343,13 +1363,13 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
             else:
                 cursor.execute(
                     """
-                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, NULL, %s, 0, 1, NOW(), NOW())
                     """,
                     params,
                 )
             cursor.execute(
-                "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
             cursor.execute(
@@ -1379,7 +1399,7 @@ def _db_create_comment(post_id: int, request: CreateCommentRequest, current_user
             pc.content,
             pc.like_count,
             pc.status,
-            pc.create_time,
+            pc.created_at AS create_time,
             {media_json_column}
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
@@ -1446,7 +1466,7 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             if _db_post_comment_has_media_json():
                 cursor.execute(
                     """
-                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, 0, 1, NOW(), NOW())
                     """,
                     [post_id, user_id, comment_id, request.content, media_json_value],
@@ -1454,13 +1474,13 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             else:
                 cursor.execute(
                     """
-                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    INSERT INTO post_comment (post_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, 0, 1, NOW(), NOW())
                     """,
                     params,
                 )
             cursor.execute(
-                "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET comment_count = comment_count + 1, heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
             cursor.execute(
@@ -1490,8 +1510,12 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             pc.content,
             pc.like_count,
             pc.status,
+<<<<<<< HEAD
             pc.create_time,
             {media_json_column}
+=======
+            pc.created_at AS create_time
+>>>>>>> develop
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
         WHERE pc.id = %s
@@ -1564,7 +1588,7 @@ def _db_toggle_post_like(post_id: int, current_user: Optional[Any]) -> LikeRespo
                     [user_id, post_id],
                 )
                 cursor.execute(
-                    "UPDATE community_post SET like_count = GREATEST(like_count - 1, 0), heat_score = GREATEST(heat_score - 1, 0), update_time = NOW() WHERE id = %s",
+                    "UPDATE community_post SET like_count = GREATEST(like_count - 1, 0), heat_score = GREATEST(heat_score - 1, 0), updated_at = NOW() WHERE id = %s",
                     [post_id],
                 )
                 connection.commit()
@@ -1573,13 +1597,13 @@ def _db_toggle_post_like(post_id: int, current_user: Optional[Any]) -> LikeRespo
 
             cursor.execute(
                 """
-                INSERT INTO user_like (user_id, target_id, target_type, create_time)
+                INSERT INTO user_like (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'community_post', NOW())
                 """,
                 [user_id, post_id],
             )
             cursor.execute(
-                "UPDATE community_post SET like_count = like_count + 1, heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET like_count = like_count + 1, heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
             connection.commit()
@@ -1619,7 +1643,7 @@ def _db_unlike_post(post_id: int, current_user: Optional[Any]) -> LikeResponse:
                 [user_id, post_id],
             )
             cursor.execute(
-                "UPDATE community_post SET like_count = GREATEST(like_count - 1, 0), heat_score = GREATEST(heat_score - 1, 0), update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET like_count = GREATEST(like_count - 1, 0), heat_score = GREATEST(heat_score - 1, 0), updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
         connection.commit()
@@ -1665,7 +1689,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
                     [user_id, post_id],
                 )
                 cursor.execute(
-                    "UPDATE community_post SET favorite_count = GREATEST(favorite_count - 1, 0), update_time = NOW() WHERE id = %s",
+                    "UPDATE community_post SET favorite_count = GREATEST(favorite_count - 1, 0), updated_at = NOW() WHERE id = %s",
                     [post_id],
                 )
                 connection.commit()
@@ -1674,13 +1698,13 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
 
             cursor.execute(
                 """
-                INSERT INTO favorite (user_id, target_id, target_type, create_time)
+                INSERT INTO favorite (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'community_post', NOW())
                 """,
                 [user_id, post_id],
             )
             cursor.execute(
-                "UPDATE community_post SET favorite_count = favorite_count + 1, update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET favorite_count = favorite_count + 1, updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
             connection.commit()
@@ -1720,7 +1744,7 @@ def _db_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteRe
                 [user_id, post_id],
             )
             cursor.execute(
-                "UPDATE community_post SET favorite_count = GREATEST(favorite_count - 1, 0), update_time = NOW() WHERE id = %s",
+                "UPDATE community_post SET favorite_count = GREATEST(favorite_count - 1, 0), updated_at = NOW() WHERE id = %s",
                 [post_id],
             )
         connection.commit()
@@ -1766,7 +1790,7 @@ def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> Lik
                     [user_id, comment_id],
                 )
                 cursor.execute(
-                    "UPDATE post_comment SET like_count = GREATEST(like_count - 1, 0), update_time = NOW() WHERE id = %s",
+                    "UPDATE post_comment SET like_count = GREATEST(like_count - 1, 0), updated_at = NOW() WHERE id = %s",
                     [comment_id],
                 )
                 connection.commit()
@@ -1775,13 +1799,13 @@ def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> Lik
 
             cursor.execute(
                 """
-                INSERT INTO user_like (user_id, target_id, target_type, create_time)
+                INSERT INTO user_like (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'post_comment', NOW())
                 """,
                 [user_id, comment_id],
             )
             cursor.execute(
-                "UPDATE post_comment SET like_count = like_count + 1, update_time = NOW() WHERE id = %s",
+                "UPDATE post_comment SET like_count = like_count + 1, updated_at = NOW() WHERE id = %s",
                 [comment_id],
             )
             connection.commit()
@@ -1816,7 +1840,7 @@ def _db_block_user(blocked_user_id: int, current_user: Optional[Any]) -> BlockRe
 
             cursor.execute(
                 """
-                INSERT INTO user_block (user_id, blocked_user_id, create_time)
+                INSERT INTO user_block (user_id, blocked_user_id, created_at)
                 VALUES (%s, %s, NOW())
                 """,
                 [user_id, blocked_user_id],
@@ -1860,6 +1884,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
     new_id = max([int(item["id"]) for item in FALLBACK_POSTS], default=0) + 1
     now = _now_text()
     news_title_map = _mock_news_title_map()
+    validated_tags = _validate_tags(request.tags or [])
     post = {
         "id": new_id,
         "user_id": _current_user_id(current_user) or 0,
@@ -1878,7 +1903,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
         "status": 1,
         "create_time": now,
         "update_time": now,
-        "tags": request.tags or [],
+        "tags": validated_tags,
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -2160,7 +2185,7 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
             if post is not None:
                 try:
                     execute_update(
-                        "UPDATE community_post SET heat_score = heat_score + 1, update_time = NOW() WHERE id = %s",
+                        "UPDATE community_post SET heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
                         [post_id],
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -2327,10 +2352,9 @@ def unblock_user(blocked_user_id: int, current_user: Optional[Any] = None) -> Bl
 
 def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
     try:
-        if _db_has_hot_topics():
-            rows = _db_hot_topics(limit=limit)
-            if rows:
-                return [HotSearchItem(**row) for row in rows]
+        rows = _db_hot_topics(limit=limit)
+        if rows:
+            return [HotSearchItem(**row) for row in rows]
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取社区热搜失败，回退 mock：%s", exc)
     return [HotSearchItem(**row) for row in _mock_hot_search(limit=limit)]
@@ -2338,6 +2362,39 @@ def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
 
 def get_hot_topics(limit: int = 10) -> list[HotSearchItem]:
     return get_hot_search(limit=limit)
+
+
+def get_hot_tags(limit: int = 10) -> list[dict[str, Any]]:
+    try:
+        rows = execute_query(
+            """
+            SELECT tags FROM community_post WHERE status = 1 AND tags IS NOT NULL
+            """,
+            [],
+        )
+        if not rows:
+            return []
+
+        tag_counter: dict[str, int] = {}
+        for row in rows:
+            tags_json = row.get("tags")
+            if not tags_json:
+                continue
+            try:
+                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+                if isinstance(tags, list):
+                    for tag in tags:
+                        tag_name = str(tag).strip()
+                        if tag_name:
+                            tag_counter[tag_name] = tag_counter.get(tag_name, 0) + 1
+            except Exception:
+                continue
+
+        sorted_tags = sorted(tag_counter.items(), key=lambda x: -x[1])[:limit]
+        return [{"name": name, "count": count} for name, count in sorted_tags]
+    except Exception as exc:
+        logger.warning("读取热门标签失败：%s", exc)
+        return []
 
 
 async def ai_news_helper(question: str) -> AIHelperResponse:
@@ -2558,3 +2615,4 @@ FALLBACK_POST_LIKES = [deepcopy(item) for item in MOCK_COMMUNITY_POST_LIKES]
 FALLBACK_POST_FAVORITES = [deepcopy(item) for item in MOCK_COMMUNITY_POST_FAVORITES]
 FALLBACK_COMMENT_LIKES = [deepcopy(item) for item in MOCK_COMMUNITY_COMMENT_LIKES]
 FALLBACK_BLOCKS = [deepcopy(item) for item in MOCK_COMMUNITY_BLOCKS]
+

@@ -488,6 +488,15 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
     if news is None:
         return None
 
+    topic_id = news.get("topic_id")
+    timeline_news_count = 0
+    if topic_id is not None:
+        count_row = execute_one(
+            "SELECT COUNT(*) AS total FROM news WHERE topic_id = %s AND status = 1",
+            [topic_id],
+        )
+        timeline_news_count = int((count_row or {}).get("total") or 0)
+
     current_user_id = _get_current_user_id(current_user)
     related_rows = execute_query(
         f"""
@@ -518,8 +527,8 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         """,
         [news.get("category_id"), news_id],
     )
-    recommended_rows = execute_query(
-        f"""
+    # Build recommended_news with 3-tier fallback: same topic → same category → hot
+    _RECOMMEND_SELECT = f"""
         SELECT
             n.id,
             n.title,
@@ -541,17 +550,61 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE n.status = 1 AND n.id <> %s
-        ORDER BY n.view_count DESC, n.comment_count DESC, n.like_count DESC, n.publish_time DESC, n.id DESC
-        LIMIT 5
-        """,
-        [news_id],
-    )
+        WHERE n.status = 1
+    """
+    _RECOMMEND_ORDER = "ORDER BY n.view_count DESC, n.comment_count DESC, n.like_count DESC, n.publish_time DESC, n.id DESC"
+
+    recommended_news: list[dict[str, Any]] = []
+    used_ids: set[int] = {news_id}
+
+    category_id = news.get("category_id")
+    if topic_id is not None:
+        topic_rows = execute_query(
+            _RECOMMEND_SELECT + " AND n.topic_id = %s AND n.id <> %s " + _RECOMMEND_ORDER + " LIMIT 5",
+            [topic_id, news_id],
+        )
+        for row in topic_rows:
+            row_id = int(row["id"])
+            if row_id not in used_ids:
+                item = _format_news_row(row)
+                item["recommend_source"] = "related"
+                recommended_news.append(item)
+                used_ids.add(row_id)
+        logger.info("[recommended_news] same topic_id=%d: got %d items", topic_id, len(recommended_news))
+
+    if len(recommended_news) < 5 and category_id is not None:
+        remaining = 5 - len(recommended_news)
+        exclude_ids = list(used_ids)
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        category_rows = execute_query(
+            _RECOMMEND_SELECT + f" AND n.category_id = %s AND n.id NOT IN ({placeholders}) " + _RECOMMEND_ORDER + f" LIMIT {remaining}",
+            [category_id] + exclude_ids,
+        )
+        for row in category_rows:
+            item = _format_news_row(row)
+            item["recommend_source"] = "related"
+            recommended_news.append(item)
+            used_ids.add(int(row["id"]))
+        logger.info("[recommended_news] same category_id=%d: got %d items (total=%d)", category_id, len(category_rows), len(recommended_news))
+
+    if len(recommended_news) < 5:
+        remaining = 5 - len(recommended_news)
+        exclude_ids = list(used_ids)
+        placeholders = ",".join(["%s"] * len(exclude_ids))
+        hot_rows = execute_query(
+            _RECOMMEND_SELECT + f" AND n.id NOT IN ({placeholders}) " + _RECOMMEND_ORDER + f" LIMIT {remaining}",
+            exclude_ids,
+        )
+        for row in hot_rows:
+            item = _format_news_row(row)
+            item["recommend_source"] = "hot"
+            recommended_news.append(item)
+        logger.info("[recommended_news] hot fallback: got %d items (total=%d)", len(hot_rows), len(recommended_news))
 
     detail = _format_news_row(news)
     detail["content"] = normalize_text(news.get("content"))
     detail["related_news"] = [_format_news_row(row) for row in related_rows]
-    detail["recommended_news"] = [_format_news_row(row) for row in recommended_rows]
+    detail["recommended_news"] = recommended_news
 
     if current_user_id is None:
         detail["is_liked"] = False
@@ -578,6 +631,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail["is_liked"] = liked is not None
         detail["is_favorited"] = favorited is not None
 
+    detail["timeline_news_count"] = timeline_news_count
     return detail
 
 
@@ -589,15 +643,15 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
     if news is None:
         return None
 
-    execute_update("UPDATE news SET view_count = view_count + 1, update_time = NOW() WHERE id = %s", [news_id])
+    execute_update("UPDATE news SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s", [news_id])
 
     current_user_id = _get_current_user_id(current_user)
     if current_user_id is not None:
         try:
             execute_update(
                 """
-                INSERT INTO browse_history (user_id, news_id, browse_time, create_time)
-                VALUES (%s, %s, NOW(), NOW())
+                INSERT INTO browse_history (user_id, news_id, browse_time)
+                VALUES (%s, %s, NOW())
                 """,
                 [current_user_id, news_id],
             )
@@ -610,9 +664,7 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
 def get_categories() -> list[dict[str, Any]]:
     """获取新闻分类，优先数据库，失败时回退 mock。"""
     try:
-        rows = _db_categories()
-        if rows:
-            return rows
+        return _db_categories()
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻分类失败，回退 mock：%s", exc)
     return _mock_get_categories()
@@ -627,32 +679,26 @@ def get_news_list(
 ) -> dict[str, Any]:
     """获取新闻列表，优先数据库，必要时回退 mock。"""
     try:
-        result = _db_news_list(
+        return _db_news_list(
             category=category,
             category_id=category_id,
             keyword=keyword,
             page=page,
             page_size=page_size,
         )
-        if result["list"]:
-            return result
-        if not (category or category_id or (keyword or "").strip()):
-            return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
-        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻列表失败，回退 mock：%s", exc)
         return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
 
 
 def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    """获取新闻热榜，优先数据库，失败时回退 mock。"""
+    """获取新闻热榜，优先数据库；无数据时返回空列表，异常时向上抛出。"""
     try:
         rows = _db_hot_news(limit=limit)
-        if rows:
-            return rows
+        return rows or []
     except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻热榜失败，回退 mock：%s", exc)
-    return _mock_get_hot_news(limit=limit)
+        logger.warning("读取新闻热榜失败：%s", exc)
+        raise
 
 
 def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
@@ -673,6 +719,9 @@ def get_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail = _db_news_detail(news_id=news_id, current_user=current_user)
         if detail is not None:
             return detail
+        raise AppException(code=404, message="新闻不存在")
+    except AppException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻详情失败，回退 mock：%s", exc)
 
@@ -688,6 +737,9 @@ def record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str,
         result = _db_record_browse(news_id=news_id, current_user=current_user)
         if result is not None:
             return result
+        raise AppException(code=404, message="新闻不存在")
+    except AppException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("记录浏览失败，回退 mock：%s", exc)
 

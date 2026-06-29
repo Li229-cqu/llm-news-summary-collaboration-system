@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, File, Header, UploadFile
 
 from app.common.auth import require_login
 from app.common.response import ApiResponse, success_response
@@ -11,7 +11,7 @@ from app.modules.user.schema import (
     UpdateProfileRequest,
     UserInfo,
 )
-from app.modules.user.service import change_password, get_profile, update_profile
+from app.modules.user.service import change_password, get_profile, update_profile, upload_avatar
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -46,3 +46,13 @@ async def change_user_password(
         request.confirm_password,
     )
     return success_response(message="密码修改成功")
+
+
+@router.post("/avatar", response_model=ApiResponse[dict])
+async def upload_user_avatar(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[dict]:
+    """上传用户头像，保存到 uploads/avatar/ 并更新 user.avatar。"""
+    result = upload_avatar(current_user, file)
+    return success_response(result)

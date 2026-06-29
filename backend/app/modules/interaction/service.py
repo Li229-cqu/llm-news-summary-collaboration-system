@@ -1,4 +1,4 @@
-"""新闻互动模块服务层：数据库优先，mock 兜底。
+﻿"""新闻互动模块服务层：数据库优先，mock 兜底。
 
 当前阶段优先读写 MySQL 中的 news_comment、user_like、favorite 等表；
 当数据库不可用、查询异常或目标数据尚未同步时，自动回退到进程内 mock 数据，
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import json
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Sequence, Set, Union
@@ -50,6 +51,45 @@ def _get_current_user_value(current_user: Any, field: str, default: Any = "") ->
         return current_user.get(field, default)
     return getattr(current_user, field, default)
 
+
+
+def _normalize_comment_media_json(value: Any) -> Optional[dict[str, Any]]:
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(exclude_none=True)
+    elif hasattr(value, "dict"):
+        value = value.dict(exclude_none=True)
+    elif isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except Exception:  # noqa: BLE001
+            return None
+
+    if not isinstance(value, dict):
+        return None
+
+    normalized: dict[str, Any] = {}
+    images = value.get("images")
+    if isinstance(images, list):
+        normalized_images = [normalize_text(item) for item in images if normalize_text(item)]
+        if normalized_images:
+            normalized["images"] = normalized_images
+
+    emojis = value.get("emojis")
+    if isinstance(emojis, list):
+        normalized_emojis = [normalize_text(item) for item in emojis if normalize_text(item)]
+        if normalized_emojis:
+            normalized["emojis"] = normalized_emojis
+
+    return normalized or None
+
+
+def _serialize_comment_media_json(value: Any) -> Optional[str]:
+    normalized = _normalize_comment_media_json(value)
+    if normalized is None:
+        return None
+    return json.dumps(normalized, ensure_ascii=False)
 
 
 def _comment_row_to_item_payload(
@@ -97,7 +137,7 @@ def _comment_row_to_item_payload(
         "status": status,
         "create_time": format_datetime(row.get("create_time")),
         "is_liked": is_liked,
-        "media_json": media_json,
+        "media_json": _normalize_comment_media_json(row.get("media_json")),
         "replies": [],
         "reply_to_user_id": row.get("reply_to_user_id"),
         "reply_to_username": normalize_text(row.get("reply_to_username") or ""),
@@ -192,7 +232,7 @@ def get_comment_by_id(comment_id: int) -> Dict[str, Any]:
     try:
         row = execute_one(
             """
-            SELECT id, news_id, user_id, parent_id, content, like_count, status
+            SELECT id, news_id, user_id, parent_id, content, media_json, like_count, status
             FROM news_comment
             WHERE id = %s AND status <> 4
             LIMIT 1
@@ -282,7 +322,7 @@ def _db_news_row(news_id: int, connection=None) -> dict[str, Any] | None:
 
 def _db_comment_row(comment_id: int, connection=None) -> dict[str, Any] | None:
     sql = """
-        SELECT id, news_id, user_id, parent_id, content, like_count, status
+        SELECT id, news_id, user_id, parent_id, content, media_json, like_count, status
         FROM news_comment
         WHERE id = %s AND status <> 4
         LIMIT 1
@@ -336,10 +376,10 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
             COALESCE(u.avatar, '') AS avatar,
             c.parent_id,
             c.content,
+            c.media_json,
             c.like_count,
             c.status,
-            c.create_time,
-            {media_json_column},
+            c.created_at AS create_time,
             COALESCE(ru.id, NULL) AS reply_to_user_id,
             COALESCE(ru.username, '') AS reply_to_username,
             COALESCE(ru.nickname, '') AS reply_to_nickname,
@@ -349,9 +389,10 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
         LEFT JOIN news_comment parent_c ON parent_c.id = c.parent_id
         LEFT JOIN user ru ON ru.id = parent_c.user_id
         WHERE c.news_id = %s AND c.status IN (1, 2, 4)
-        ORDER BY c.create_time ASC, c.id ASC
-        """
-    return execute_query(sql, [news_id])
+        ORDER BY c.created_at ASC, c.id ASC
+        """,
+        [news_id],
+    )
 
 
 def _db_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResult | None:
@@ -390,7 +431,7 @@ def _db_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResul
 
             cursor.execute(
                 """
-                INSERT INTO user_like (user_id, target_id, target_type, create_time)
+                INSERT INTO user_like (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'news', NOW())
                 """,
                 [user_id, news_id],
@@ -398,7 +439,7 @@ def _db_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResul
             cursor.execute(
                 """
                 UPDATE news
-                SET like_count = like_count + 1, update_time = NOW()
+                SET like_count = like_count + 1, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [news_id],
@@ -465,7 +506,7 @@ def _db_unlike_news(news_id: int, current_user: Optional[Any]) -> InteractionRes
             cursor.execute(
                 """
                 UPDATE news
-                SET like_count = GREATEST(like_count - 1, 0), update_time = NOW()
+                SET like_count = GREATEST(like_count - 1, 0), updated_at = NOW()
                 WHERE id = %s
                 """,
                 [news_id],
@@ -524,7 +565,7 @@ def _db_favorite_news(news_id: int, current_user: Optional[Any]) -> InteractionR
 
             cursor.execute(
                 """
-                INSERT INTO favorite (user_id, target_id, target_type, create_time)
+                INSERT INTO favorite (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'news', NOW())
                 """,
                 [user_id, news_id],
@@ -532,7 +573,7 @@ def _db_favorite_news(news_id: int, current_user: Optional[Any]) -> InteractionR
             cursor.execute(
                 """
                 UPDATE news
-                SET favorite_count = favorite_count + 1, update_time = NOW()
+                SET favorite_count = favorite_count + 1, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [news_id],
@@ -599,7 +640,7 @@ def _db_unfavorite_news(news_id: int, current_user: Optional[Any]) -> Interactio
             cursor.execute(
                 """
                 UPDATE news
-                SET favorite_count = GREATEST(favorite_count - 1, 0), update_time = NOW()
+                SET favorite_count = GREATEST(favorite_count - 1, 0), updated_at = NOW()
                 WHERE id = %s
                 """,
                 [news_id],
@@ -649,15 +690,9 @@ def _db_create_news_comment(
 ) -> CommentItem | None:
     user = require_current_user(current_user)
     user_id = _get_current_user_id(user)
-    media_json_dict = request.media_json.dict() if request.media_json else None
-    content = _validate_comment_content(request.content, media_json_dict)
+    content = _validate_comment_content(request.content, request.media_json)
+    media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    media_json_value = None
-    if request.media_json:
-        try:
-            media_json_value = json.dumps(request.media_json.dict(), ensure_ascii=False)
-        except Exception:
-            media_json_value = None
     has_media_json = _db_news_comment_has_media_json()
     connection = get_connection()
     try:
@@ -673,7 +708,7 @@ def _db_create_news_comment(
             if has_media_json:
                 cursor.execute(
                     """
-                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, NULL, %s, %s, 0, 1, %s, %s)
                     """,
                     [news_id, user_id, content, media_json_value, create_time, create_time],
@@ -681,7 +716,7 @@ def _db_create_news_comment(
             else:
                 cursor.execute(
                     """
-                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, NULL, %s, 0, 1, %s, %s)
                     """,
                     [news_id, user_id, content, create_time, create_time],
@@ -690,7 +725,7 @@ def _db_create_news_comment(
             cursor.execute(
                 """
                 UPDATE news
-                SET comment_count = comment_count + 1, update_time = NOW()
+                SET comment_count = comment_count + 1, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [news_id],
@@ -708,6 +743,7 @@ def _db_create_news_comment(
             like_count=0,
             status=1,
             create_time=create_time,
+            media_json=_normalize_comment_media_json(getattr(request, "media_json", None)),
             is_liked=False,
             media_json=request.media_json,
             replies=[],
@@ -730,15 +766,9 @@ def _db_reply_comment(
     if parent_comment is None:
         return None
 
-    media_json_dict = request.media_json.dict() if request.media_json else None
-    content = _validate_comment_content(request.content, media_json_dict)
+    content = _validate_comment_content(request.content, request.media_json)
+    media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    media_json_value = None
-    if request.media_json:
-        try:
-            media_json_value = json.dumps(request.media_json.dict(), ensure_ascii=False)
-        except Exception:
-            media_json_value = None
     has_media_json = _db_news_comment_has_media_json()
     connection = get_connection()
     try:
@@ -746,7 +776,7 @@ def _db_reply_comment(
             if has_media_json:
                 cursor.execute(
                     """
-                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, create_time, update_time)
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, 0, 1, %s, %s)
                     """,
                     [
@@ -762,7 +792,7 @@ def _db_reply_comment(
             else:
                 cursor.execute(
                     """
-                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, create_time, update_time)
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, 0, 1, %s, %s)
                     """,
                     [
@@ -778,7 +808,7 @@ def _db_reply_comment(
             cursor.execute(
                 """
                 UPDATE news
-                SET comment_count = comment_count + 1, update_time = NOW()
+                SET comment_count = comment_count + 1, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [int(parent_comment["news_id"])],
@@ -796,6 +826,7 @@ def _db_reply_comment(
             like_count=0,
             status=1,
             create_time=create_time,
+            media_json=_normalize_comment_media_json(getattr(request, "media_json", None)),
             is_liked=False,
             media_json=request.media_json,
             replies=[],
@@ -845,7 +876,7 @@ def _db_like_comment(comment_id: int, current_user: Optional[Any]) -> CommentLik
 
             cursor.execute(
                 """
-                INSERT INTO user_like (user_id, target_id, target_type, create_time)
+                INSERT INTO user_like (user_id, target_id, target_type, created_at)
                 VALUES (%s, %s, 'news_comment', NOW())
                 """,
                 [user_id, comment_id],
@@ -853,7 +884,7 @@ def _db_like_comment(comment_id: int, current_user: Optional[Any]) -> CommentLik
             cursor.execute(
                 """
                 UPDATE news_comment
-                SET like_count = like_count + 1, update_time = NOW()
+                SET like_count = like_count + 1, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [comment_id],
@@ -897,7 +928,7 @@ def _db_delete_news_comment(comment_id: int, current_user: Optional[Any]) -> dic
             cursor.execute(
                 """
                 UPDATE news_comment
-                SET status = 4, update_time = NOW()
+                SET status = 4, updated_at = NOW()
                 WHERE id = %s
                 """,
                 [comment_id],
@@ -905,7 +936,7 @@ def _db_delete_news_comment(comment_id: int, current_user: Optional[Any]) -> dic
             cursor.execute(
                 """
                 UPDATE news
-                SET comment_count = GREATEST(comment_count - 1, 0), update_time = NOW()
+                SET comment_count = GREATEST(comment_count - 1, 0), updated_at = NOW()
                 WHERE id = %s
                 """,
                 [int(comment["news_id"] or 0)],
@@ -1106,13 +1137,10 @@ def _mock_create_news_comment(
     if news is None:
         raise AppException(code=404, message="新闻不存在")
 
-    media_json_dict = request.media_json.dict() if request.media_json else None
-    content = _validate_comment_content(request.content, media_json_dict)
+    content = _validate_comment_content(request.content, request.media_json)
     comment_id = get_next_comment_id()
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    media_json_data = None
-    if request.media_json:
-        media_json_data = request.media_json.dict()
+    media_json_dict = _normalize_comment_media_json(getattr(request, "media_json", None))
     comment = {
         "id": comment_id,
         "news_id": news_id,
@@ -1122,10 +1150,10 @@ def _mock_create_news_comment(
         "avatar": _get_current_user_value(user, "avatar"),
         "parent_id": None,
         "content": content,
+        "media_json": media_json_dict,
         "like_count": 0,
         "status": 1,
         "create_time": create_time,
-        "media_json": media_json_data,
     }
     MOCK_NEWS_COMMENTS.append(comment)
     news["comment_count"] = int(news.get("comment_count") or 0) + 1
@@ -1146,13 +1174,9 @@ def _mock_reply_comment(
     if parent_comment is None:
         raise AppException(code=404, message="评论不存在")
 
-    media_json_dict = request.media_json.dict() if request.media_json else None
-    content = _validate_comment_content(request.content, media_json_dict)
+    content = _validate_comment_content(request.content, request.media_json)
     reply_id = get_next_comment_id()
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    media_json_data = None
-    if request.media_json:
-        media_json_data = request.media_json.dict()
     reply = {
         "id": reply_id,
         "news_id": int(parent_comment["news_id"]),
@@ -1165,7 +1189,7 @@ def _mock_reply_comment(
         "like_count": 0,
         "status": 1,
         "create_time": create_time,
-        "media_json": media_json_data,
+        "media_json": _normalize_comment_media_json(getattr(request, "media_json", None)),
     }
     MOCK_NEWS_COMMENTS.append(reply)
     for item in MOCK_NEWS:
@@ -1276,11 +1300,20 @@ def get_news_comments(news_id: int, current_user: Optional[Any] = None) -> Comme
     return _mock_get_news_comments(news_id=news_id, current_user=current_user)
 
 
+def _has_comment_media(media_json: Any) -> bool:
+    if not media_json:
+        return False
+    if isinstance(media_json, dict):
+        return bool(media_json.get("images") or media_json.get("emojis") or media_json.get("files"))
+    images = getattr(media_json, "images", None) or []
+    emojis = getattr(media_json, "emojis", None) or []
+    files = getattr(media_json, "files", None) or []
+    return len(images) > 0 or len(emojis) > 0 or len(files) > 0
+
+
 def _validate_comment_content(content: str, media_json: Any = None) -> str:
-    normalized_content = content.strip()
-    if not normalized_content:
-        if media_json and (isinstance(media_json, dict) and (media_json.get("images") or media_json.get("emojis") or media_json.get("files"))):
-            return ""
+    normalized_content = content.strip() if content else ""
+    if not normalized_content and not _has_comment_media(media_json):
         raise AppException(code=400, message="评论内容不能为空")
     return normalized_content
 
@@ -1329,3 +1362,4 @@ def like_comment(comment_id: int, current_user: Optional[Any]) -> CommentLikeRes
     except Exception as exc:  # noqa: BLE001
         logger.warning("数据库点赞评论失败，回退 mock：%s", exc)
     return _mock_like_comment(comment_id=comment_id, current_user=current_user)
+

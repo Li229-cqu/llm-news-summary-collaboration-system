@@ -55,6 +55,8 @@ class AIGenerateRecordItem(BaseModel):
     title_count: int
     risk_level: Literal["low", "medium", "high"]
     created_at: str
+    candidate_titles: list[str] = []
+    summary_short: str = ""
 
 
 class AIGenerateRecordDetail(BaseModel):
@@ -76,3 +78,10 @@ class AIRecordListResponse(BaseModel):
 class DeleteAIRecordResult(BaseModel):
     success: bool
     message: str
+
+
+class FileUploadResponse(BaseModel):
+    success: bool
+    message: str
+    content: str
+    filename: str

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AIInputPanel from '@/components/ai/AIInputPanel.vue'
@@ -11,6 +11,7 @@ import { generateTitleSummary } from '@/api/ai'
 
 const aiDraft = useAIDraftStore()
 const route = useRoute()
+const historyRef = ref<{ loadHistory?: () => Promise<void> } | null>(null)
 
 function loadNewsDraftFromSession() {
   const rawDraft = sessionStorage.getItem('ai_draft_from_news')
@@ -87,6 +88,9 @@ const handleGenerate = async () => {
 
     aiDraft.setResult(result)
     ElMessage.success('标题和摘要生成成功')
+    // 刷新生成历史
+    await nextTick()
+    await historyRef.value?.loadHistory?.()
   } catch (error) {
     let errorMessage = 'AI 服务暂时不可用，请稍后重试'
 
@@ -109,6 +113,11 @@ const handleGenerate = async () => {
 
 onMounted(() => {
   syncDraftFromNewsRoute()
+})
+
+onUnmounted(() => {
+  aiDraft.resetDraft()
+  sessionStorage.removeItem('ai_draft_from_news')
 })
 
 watch(
@@ -158,7 +167,7 @@ watch(
     <AIResultPanel />
 
     <!-- 生成历史区域 -->
-    <AIGenerateHistory />
+    <AIGenerateHistory ref="historyRef" />
   </main>
 </template>
 

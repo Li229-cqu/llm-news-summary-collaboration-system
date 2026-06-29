@@ -20,7 +20,7 @@
           <div class="news-detail-card__header">
             <el-button text type="primary" @click="goHome">返回首页</el-button>
             <div class="news-detail-card__header-actions">
-              <ShareButton />
+              <ShareButton target-selector=".news-detail-main" :title="newsDetail?.title || ''" />
               <el-button type="primary" plain @click="goToAiGenerate">用 AI 生成标题和摘要</el-button>
             </div>
           </div>
@@ -76,10 +76,10 @@
 
       <aside class="news-detail-aside">
         <NewsDetailSidePanel
-          :related-news="relatedNews"
           :recommended-news="recommendedNews"
           :timeline-topic-id="timelineTopicId"
           :timeline-topic-name="timelineTopicName"
+          :timeline-news-count="newsDetail?.timeline_news_count ?? 0"
           @view-timeline="handleViewTimeline"
         />
       </aside>
@@ -146,7 +146,6 @@ const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 const newsId = computed(() => String(route.params.id ?? '').trim())
 
-const relatedNews = computed<NewsItem[]>(() => newsDetail.value?.related_news ?? [])
 const recommendedNews = computed<NewsItem[]>(() => newsDetail.value?.recommended_news ?? [])
 const timelineTopicId = computed(() => newsDetail.value?.topic_id ?? null)
 const timelineTopicName = computed(
@@ -337,7 +336,10 @@ async function handleCreateComment(content: string, mediaJson?: CommentMediaJson
   submittingComment.value = true
 
   try {
-    await createNewsComment(newsDetail.value.id, { content, media_json: mediaJson || undefined })
+    await createNewsComment(newsDetail.value.id, {
+      content: content || ' ',
+      media_json: mediaJson ?? null,
+    })
     await loadComments()
     newsDetail.value = {
       ...newsDetail.value,

@@ -10,3 +10,6 @@ DBUtils
 beautifulsoup4
 python-dateutil
 python-multipart
+python-docx
+PyPDF2
+eval_type_backport

@@ -94,10 +94,11 @@ async def get_history(
 async def get_user_favorites(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    type: str = Query("news"),
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[dict]:
-    """获取用户收藏列表。"""
-    data = get_favorites(current_user, page=page, page_size=page_size)
+    """获取用户收藏列表，支持 type=news 或 type=post。"""
+    data = get_favorites(current_user, page=page, page_size=page_size, target_type=type)
     return success_response(data)
 
 

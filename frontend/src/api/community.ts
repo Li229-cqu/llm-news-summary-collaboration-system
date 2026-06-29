@@ -74,6 +74,9 @@ export interface HotSearchItem {
   rank: number
   search_count: number
   trend: 'up' | 'down' | 'stable'
+  title: string
+  target_type: string
+  target_id: number
 }
 
 export interface AIHelperResponse {
@@ -163,6 +166,19 @@ export function deleteComment(commentId: number | string) {
 
 export function getHotSearch(params: { limit?: number } = {}) {
   return request.get<HotSearchItem[], HotSearchItem[]>('/api/community/hot-search', { params })
+}
+
+export interface TagCount {
+  name: string
+  count: number
+}
+
+export function getHotTags(params: { limit?: number } = {}) {
+  return request.get<TagCount[], TagCount[]>('/api/community/hot-tags', { params })
+}
+
+export function getAvailableTags() {
+  return request.get<TagCount[], TagCount[]>('/api/community/available-tags')
 }
 
 export function aiNewsHelper(question: string) {

@@ -10,7 +10,7 @@ SET @col_exists := (
 
 SET @sql := IF(
   @col_exists = 0,
-  'ALTER TABLE `community_post` ADD COLUMN `tags` JSON NULL COMMENT ''社区帖子标签'' AFTER `update_time`',
+  'ALTER TABLE `community_post` ADD COLUMN `tags` JSON NULL COMMENT ''社区帖子标签'' AFTER `updated_at`',
   'SELECT 1'
 );
 

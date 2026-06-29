@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ _db_connected: bool = False
 BASE_DIR = Path(__file__).resolve().parents[2]
 UPLOADS_DIR = BASE_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+os.makedirs(os.path.join(str(UPLOADS_DIR), "avatar"), exist_ok=True)
 from app.modules.admin.router import router as admin_router
 from app.modules.ai.router import router as ai_router
 from app.modules.auth.router import router as auth_router
@@ -100,6 +102,8 @@ async def test_error():
     """开发测试接口：主动抛出业务异常以验证统一异常处理。"""
     raise AppException(code=400, message="开发测试异常")
 
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.include_router(auth_router)
 app.include_router(user_router)

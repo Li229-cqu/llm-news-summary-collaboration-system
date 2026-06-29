@@ -868,20 +868,66 @@ def _mock_favorites(
                     category_name=news["category_name"],
                     source=news["source"],
                     publish_time=news["publish_time"],
+                    favorited_at=format_datetime(record.get("favorited_at") or record.get("create_time")),
                 ).dict()
             )
 
-    favorite_items.sort(key=lambda x: x["publish_time"], reverse=True)
+    favorite_items.sort(key=lambda x: x.get("favorited_at") or x["publish_time"], reverse=True)
     return paginate(favorite_items, page=page, page_size=page_size)
 
 
 def _db_favorites(
-    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10
+    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10,
+    target_type: str = "news",
 ) -> Dict[str, Any] | None:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
         return paginate([], page=page, page_size=page_size)
 
+    if target_type not in ("news", "post"):
+        return paginate([], page=page, page_size=page_size)
+
+    if target_type == "post":
+        rows = execute_query(
+            """
+            SELECT
+                p.id AS post_id,
+                p.title,
+                LEFT(p.content, 80) AS summary,
+                '' AS category_name,
+                '社区帖子' AS source,
+                COALESCE(p.created_at, p.create_time) AS publish_time,
+                COALESCE(f.created_at, f.create_time) AS favorited_at
+            FROM favorite f
+            LEFT JOIN community_post p ON p.id = f.target_id
+            WHERE f.user_id = %s
+              AND f.target_type = 'post'
+              AND p.status = 1
+            ORDER BY favorited_at DESC, f.id DESC
+            """,
+            [user_id],
+        )
+        if not rows:
+            return None
+
+        favorite_items = []
+        for row in rows:
+            favorite_items.append(
+                FavoriteItem(
+                    news_id=int(row["post_id"]),
+                    title=normalize_text(row["title"]),
+                    summary=normalize_text(row["summary"]),
+                    category_name=normalize_text(row["category_name"]),
+                    source=normalize_text(row["source"]) or "社区帖子",
+                    publish_time=format_datetime(row["publish_time"]),
+                    favorited_at=format_datetime(row.get("favorited_at")),
+                    target_type="post",
+                ).dict()
+            )
+
+        return paginate(favorite_items, page=page, page_size=page_size)
+
+    # target_type = 'news'
     rows = execute_query(
         """
         SELECT
@@ -890,14 +936,15 @@ def _db_favorites(
             n.summary,
             COALESCE(nc.name, '未分类') AS category_name,
             n.source,
-            n.publish_time
+            n.publish_time,
+            COALESCE(f.created_at, f.create_time) AS favorited_at
         FROM favorite f
         LEFT JOIN news n ON n.id = f.target_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
         WHERE f.user_id = %s
           AND f.target_type = 'news'
           AND n.status = 1
-        ORDER BY n.publish_time DESC, f.id DESC
+        ORDER BY favorited_at DESC, f.id DESC
         """,
         [user_id],
     )
@@ -914,6 +961,8 @@ def _db_favorites(
                 category_name=normalize_text(row["category_name"]),
                 source=normalize_text(row["source"]),
                 publish_time=format_datetime(row["publish_time"]),
+                favorited_at=format_datetime(row.get("favorited_at")),
+                target_type="news",
             ).dict()
         )
 
@@ -921,16 +970,19 @@ def _db_favorites(
 
 
 def get_favorites(
-    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10
+    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10,
+    target_type: str = "news",
 ) -> Dict[str, Any]:
-    """获取用户收藏列表。"""
+    """获取用户收藏列表，支持 target_type=news 或 post。"""
 
     try:
-        result = _db_favorites(current_user, page=page, page_size=page_size)
+        result = _db_favorites(current_user, page=page, page_size=page_size, target_type=target_type)
         if result is not None:
             return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取收藏列表失败，回退 mock：%s", exc)
+    if target_type != "news":
+        return paginate([], page=page, page_size=page_size)
     return _mock_favorites(current_user, page=page, page_size=page_size)
 
 
@@ -988,12 +1040,12 @@ def _db_comments(
             c.content,
             c.like_count,
             c.status,
-            c.create_time
+            c.created_at AS create_time
         FROM news_comment c
         LEFT JOIN news n ON n.id = c.news_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
         WHERE c.user_id = %s AND c.status <> 4
-        ORDER BY c.create_time DESC, c.id DESC
+        ORDER BY c.created_at DESC, c.id DESC
         """,
         [user_id],
     )
@@ -1080,6 +1132,7 @@ def _db_ai_records(
             source_news_id,
             source_title,
             input_text,
+            title_count,
             candidate_titles,
             summary_short,
             summary_long,
@@ -1108,6 +1161,7 @@ def _db_ai_records(
                 source_news_id=row.get("source_news_id"),
                 source_title=normalize_text(row.get("source_title")),
                 input_text=normalize_text(row["input_text"]),
+                title_count=int(row.get("title_count") or 3),
                 candidate_titles=_parse_json_field(row.get("candidate_titles"), default=[]),
                 summary_short=normalize_text(row.get("summary_short")),
                 summary_long=normalize_text(row.get("summary_long")) or None,
@@ -1653,7 +1707,7 @@ def get_recommendations(current_user: Optional[Any] = None, limit: int = 10) -> 
 
     try:
         result = _db_recommendations(user_id, limit=limit)
-        if result is not None and result.get("list"):
+        if result is not None:
             return result
     except Exception as exc:
         logger.warning("数据库推荐查询异常，回退 mock：%s", exc)

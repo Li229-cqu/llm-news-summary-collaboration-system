@@ -31,6 +31,7 @@ export interface NewsItem {
   source_url?: string
   recommendation_score?: number
   recommendation_reason?: string
+  recommend_source?: 'related' | 'hot'
 }
 
 export interface NewsDetail extends NewsItem {
@@ -39,6 +40,7 @@ export interface NewsDetail extends NewsItem {
   recommended_news: NewsItem[]
   is_liked: boolean
   is_favorited: boolean
+  timeline_news_count?: number
 }
 
 export interface NewsListParams {

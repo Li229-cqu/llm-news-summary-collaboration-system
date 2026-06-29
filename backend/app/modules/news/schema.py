@@ -40,6 +40,7 @@ class NewsItem(BaseModel):
     status: int
     tags: list[str] = Field(default_factory=list)
     source_url: str = ""
+    recommend_source: Optional[str] = None
 
 
 class NewsDetail(NewsItem):
@@ -50,6 +51,7 @@ class NewsDetail(NewsItem):
     recommended_news: list[NewsItem] = Field(default_factory=list)
     is_liked: bool = False
     is_favorited: bool = False
+    timeline_news_count: int = 0
 
 
 class NewsListQuery(BaseModel):
