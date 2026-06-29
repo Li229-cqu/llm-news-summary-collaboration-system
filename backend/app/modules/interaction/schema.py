@@ -89,6 +89,10 @@ class CommentItem(BaseModel):
     is_liked: bool = False
     media_json: Optional[CommentMediaJson] = None
     replies: List["CommentItem"] = Field(default_factory=list)
+    reply_to_user_id: Optional[int] = None
+    reply_to_username: str = ""
+    reply_to_nickname: str = ""
+    reply_to_content: str = ""
 
 
 class CommentListResponse(BaseModel):

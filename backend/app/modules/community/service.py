@@ -308,6 +308,10 @@ def _comment_row_to_item(
         "status": status,
         "create_time": _format_datetime(row.get("create_time")),
         "media_json": _normalize_media_json(row.get("media_json")),
+        "reply_to_user_id": row.get("reply_to_user_id"),
+        "reply_to_username": normalize_text(row.get("reply_to_username") or ""),
+        "reply_to_nickname": normalize_text(row.get("reply_to_nickname") or ""),
+        "reply_to_content": normalize_text(row.get("reply_to_content") or ""),
         "author": author_name,
         "author_id": int(row.get("author_id") or row.get("user_id") or 0),
         "created_at": _format_datetime(row.get("create_time")),
@@ -649,9 +653,15 @@ def _db_comment_rows(post_id: int, current_user: Optional[Any] = None) -> list[d
             pc.like_count,
             pc.status,
             pc.created_at AS create_time,
-            {media_json_column}
+            {media_json_column},
+            COALESCE(ru.id, NULL) AS reply_to_user_id,
+            COALESCE(ru.username, '') AS reply_to_username,
+            COALESCE(ru.nickname, '') AS reply_to_nickname,
+            COALESCE(parent_pc.content, '') AS reply_to_content
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
+        LEFT JOIN post_comment parent_pc ON parent_pc.id = pc.parent_id
+        LEFT JOIN `user` ru ON ru.id = parent_pc.user_id
         WHERE pc.post_id = %s AND pc.status IN (1, 2, 4)
         ORDER BY pc.created_at ASC, pc.id ASC
         """,
@@ -944,10 +954,22 @@ def _mock_get_comments(post_id: int, current_user: Optional[Any] = None) -> list
         for item in FALLBACK_COMMENT_LIKES
         if user_id is not None and int(item["user_id"]) == user_id
     }
+    comment_map = {int(item["id"]): item for item in items}
     result_items = []
     for item in items:
         comment_id = int(item["id"])
         author_id = int(item.get("user_id") or 0)
+        parent_id = item.get("parent_id")
+        reply_to_user_id = None
+        reply_to_username = ""
+        reply_to_nickname = ""
+        if parent_id is not None:
+            parent_comment = comment_map.get(int(parent_id))
+            if parent_comment:
+                reply_to_user_id = int(parent_comment.get("user_id") or 0)
+                reply_to_username = normalize_text(parent_comment.get("username") or "")
+                reply_to_nickname = normalize_text(parent_comment.get("nickname") or "")
+                reply_to_content = normalize_text(parent_comment.get("content") or "")
         result_items.append(
             {
                 "id": comment_id,
@@ -956,11 +978,16 @@ def _mock_get_comments(post_id: int, current_user: Optional[Any] = None) -> list
                 "username": normalize_text(item.get("username")),
                 "nickname": normalize_text(item.get("nickname")),
                 "avatar": normalize_text(item.get("avatar")),
-                "parent_id": item.get("parent_id"),
+                "parent_id": parent_id,
                 "content": normalize_text(item.get("content")),
                 "like_count": int(item.get("like_count") or 0),
                 "status": int(item.get("status") or 0),
                 "create_time": _format_datetime(item.get("create_time")),
+                "media_json": _normalize_media_json(item.get("media_json")),
+                "reply_to_user_id": reply_to_user_id,
+                "reply_to_username": reply_to_username,
+                "reply_to_nickname": reply_to_nickname,
+                "reply_to_content": reply_to_content,
                 "author": normalize_text(item.get("author")),
                 "author_id": author_id,
                 "created_at": _format_datetime(item.get("create_time")),
@@ -1469,8 +1496,9 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
     finally:
         connection.close()
 
+    media_json_column = "pc.media_json" if _db_post_comment_has_media_json() else "NULL AS media_json"
     row = execute_one(
-        """
+        f"""
         SELECT
             pc.id,
             pc.post_id,
@@ -1482,7 +1510,12 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             pc.content,
             pc.like_count,
             pc.status,
+<<<<<<< HEAD
+            pc.create_time,
+            {media_json_column}
+=======
             pc.created_at AS create_time
+>>>>>>> develop
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
         WHERE pc.id = %s
@@ -2473,11 +2506,83 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
     )
 
 
-async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
-    """获取帖子的评论区 AI 总结。"""
+async def generate_comments_summary(comments: list[str]) -> CommentsSummaryResponse:
+    """生成评论总结（接收评论列表，调用 AI 服务）。"""
     import httpx
     from app.core.config import settings
 
+    if not comments:
+        return CommentsSummaryResponse(
+            summary="暂无评论可总结",
+            sentiment="neutral",
+            keyword="",
+            keywords=[],
+            key_points=[],
+            source="fallback"
+        )
+
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/comment-summary"
+        logger.info(f"🚀 [REAL API] 调用 AI 服务生成评论总结: {ai_service_url}")
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                ai_service_url,
+                json={
+                    "comments": comments
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and "data" in data:
+                    ai_data = data["data"]
+                    logger.info("✅ [REAL API] AI 评论总结生成成功")
+                    return CommentsSummaryResponse(
+                        summary=ai_data.get("summary", ""),
+                        sentiment=ai_data.get("sentiment", "neutral"),
+                        keyword=ai_data.get("keyword", "") or ",".join(ai_data.get("keywords", [])[:3]),
+                        keywords=ai_data.get("keywords", []),
+                        key_points=ai_data.get("key_points", []),
+                        source=ai_data.get("source", "llm")
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"❌ [REAL API] AI 服务调用失败，返回基础总结：{exc}")
+
+    import re
+    all_text = "\n".join(comments)
+    positive_words = ["支持", "赞同", "好", "棒", "赞", "喜欢", "满意", "精彩", "优秀", "不错", "推荐", "认可", "肯定"]
+    negative_words = ["反对", "不赞同", "差", "垃圾", "烂", "讨厌", "失望", "糟糕", "问题", "不满", "投诉", "批评"]
+    pos_count = sum(1 for word in positive_words if word in all_text)
+    neg_count = sum(1 for word in negative_words if word in all_text)
+    sentiment = "positive" if pos_count > neg_count else "negative" if neg_count > pos_count else "neutral"
+
+    words = re.findall(r'[一-鿿]{2,}', all_text)
+    keyword_freq = {}
+    for word in words:
+        keyword_freq[word] = keyword_freq.get(word, 0) + 1
+    sorted_keywords = sorted(keyword_freq.items(), key=lambda x: (-x[1], -len(x[0])))
+    keywords = [word for word, _ in sorted_keywords[:5]]
+
+    key_points = []
+    for i, comment in enumerate(comments[:3], 1):
+        if comment.strip():
+            key_points.append(f"观点{i}：{comment[:50]}")
+
+    logger.info("🤖 [FALLBACK] 使用基础总结（关键词匹配）")
+    sentiment_text = "正面" if sentiment == "positive" else "负面" if sentiment == "negative" else "中立"
+    basic_summary = f"该话题共有 {len(comments)} 条评论。整体情感倾向为{sentiment_text}。主要讨论热点包括：{('、'.join(keywords)) if keywords else '暂无明显热点'}。建议查看完整评论了解详细观点。"
+
+    return CommentsSummaryResponse(
+        summary=basic_summary,
+        sentiment=sentiment,
+        keyword=",".join(keywords[:3]),
+        keywords=keywords,
+        key_points=key_points,
+        source="fallback"
+    )
+
+
+async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
+    """获取帖子的评论区 AI 总结。"""
     all_comments = []
     page = 1
     page_size = 50
@@ -2501,59 +2606,7 @@ async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
             break
         page += 1
 
-    if not all_comments:
-        return CommentsSummaryResponse(
-            summary="该帖子暂无评论，快来发表你的看法吧！",
-            sentiment="neutral",
-            keyword="",
-            source="fallback"
-        )
-
-    comments_text = "\n".join([f"{i+1}. {comment}" for i, comment in enumerate(all_comments)])
-
-    system_prompt = """你是一个专业的评论区分析师。请总结以下用户评论的主要观点。
-要求：
-1. 总结核心观点和用户态度
-2. 总结长度在 200-300 字之间
-3. 客观准确，避免偏向
-4. 如有分歧观点，请分别概括"""
-
-    question = f"以下是用户对这条帖子的所有评论，请总结主要观点：\n\n{comments_text}"
-
-    try:
-        ai_service_url = f"{settings.ai_service_url}/ai/chat"
-        logger.info(f"🚀 [REAL API] 调用 AI 服务生成评论总结: {ai_service_url}")
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                ai_service_url,
-                json={
-                    "question": question,
-                    "context": system_prompt
-                }
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 200 and "data" in data:
-                    summary = data["data"].get("answer", "")
-                    if summary:
-                        logger.info("✅ [REAL API] AI 评论总结生成成功")
-                        return CommentsSummaryResponse(
-                            summary=summary,
-                            sentiment="neutral",
-                            keyword="AI总结",
-                            source="llm"
-                        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"❌ [REAL API] AI 服务调用失败，返回基础总结：{exc}")
-
-    logger.info("🤖 [FALLBACK] 使用基础总结（关键词匹配）")
-    basic_summary = f"该帖子共有 {len(all_comments)} 条评论。用户对此话题进行了积极讨论，整体氛围较为活跃。建议逐条查看评论了解详细观点。"
-    return CommentsSummaryResponse(
-        summary=basic_summary,
-        sentiment="neutral",
-        keyword="",
-        source="fallback"
-    )
+    return await generate_comments_summary(all_comments)
 
 
 FALLBACK_POSTS = [deepcopy(item) for item in MOCK_COMMUNITY_POSTS]

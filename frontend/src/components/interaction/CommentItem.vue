@@ -18,6 +18,12 @@
         </div>
       </div>
 
+      <div v-if="replyQuote" class="comment-item__quote">
+        <span class="comment-item__quote-arrow">→</span>
+        <span class="comment-item__quote-user">@{{ replyQuote.nickname }}</span>
+        <span class="comment-item__quote-content">"{{ replyQuote.content }}"</span>
+      </div>
+
       <div class="comment-item__content">
         {{ displayContent }}
       </div>
@@ -80,7 +86,7 @@
         </div>
       </div>
 
-      <div v-if="visibleReplies.length" class="comment-item__replies">
+      <div v-if="allReplies.length" class="comment-item__replies">
         <CommentItem
           v-for="reply in visibleReplies"
           :key="reply.id"
@@ -92,17 +98,37 @@
           :current-user-id="currentUserId"
           :current-user-role="currentUserRole"
           :level="level + 1"
+          :root-comment-id="level === 0 ? props.comment.id : props.rootCommentId"
           @like="handleLike"
           @reply="handleReplyEvent"
           @delete="handleDeleteEvent"
         />
+
+        <div class="comment-item__expand-btn">
+          <el-button
+            v-if="showExpandButton"
+            text
+            type="primary"
+            @click="expandReplies"
+          >
+            展开更多评论
+          </el-button>
+          <el-button
+            v-if="showCollapseButton"
+            text
+            type="primary"
+            @click="collapseReplies"
+          >
+            收起以上评论
+          </el-button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import CommentBox from './CommentBox.vue'
 
 export interface CommentMediaJson {
@@ -131,6 +157,10 @@ export interface CommentItemData {
   is_liked: boolean
   replies: CommentItemData[]
   media_json?: CommentMediaJson | string | null
+  reply_to_user_id?: number | null
+  reply_to_username?: string
+  reply_to_nickname?: string
+  reply_to_content?: string
 }
 
 const props = withDefaults(
@@ -143,6 +173,7 @@ const props = withDefaults(
     currentUserId?: number | null
     currentUserRole?: string
     level?: number
+    rootCommentId?: number | null
   }>(),
   {
     replyingId: null,
@@ -152,6 +183,7 @@ const props = withDefaults(
     currentUserId: null,
     currentUserRole: '',
     level: 0,
+    rootCommentId: null,
   },
 )
 
@@ -160,6 +192,32 @@ const emit = defineEmits<{
   (event: 'reply', comment: CommentItemData, content: string, mediaJson?: CommentMediaJson | null): void
   (event: 'delete', comment: CommentItemData): void
 }>()
+
+const expandedCount = ref(0)
+
+interface ExpandState {
+  expandedCount: number
+}
+
+const expandStateMap = new Map<number, ExpandState>()
+
+watch(
+  () => props.comment.id,
+  (newId) => {
+    const stored = expandStateMap.get(newId)
+    expandedCount.value = stored?.expandedCount ?? 0
+  },
+  { immediate: true }
+)
+
+function getExpandedCount(): number {
+  return expandedCount.value
+}
+
+function setExpandedCount(value: number): void {
+  expandedCount.value = value
+  expandStateMap.set(props.comment.id, { expandedCount: value })
+}
 
 const showReplyBox = computed(() => props.replyingId === props.comment.id)
 const isFolded = computed(() => props.comment.status === 2)
@@ -173,7 +231,103 @@ const canDelete = computed(() => {
   return isOwner.value || role === 'admin' || role === 'editor'
 })
 const loadingDelete = computed(() => props.deletingId === props.comment.id)
-const visibleReplies = computed(() => (props.level >= 1 ? [] : props.comment.replies ?? []))
+
+const allReplies = computed(() => {
+  if (props.level >= 1) {
+    return []
+  }
+  const replies = props.comment.replies ?? []
+  const flatReplies: CommentItemData[] = []
+  const visited = new Set<number>()
+
+  function collect(comment: CommentItemData) {
+    if (visited.has(comment.id)) return
+    visited.add(comment.id)
+    flatReplies.push(comment)
+    for (const child of comment.replies ?? []) {
+      collect(child)
+    }
+  }
+
+  for (const reply of replies) {
+    collect(reply)
+  }
+
+  return flatReplies
+})
+
+const maxLikedReply = computed(() => {
+  if (allReplies.value.length === 0) return null
+  return allReplies.value.reduce((max, current) => {
+    if (current.like_count > max.like_count) return current
+    if (current.like_count === max.like_count) {
+      return current.create_time < max.create_time ? current : max
+    }
+    return max
+  })
+})
+
+const displayLimit = computed(() => {
+  if (allReplies.value.length < 3) {
+    return allReplies.value.length
+  }
+  const expanded = getExpandedCount()
+  if (expanded === 0) {
+    return 1
+  }
+  return 1 + expanded * 3
+})
+
+const visibleReplies = computed(() => {
+  if (allReplies.value.length === 0) return []
+  if (allReplies.value.length < 3) {
+    return allReplies.value
+  }
+  const expanded = getExpandedCount()
+  if (expanded === 0) {
+    return maxLikedReply.value ? [maxLikedReply.value] : []
+  }
+  const sortedReplies = [...allReplies.value].sort((a, b) => {
+    if (b.like_count !== a.like_count) {
+      return b.like_count - a.like_count
+    }
+    return a.create_time.localeCompare(b.create_time)
+  })
+  return sortedReplies.slice(0, displayLimit.value)
+})
+
+const showExpandButton = computed(() => {
+  return allReplies.value.length >= 3 && visibleReplies.value.length < allReplies.value.length
+})
+
+const showCollapseButton = computed(() => {
+  return getExpandedCount() > 0
+})
+
+function expandReplies() {
+  setExpandedCount(getExpandedCount() + 1)
+}
+
+function collapseReplies() {
+  setExpandedCount(0)
+}
+
+const replyQuote = computed(() => {
+  const nickname = props.comment.reply_to_nickname
+  const content = props.comment.reply_to_content
+  if (!nickname || !content) {
+    return null
+  }
+  const rootId = props.rootCommentId ?? props.comment.id
+  const isDirectReplyToRoot = props.comment.parent_id === rootId
+  if (isDirectReplyToRoot) {
+    return null
+  }
+  return {
+    nickname,
+    content: content.length > 50 ? content.slice(0, 50) + '...' : content
+  }
+})
 
 const normalizedMedia = computed<CommentMediaJson>(() => {
   const raw = props.comment.media_json
@@ -190,7 +344,18 @@ const normalizedMedia = computed<CommentMediaJson>(() => {
   return raw
 })
 
-const mediaImages = computed(() => normalizedMedia.value.images ?? [])
+const mediaImages = computed(() => {
+  const images = normalizedMedia.value.images ?? []
+  return images.map(image => {
+    if (image.startsWith('http://') || image.startsWith('https://')) {
+      return image
+    }
+    if (image.startsWith('/')) {
+      return image
+    }
+    return `/${image}`
+  })
+})
 const mediaEmojis = computed(() => normalizedMedia.value.emojis ?? [])
 const avatarText = computed(() => props.comment.nickname?.slice(0, 1) || 'U')
 const displayNickname = computed(() => props.comment.nickname || props.comment.username || '用户')
@@ -309,7 +474,7 @@ function handleDeleteEvent(comment: CommentItemData) {
 .comment-item__body {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .comment-item__header {
@@ -346,6 +511,32 @@ function handleDeleteEvent(comment: CommentItemData) {
 .comment-item__time {
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+.comment-item__quote {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-card));
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.comment-item__quote-arrow {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.comment-item__quote-user {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.comment-item__quote-content {
+  color: var(--color-text-secondary);
 }
 
 .comment-item__content {
@@ -442,6 +633,18 @@ function handleDeleteEvent(comment: CommentItemData) {
   width: 2px;
   height: 10px;
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-border));
+}
+
+.comment-item__expand-btn {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  text-align: left;
+}
+
+.comment-item__expand-btn :deep(.el-button) {
+  color: var(--color-primary);
+  font-size: 13px;
 }
 
 @media (max-width: 640px) {

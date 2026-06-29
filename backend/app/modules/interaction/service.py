@@ -11,6 +11,7 @@ import json
 import logging
 import json
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Sequence, Set, Union
 
 from app.common.exceptions import AppException
@@ -110,6 +111,19 @@ def _comment_row_to_item_payload(
     else:
         content = normalize_text(row.get("content"))
 
+    media_json_raw = row.get("media_json")
+    media_json = None
+    if media_json_raw:
+        if isinstance(media_json_raw, str):
+            media_json_raw = media_json_raw.strip()
+            if media_json_raw:
+                try:
+                    media_json = json.loads(media_json_raw)
+                except (json.JSONDecodeError, TypeError):
+                    media_json = None
+        elif isinstance(media_json_raw, (dict, list)):
+            media_json = media_json_raw
+
     return {
         "id": comment_id,
         "news_id": int(row.get("news_id") or 0),
@@ -125,6 +139,10 @@ def _comment_row_to_item_payload(
         "is_liked": is_liked,
         "media_json": _normalize_comment_media_json(row.get("media_json")),
         "replies": [],
+        "reply_to_user_id": row.get("reply_to_user_id"),
+        "reply_to_username": normalize_text(row.get("reply_to_username") or ""),
+        "reply_to_nickname": normalize_text(row.get("reply_to_nickname") or ""),
+        "reply_to_content": normalize_text(row.get("reply_to_content") or ""),
     }
 
 
@@ -329,9 +347,26 @@ def _db_liked_comment_ids(user_id: int) -> set[int]:
     return {int(row["target_id"]) for row in rows}
 
 
+@lru_cache(maxsize=1)
+def _db_news_comment_has_media_json() -> bool:
+    try:
+        row = execute_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'news_comment'
+              AND column_name = 'media_json'
+            """,
+        )
+        return bool(int(row.get("cnt") or 0)) if row else False
+    except Exception:
+        return False
+
+
 def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
-    return execute_query(
-        """
+    media_json_column = "c.media_json" if _db_news_comment_has_media_json() else "NULL AS media_json"
+    sql = f"""
         SELECT
             c.id,
             c.news_id,
@@ -341,17 +376,29 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
             COALESCE(u.avatar, '') AS avatar,
             c.parent_id,
             c.content,
-            c.media_json,
+            {media_json_column},
             c.like_count,
             c.status,
-            c.created_at AS create_time
+            c.created_at AS create_time,
+            COALESCE(ru.id, NULL) AS reply_to_user_id,
+            COALESCE(ru.username, '') AS reply_to_username,
+            COALESCE(ru.nickname, '') AS reply_to_nickname,
+            COALESCE(parent_c.content, '') AS reply_to_content
         FROM news_comment c
         LEFT JOIN user u ON u.id = c.user_id
+        LEFT JOIN news_comment parent_c ON parent_c.id = c.parent_id
+        LEFT JOIN user ru ON ru.id = parent_c.user_id
         WHERE c.news_id = %s AND c.status IN (1, 2, 4)
         ORDER BY c.created_at ASC, c.id ASC
-        """,
-        [news_id],
-    )
+        """
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [news_id])
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows] if rows else []
+    finally:
+        connection.close()
 
 
 def _db_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResult | None:
@@ -652,6 +699,7 @@ def _db_create_news_comment(
     content = _validate_comment_content(request.content, request.media_json)
     media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    has_media_json = _db_news_comment_has_media_json()
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
@@ -663,13 +711,22 @@ def _db_create_news_comment(
             if news is None:
                 return None
 
-            cursor.execute(
-                """
-                INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
-                VALUES (%s, %s, NULL, %s, %s, 0, 1, %s, %s)
-                """,
-                [news_id, user_id, content, media_json_value, create_time, create_time],
-            )
+            if has_media_json:
+                cursor.execute(
+                    """
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
+                    VALUES (%s, %s, NULL, %s, %s, 0, 1, %s, %s)
+                    """,
+                    [news_id, user_id, content, media_json_value, create_time, create_time],
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
+                    VALUES (%s, %s, NULL, %s, 0, 1, %s, %s)
+                    """,
+                    [news_id, user_id, content, create_time, create_time],
+                )
             comment_id = int(cursor.lastrowid)
             cursor.execute(
                 """
@@ -717,24 +774,41 @@ def _db_reply_comment(
     content = _validate_comment_content(request.content, request.media_json)
     media_json_value = _serialize_comment_media_json(getattr(request, "media_json", None))
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    has_media_json = _db_news_comment_has_media_json()
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, 0, 1, %s, %s)
-                """,
-                [
-                    int(parent_comment["news_id"]),
-                    user_id,
-                    comment_id,
-                    content,
-                    media_json_value,
-                    create_time,
-                    create_time,
-                ],
-            )
+            if has_media_json:
+                cursor.execute(
+                    """
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, media_json, like_count, status, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, 0, 1, %s, %s)
+                    """,
+                    [
+                        int(parent_comment["news_id"]),
+                        user_id,
+                        comment_id,
+                        content,
+                        media_json_value,
+                        create_time,
+                        create_time,
+                    ],
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO news_comment (news_id, user_id, parent_id, content, like_count, status, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, 0, 1, %s, %s)
+                    """,
+                    [
+                        int(parent_comment["news_id"]),
+                        user_id,
+                        comment_id,
+                        content,
+                        create_time,
+                        create_time,
+                    ],
+                )
             reply_id = int(cursor.lastrowid)
             cursor.execute(
                 """
@@ -1039,6 +1113,21 @@ def _mock_get_news_comments(news_id: int, current_user: Optional[Any] = None) ->
         for comment in MOCK_NEWS_COMMENTS
         if int(comment.get("news_id") or 0) == news_id and int(comment.get("status") or 0) in (1, 2, 4)
     ]
+    comment_map = {int(row["id"]): row for row in rows}
+    for row in rows:
+        parent_id = row.get("parent_id")
+        if parent_id is not None:
+            parent_comment = comment_map.get(int(parent_id))
+            if parent_comment:
+                row["reply_to_user_id"] = int(parent_comment.get("user_id") or 0)
+                row["reply_to_username"] = normalize_text(parent_comment.get("username") or "")
+                row["reply_to_nickname"] = normalize_text(parent_comment.get("nickname") or "")
+                row["reply_to_content"] = normalize_text(parent_comment.get("content") or "")
+        else:
+            row["reply_to_user_id"] = None
+            row["reply_to_username"] = ""
+            row["reply_to_nickname"] = ""
+            row["reply_to_content"] = ""
     return _assemble_comment_tree(rows, current_user=current_user, liked_comment_ids=None)
 
 
@@ -1055,7 +1144,7 @@ def _mock_create_news_comment(
     content = _validate_comment_content(request.content, request.media_json)
     comment_id = get_next_comment_id()
     create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    media_json_dict = request.media_json.dict() if request.media_json else None
+    media_json_dict = _normalize_comment_media_json(getattr(request, "media_json", None))
     comment = {
         "id": comment_id,
         "news_id": news_id,
@@ -1069,7 +1158,6 @@ def _mock_create_news_comment(
         "like_count": 0,
         "status": 1,
         "create_time": create_time,
-        "media_json": _normalize_comment_media_json(getattr(request, "media_json", None)),
     }
     MOCK_NEWS_COMMENTS.append(comment)
     news["comment_count"] = int(news.get("comment_count") or 0) + 1
@@ -1219,9 +1307,12 @@ def get_news_comments(news_id: int, current_user: Optional[Any] = None) -> Comme
 def _has_comment_media(media_json: Any) -> bool:
     if not media_json:
         return False
+    if isinstance(media_json, dict):
+        return bool(media_json.get("images") or media_json.get("emojis") or media_json.get("files"))
     images = getattr(media_json, "images", None) or []
     emojis = getattr(media_json, "emojis", None) or []
-    return len(images) > 0 or len(emojis) > 0
+    files = getattr(media_json, "files", None) or []
+    return len(images) > 0 or len(emojis) > 0 or len(files) > 0
 
 
 def _validate_comment_content(content: str, media_json: Any = None) -> str:

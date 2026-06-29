@@ -297,14 +297,34 @@
             <el-tag :type="getSentimentType(commentsSummary.sentiment)" size="small">
               {{ getSentimentText(commentsSummary.sentiment) }}
             </el-tag>
-            <el-tag type="info" size="small">
-              关键词: {{ commentsSummary.keyword }}
+            <el-tag v-for="kw in commentsSummary.keywords.slice(0, 3)" :key="kw" type="info" size="small">
+              {{ kw }}
             </el-tag>
+          </div>
+          <div v-if="commentsSummary.key_points && commentsSummary.key_points.length" class="summary-points">
+            <div class="summary-points-title">主要观点</div>
+            <ul>
+              <li v-for="(point, index) in commentsSummary.key_points" :key="index">{{ point }}</li>
+            </ul>
           </div>
         </div>
         <div class="comments-header">
           <h4>评论 ({{ comments.length }})</h4>
-          <span class="comments-hint">支持图片和表情</span>
+          <div class="comments-header-actions">
+            <el-button
+                v-if="comments.length > 0"
+                type="primary"
+                link
+                size="small"
+                :loading="loadingCommentsSummary"
+                @click="handleGenerateSummary"
+                class="summary-btn"
+              >
+                <el-icon><Aim /></el-icon>
+                AI 总结评论
+              </el-button>
+            <span class="comments-hint">支持图片和表情</span>
+          </div>
         </div>
 
         <CommentBox
@@ -358,6 +378,7 @@ import {
   User,
   Share,
   ChatDotRound,
+  Aim,
 } from '@element-plus/icons-vue'
 import {
   getPostList,
@@ -372,6 +393,7 @@ import {
   getHotSearch,
   aiNewsHelper,
   getCommentsSummary,
+  generateCommentsSummary,
   getHotTags,
   getAvailableTags,
   type CommunityPost,
@@ -685,8 +707,45 @@ async function showPostDetail(post: CommunityPost) {
   selectedPost.value = post
   replyingCommentId.value = null
   showPostModal.value = true
+  commentsSummary.value = null
   await loadComments(post.id)
-  await loadCommentsSummary(post.id)
+}
+
+async function handleGenerateSummary() {
+  if (!selectedPost.value) return
+
+  const allComments = collectCommentContents(comments.value)
+  if (allComments.length === 0) {
+    ElMessage.info('暂无评论内容可总结')
+    return
+  }
+
+  loadingCommentsSummary.value = true
+  try {
+    commentsSummary.value = await generateCommentsSummary(allComments)
+  } catch (e) {
+    commentsSummary.value = null
+    ElMessage.error(e instanceof Error ? e.message : '总结失败，请稍后重试')
+    console.error('生成评论总结失败', e)
+  } finally {
+    loadingCommentsSummary.value = false
+  }
+}
+
+function collectCommentContents(items: CommunityCommentItem[]): string[] {
+  const result: string[] = []
+  function traverse(list: CommunityCommentItem[]) {
+    for (const item of list) {
+      if (item.content && item.content.trim()) {
+        result.push(item.content.trim())
+      }
+      if (item.replies && item.replies.length > 0) {
+        traverse(item.replies)
+      }
+    }
+  }
+  traverse(items)
+  return result
 }
 
 async function loadCommentsSummary(postId: number) {
@@ -1391,7 +1450,32 @@ onMounted(() => {
 
 .summary-tags {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.summary-points {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.summary-points-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+
+.summary-points ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.summary-points li {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.8;
 }
 
 .comments-header {
@@ -1400,6 +1484,18 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   margin: 20px 0 12px;
+}
+
+.comments-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.summary-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .comments-hint {

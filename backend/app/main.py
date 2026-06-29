@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,11 @@ from app.db.database import check_db_connection
 
 logger = logging.getLogger(__name__)
 _db_connected: bool = False
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+os.makedirs(os.path.join(str(UPLOADS_DIR), "avatar"), exist_ok=True)
 from app.modules.admin.router import router as admin_router
 from app.modules.ai.router import router as ai_router
 from app.modules.auth.router import router as auth_router
@@ -52,7 +58,6 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
-
 
 @app.options("/{full_path:path}")
 async def preflight_handler(full_path: str):
@@ -95,8 +100,6 @@ async def test_error():
     raise AppException(code=400, message="开发测试异常")
 
 
-UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
-os.makedirs(os.path.join(UPLOADS_DIR, "avatar"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.include_router(auth_router)

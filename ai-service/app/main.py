@@ -5,6 +5,7 @@ from app.common.exceptions import AIServiceException, register_exception_handler
 from app.core.config import settings
 from app.routers.chat import router as chat_router
 from app.routers.check import router as check_router
+from app.routers.comment_summary import router as comment_summary_router
 from app.routers.extract import router as extract_router
 from app.routers.generate import router as generate_router
 from app.routers.health import router as health_router
@@ -37,4 +38,5 @@ app.include_router(generate_router)
 app.include_router(extract_router)
 app.include_router(check_router)
 app.include_router(chat_router)
+app.include_router(comment_summary_router)
 app.include_router(timeline_router)
