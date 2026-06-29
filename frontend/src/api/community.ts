@@ -171,6 +171,10 @@ export function getHotTags(params: { limit?: number } = {}) {
   return request.get<TagCount[], TagCount[]>('/api/community/hot-tags', { params })
 }
 
+export function getAvailableTags() {
+  return request.get<TagCount[], TagCount[]>('/api/community/available-tags')
+}
+
 export function aiNewsHelper(question: string) {
   return request.post<AIHelperResponse, AIHelperResponse>('/api/community/ai-helper', { question }, { timeout: 60000 })
 }

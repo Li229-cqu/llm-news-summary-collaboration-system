@@ -44,35 +44,18 @@
               />
             </el-form-item>
             <el-form-item>
-              <div class="post-tags">
-                <el-tag
-                  v-for="tag in postForm.tags"
-                  :key="tag"
-                  closable
-                  @close="removeTag(tag)"
-                >
-                  {{ tag }}
-                </el-tag>
-                <el-input
-                  v-model="newTag"
-                  placeholder="添加标签"
-                  class="tag-input"
-                  @keyup.enter.prevent="addTag"
-                />
-              </div>
-              <div v-if="suggestedTags.length" class="suggested-tags-wrap">
-                <div class="suggested-tags-title">推荐标签</div>
-                <div class="suggested-tags">
-                  <el-tag
-                    v-for="tag in suggestedTags"
-                    :key="tag"
-                    class="suggested-tag"
-                    effect="plain"
-                    @click="addSuggestedTag(tag)"
+              <div class="post-tags-select">
+                <div class="tags-select-title">选择标签（最多5个）</div>
+                <el-checkbox-group v-model="postForm.tags" class="tags-checkbox-group">
+                  <el-checkbox
+                    v-for="tag in availableTags"
+                    :key="tag.name"
+                    :label="tag.name"
+                    :disabled="postForm.tags.length >= 5 && !postForm.tags.includes(tag.name)"
                   >
-                    + {{ tag }}
-                  </el-tag>
-                </div>
+                    {{ tag.name }}
+                  </el-checkbox>
+                </el-checkbox-group>
               </div>
             </el-form-item>
           </el-form>
@@ -101,7 +84,7 @@
             </div>
           </div>
           <div class="tag-filter-bar">
-            <span class="tag-filter-title">热门标签：</span>
+            <span class="tag-filter-title">标签分类：</span>
             <el-tag
               :type="!selectedTag ? 'primary' : 'info'"
               effect="light"
@@ -111,14 +94,14 @@
               全部
             </el-tag>
             <el-tag
-              v-for="tag in hotTags"
+              v-for="tag in availableTags"
               :key="tag.name"
               :type="selectedTag === tag.name ? 'primary' : 'info'"
               effect="light"
               class="filter-tag"
               @click="selectedTag = tag.name"
             >
-              {{ tag.name }} {{ tag.count }}
+              {{ tag.name }} {{ getTagPostCount(tag.name) }}
             </el-tag>
           </div>
           <div v-if="loadingPosts" class="loading-container">
@@ -390,6 +373,7 @@ import {
   aiNewsHelper,
   getCommentsSummary,
   getHotTags,
+  getAvailableTags,
   type CommunityPost,
   type CommentItem as CommunityCommentItem,
   type HotSearchItem,
@@ -410,7 +394,6 @@ const postForm = ref({
   content: '',
   tags: [] as string[],
 })
-const newTag = ref('')
 const submitting = ref(false)
 const router = useRouter()
 const route = useRoute()
@@ -426,6 +409,8 @@ const selectedTag = ref('')
 
 const hotTags = ref<TagCount[]>([])
 const loadingHotTags = ref(false)
+const availableTags = ref<TagCount[]>([])
+const loadingAvailableTags = ref(false)
 
 const filteredPosts = computed(() => {
   if (!selectedTag.value) {
@@ -461,65 +446,6 @@ const commentDeleteLoadingId = ref<number | null>(null)
 const commentsSummary = ref<CommentsSummaryResponse | null>(null)
 const loadingCommentsSummary = ref(false)
 
-const tagRules = [
-  {
-    tag: 'AI生成',
-    keywords: ['AI', '大模型', '生成', '标题生成', '摘要生成', '智能生成'],
-  },
-  {
-    tag: '摘要',
-    keywords: ['摘要', '总结', '概括', '长摘要', '短摘要'],
-  },
-  {
-    tag: '新闻推荐',
-    keywords: ['推荐', '个性化', '首页', '推送', '阅读偏好'],
-  },
-  {
-    tag: '社区反馈',
-    keywords: ['社区', '帖子', '发帖', '互动', '讨论'],
-  },
-  {
-    tag: '评论审核',
-    keywords: ['评论', '审核', '删除', '举报', '拉黑', '管理'],
-  },
-  {
-    tag: '时间线',
-    keywords: ['时间线', '脉络', '事件脉络', 'timeline', '发展过程'],
-  },
-  {
-    tag: '爬虫数据',
-    keywords: ['爬虫', '采集', 'RSS', '新闻源', '数据源'],
-  },
-  {
-    tag: '系统问题',
-    keywords: ['bug', '报错', '失败', '无法', '问题', '异常'],
-  },
-  {
-    tag: '功能建议',
-    keywords: ['建议', '优化', '希望', '能不能', '增加', '改进'],
-  },
-] as const
-
-const suggestedTags = computed(() => {
-  const text = `${postForm.value.title || ''} ${postForm.value.content || ''}`.toLowerCase()
-  const currentTags = postForm.value.tags
-
-  if (!text.trim()) {
-    return [] as string[]
-  }
-
-  return tagRules
-    .filter((rule) => rule.keywords.some((keyword) => text.includes(keyword.toLowerCase())))
-    .map((rule) => rule.tag)
-    .filter((tag) => !currentTags.includes(tag))
-    .slice(0, 5)
-})
-
-function addTag() {
-  addSuggestedTag(newTag.value)
-  newTag.value = ''
-}
-
 function removeTag(tag: string) {
   const index = postForm.value.tags.indexOf(tag)
   if (index > -1) {
@@ -527,22 +453,8 @@ function removeTag(tag: string) {
   }
 }
 
-function addSuggestedTag(tag: string) {
-  const normalizedTag = tag.trim()
-  if (!normalizedTag) {
-    return
-  }
-
-  if (postForm.value.tags.includes(normalizedTag)) {
-    return
-  }
-
-  if (postForm.value.tags.length >= 5) {
-    ElMessage.warning('最多添加 5 个标签')
-    return
-  }
-
-  postForm.value.tags.push(normalizedTag)
+function getTagPostCount(tagName: string): number {
+  return posts.value.filter((post) => (post.tags || []).includes(tagName)).length
 }
 
 function openPostDialog() {
@@ -578,7 +490,6 @@ async function submitPost() {
     })
     ElMessage.success('发布成功')
     postForm.value = { title: '', content: '', tags: [] }
-    newTag.value = ''
     postDialogVisible.value = false
     await loadPosts(1)
   } catch (error) {
@@ -638,6 +549,28 @@ async function loadHotTags() {
     hotTags.value = []
   } finally {
     loadingHotTags.value = false
+  }
+}
+
+async function loadAvailableTags() {
+  loadingAvailableTags.value = true
+  try {
+    availableTags.value = await getAvailableTags()
+  } catch (error) {
+    availableTags.value = [
+      { name: '时政', count: 0 },
+      { name: '经济', count: 0 },
+      { name: '科技', count: 0 },
+      { name: '教育', count: 0 },
+      { name: '军事', count: 0 },
+      { name: '社会', count: 0 },
+      { name: '国际', count: 0 },
+      { name: '体育', count: 0 },
+      { name: '娱乐', count: 0 },
+      { name: '健康', count: 0 },
+    ]
+  } finally {
+    loadingAvailableTags.value = false
   }
 }
 
@@ -925,6 +858,7 @@ onMounted(() => {
   loadPosts()
   loadHotSearch()
   loadHotTags()
+  loadAvailableTags()
   loadTimelineTopics()
 })
 </script>
@@ -1000,6 +934,23 @@ onMounted(() => {
 
 .tag-input {
   width: 160px;
+}
+
+.post-tags-select {
+  margin-bottom: 16px;
+}
+
+.tags-select-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: #374151;
+}
+
+.tags-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .tag-filter-bar {
