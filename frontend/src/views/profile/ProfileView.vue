@@ -57,7 +57,10 @@ const comments = ref<CommentRecordItem[]>([])
 const aiRecords = ref<AIRecordItem[]>([])
 const subscriptions = ref<SubscriptionCategory[]>([])
 
-const searchQuery = ref('')
+const browseSearchKeyword = ref('')
+const favoriteSearchKeyword = ref('')
+const commentSearchKeyword = ref('')
+const aiSearchKeyword = ref('')
 const currentPage = ref(1)
 const pageSize = 10
 const totalCount = ref(0)
@@ -138,26 +141,30 @@ const tabs = [
 ]
 
 const filteredBrowseHistory = computed(() => {
-  if (!searchQuery.value) return browseHistory.value
-  const query = searchQuery.value.toLowerCase()
+  if (!browseSearchKeyword.value) return browseHistory.value
+  const query = browseSearchKeyword.value.toLowerCase()
   return browseHistory.value.filter((item) =>
-    item.title.toLowerCase().includes(query)
+    item.title.toLowerCase().includes(query) ||
+    (item as any).summary?.toLowerCase().includes(query) ||
+    (item as any).source?.toLowerCase().includes(query) ||
+    (item as any).category_name?.toLowerCase().includes(query)
   )
 })
 
 const filteredFavorites = computed(() => {
-  if (!searchQuery.value) return favorites.value
-  const query = searchQuery.value.toLowerCase()
+  if (!favoriteSearchKeyword.value) return favorites.value
+  const query = favoriteSearchKeyword.value.toLowerCase()
   return favorites.value.filter(
     (item) =>
       item.title.toLowerCase().includes(query) ||
-      item.summary.toLowerCase().includes(query)
+      item.summary.toLowerCase().includes(query) ||
+      item.source.toLowerCase().includes(query)
   )
 })
 
 const filteredComments = computed(() => {
-  if (!searchQuery.value) return comments.value
-  const query = searchQuery.value.toLowerCase()
+  if (!commentSearchKeyword.value) return comments.value
+  const query = commentSearchKeyword.value.toLowerCase()
   return comments.value.filter(
     (item) =>
       item.content.toLowerCase().includes(query) ||
@@ -166,8 +173,8 @@ const filteredComments = computed(() => {
 })
 
 const filteredAIRecords = computed(() => {
-  if (!searchQuery.value) return aiRecords.value
-  const query = searchQuery.value.toLowerCase()
+  if (!aiSearchKeyword.value) return aiRecords.value
+  const query = aiSearchKeyword.value.toLowerCase()
   return aiRecords.value.filter(
     (item) =>
       item.input_text.toLowerCase().includes(query) ||
@@ -190,12 +197,23 @@ function handleFavoriteClick(item: FavoriteItem) {
   router.push(`/news/${item.news_id}`)
 }
 
-function handleSearch() {
+function clearBrowseSearch() {
+  browseSearchKeyword.value = ''
   currentPage.value = 1
 }
 
-function handleSearchClear() {
-  searchQuery.value = ''
+function clearFavoriteSearch() {
+  favoriteSearchKeyword.value = ''
+  currentPage.value = 1
+}
+
+function clearCommentSearch() {
+  commentSearchKeyword.value = ''
+  currentPage.value = 1
+}
+
+function clearAISearch() {
+  aiSearchKeyword.value = ''
   currentPage.value = 1
 }
 
@@ -538,7 +556,10 @@ function handlePageChange(page: number) {
 
 function handleTabChange(key: string) {
   activeTab.value = key
-  searchQuery.value = ''
+  browseSearchKeyword.value = ''
+  favoriteSearchKeyword.value = ''
+  commentSearchKeyword.value = ''
+  aiSearchKeyword.value = ''
   currentPage.value = 1
   if (key === 'overview') {
     loadOverview()
@@ -756,20 +777,20 @@ onMounted(() => {
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="browseType" size="small" @change="searchQuery = ''; currentPage = 1">
+                <el-radio-group v-model="browseType" size="small" @change="browseSearchKeyword = ''; currentPage = 1">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
                 <el-input
                   v-if="browseType === 'news'"
-                  v-model="searchQuery"
+                  v-model="browseSearchKeyword"
                   placeholder="搜索浏览历史..."
                   :prefix-icon="Search"
                   class="search-input"
-                  @keyup.enter="handleSearch"
+                  @keyup.enter="currentPage = 1"
                 />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <el-button @click="handleSearchClear">清空</el-button>
+                <el-button v-if="browseType === 'news'" type="primary" @click="currentPage = 1">搜索</el-button>
+                <el-button v-if="browseType === 'news'" @click="clearBrowseSearch">清空</el-button>
               </div>
               <el-button type="danger" plain :disabled="browseHistory.length === 0" @click="handleClearHistory">
                 清空历史
@@ -781,11 +802,16 @@ onMounted(() => {
               <p class="empty-text">暂无帖子浏览记录</p>
               <p class="empty-desc">浏览社区帖子后将在这里显示</p>
             </div>
+            <div v-else-if="browseHistory.length === 0" class="empty-state">
+              <Clock :size="64" class="empty-icon" />
+              <p class="empty-text">暂无浏览历史</p>
+              <p class="empty-desc">去首页看看精彩新闻吧</p>
+              <el-button type="primary" @click="router.push('/')">返回首页</el-button>
+            </div>
             <div v-else-if="filteredBrowseHistory.length === 0" class="empty-state">
               <Clock :size="64" class="empty-icon" />
-              <p class="empty-text">{{ searchQuery ? '未找到相关浏览历史' : '暂无浏览历史' }}</p>
-              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去首页看看精彩新闻吧' }}</p>
-              <el-button v-if="!searchQuery" type="primary" @click="router.push('/')">返回首页</el-button>
+              <p class="empty-text">未找到匹配的浏览记录</p>
+              <p class="empty-desc">请尝试其他关键词</p>
             </div>
             <div v-else class="record-list">
               <div
@@ -832,26 +858,31 @@ onMounted(() => {
           <template v-else-if="tab.key === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="favoriteType" size="small" @change="searchQuery = ''; currentPage = 1; loadFavorites()">
+                <el-radio-group v-model="favoriteType" size="small" @change="favoriteSearchKeyword = ''; currentPage = 1; loadFavorites()">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
                 <el-input
-                  v-model="searchQuery"
+                  v-model="favoriteSearchKeyword"
                   placeholder="搜索收藏内容..."
                   :prefix-icon="Search"
                   class="search-input"
-                  @keyup.enter="handleSearch"
+                  @keyup.enter="currentPage = 1"
                 />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <el-button @click="handleSearchClear">清空</el-button>
+                <el-button type="primary" @click="currentPage = 1">搜索</el-button>
+                <el-button @click="clearFavoriteSearch">清空</el-button>
               </div>
             </div>
 
-            <div v-if="filteredFavorites.length === 0" class="empty-state">
+            <div v-if="favorites.length === 0" class="empty-state">
               <Star :size="64" class="empty-icon" />
-              <p class="empty-text">{{ searchQuery ? '未找到相关收藏' : '暂无收藏记录' }}</p>
-              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '看到喜欢的新闻就收藏起来吧' }}</p>
+              <p class="empty-text">{{ favoriteType === 'news' ? '暂无新闻收藏记录' : '暂无帖子收藏记录' }}</p>
+              <p class="empty-desc">看到喜欢的就收藏起来吧</p>
+            </div>
+            <div v-else-if="filteredFavorites.length === 0" class="empty-state">
+              <Star :size="64" class="empty-icon" />
+              <p class="empty-text">未找到匹配的收藏记录</p>
+              <p class="empty-desc">请尝试其他关键词</p>
             </div>
             <div v-else class="record-list">
               <div
@@ -901,21 +932,26 @@ onMounted(() => {
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-input
-                  v-model="searchQuery"
+                  v-model="commentSearchKeyword"
                   placeholder="搜索评论内容..."
                   :prefix-icon="Search"
                   class="search-input"
-                  @keyup.enter="handleSearch"
+                  @keyup.enter="currentPage = 1"
                 />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <el-button @click="handleSearchClear">清空</el-button>
+                <el-button type="primary" @click="currentPage = 1">搜索</el-button>
+                <el-button @click="clearCommentSearch">清空</el-button>
               </div>
             </div>
 
-            <div v-if="filteredComments.length === 0" class="empty-state">
+            <div v-if="comments.length === 0" class="empty-state">
               <ChatDotRound :size="64" class="empty-icon" />
-              <p class="empty-text">{{ searchQuery ? '未找到相关评论' : '暂无评论记录' }}</p>
-              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去新闻详情页发表你的看法吧' }}</p>
+              <p class="empty-text">暂无评论记录</p>
+              <p class="empty-desc">去新闻详情页发表你的看法吧</p>
+            </div>
+            <div v-else-if="filteredComments.length === 0" class="empty-state">
+              <ChatDotRound :size="64" class="empty-icon" />
+              <p class="empty-text">未找到匹配的评论记录</p>
+              <p class="empty-desc">请尝试其他关键词</p>
             </div>
             <div v-else class="record-list">
               <div
@@ -958,22 +994,22 @@ onMounted(() => {
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-input
-                  v-model="searchQuery"
+                  v-model="aiSearchKeyword"
                   placeholder="搜索 AI 记录..."
                   :prefix-icon="Search"
                   class="search-input"
-                  @keyup.enter="handleSearch"
+                  @keyup.enter="currentPage = 1"
                 />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <el-button @click="handleSearchClear">清空</el-button>
+                <el-button type="primary" @click="currentPage = 1">搜索</el-button>
+                <el-button @click="clearAISearch">清空</el-button>
               </div>
             </div>
 
             <div v-if="filteredAIRecords.length === 0" class="empty-state">
               <MagicStick :size="64" class="empty-icon" />
-              <p class="empty-text">{{ searchQuery ? '未找到相关 AI 记录' : '暂无 AI 生成记录' }}</p>
-              <p class="empty-desc">{{ searchQuery ? '请尝试其他关键词' : '去体验 AI 智能摘要功能吧' }}</p>
-              <el-button v-if="!searchQuery" type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
+              <p class="empty-text">{{ aiSearchKeyword ? '未找到匹配的 AI 记录' : '暂无 AI 生成记录' }}</p>
+              <p class="empty-desc">{{ aiSearchKeyword ? '请尝试其他关键词' : '去体验 AI 智能摘要功能吧' }}</p>
+              <el-button v-if="!aiSearchKeyword" type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
             </div>
             <div v-else class="record-list">
               <div v-for="item in filteredAIRecords" :key="item.id" class="ai-record-item">
