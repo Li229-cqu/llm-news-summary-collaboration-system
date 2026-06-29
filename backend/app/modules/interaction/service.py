@@ -376,7 +376,7 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
             COALESCE(u.avatar, '') AS avatar,
             c.parent_id,
             c.content,
-            c.media_json,
+            {media_json_column},
             c.like_count,
             c.status,
             c.created_at AS create_time,
@@ -390,9 +390,15 @@ def _db_comment_rows(news_id: int) -> list[dict[str, Any]]:
         LEFT JOIN user ru ON ru.id = parent_c.user_id
         WHERE c.news_id = %s AND c.status IN (1, 2, 4)
         ORDER BY c.created_at ASC, c.id ASC
-        """,
-        [news_id],
-    )
+        """
+    connection = get_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [news_id])
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows] if rows else []
+    finally:
+        connection.close()
 
 
 def _db_like_news(news_id: int, current_user: Optional[Any]) -> InteractionResult | None:
@@ -745,7 +751,6 @@ def _db_create_news_comment(
             create_time=create_time,
             media_json=_normalize_comment_media_json(getattr(request, "media_json", None)),
             is_liked=False,
-            media_json=request.media_json,
             replies=[],
         )
     except Exception:
@@ -828,7 +833,6 @@ def _db_reply_comment(
             create_time=create_time,
             media_json=_normalize_comment_media_json(getattr(request, "media_json", None)),
             is_liked=False,
-            media_json=request.media_json,
             replies=[],
         )
     except Exception:
