@@ -32,6 +32,7 @@ from app.modules.community.service import (
     create_comment,
     delete_comment,
     create_post,
+    get_available_tags,
     get_comments,
     get_comments_summary,
     get_hot_search,
@@ -200,6 +201,11 @@ async def hot_topics(limit: int = Query(10, ge=1, le=20, description="数量限�
 @router.get("/hot-tags", response_model=ApiResponse[list[TagCount]])
 async def hot_tags(limit: int = Query(10, ge=1, le=20, description="数量限制")) -> ApiResponse[list[TagCount]]:
     return success_response(get_hot_tags(limit))
+
+
+@router.get("/available-tags", response_model=ApiResponse[list[TagCount]])
+async def available_tags() -> ApiResponse[list[TagCount]]:
+    return success_response(get_available_tags())
 
 
 @router.post("/ai-helper", response_model=ApiResponse[AIHelperResponse])

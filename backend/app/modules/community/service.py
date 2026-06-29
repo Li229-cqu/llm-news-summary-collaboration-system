@@ -39,6 +39,18 @@ from app.modules.community.schema import (
 
 logger = logging.getLogger(__name__)
 
+VALID_COMMUNITY_TAGS = {"时政", "经济", "科技", "教育", "军事", "社会", "国际", "体育", "娱乐", "健康"}
+
+
+def _validate_tags(tags: list[str]) -> list[str]:
+    if not tags:
+        return []
+    return [tag for tag in tags if tag in VALID_COMMUNITY_TAGS]
+
+
+def get_available_tags() -> list[dict[str, Any]]:
+    return [{"name": tag, "count": 0} for tag in sorted(VALID_COMMUNITY_TAGS)]
+
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1030,6 +1042,8 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
     if user_id is None:
         raise AppException(code=401, message="未登录或登录状态已失效")
 
+    validated_tags = _validate_tags(request.tags or [])
+
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
@@ -1048,7 +1062,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                         request.content,
                         request.related_news_id,
                         request.topic_id,
-                        json.dumps(request.tags or [], ensure_ascii=False),
+                        json.dumps(validated_tags, ensure_ascii=False),
                     ],
                 )
             else:
@@ -1837,6 +1851,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
     new_id = max([int(item["id"]) for item in FALLBACK_POSTS], default=0) + 1
     now = _now_text()
     news_title_map = _mock_news_title_map()
+    validated_tags = _validate_tags(request.tags or [])
     post = {
         "id": new_id,
         "user_id": _current_user_id(current_user) or 0,
@@ -1855,7 +1870,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
         "status": 1,
         "create_time": now,
         "update_time": now,
-        "tags": request.tags or [],
+        "tags": validated_tags,
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
