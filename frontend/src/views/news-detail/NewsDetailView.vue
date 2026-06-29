@@ -328,7 +328,7 @@ async function handleFavoriteToggle(newsIdValue: number | string) {
   }
 }
 
-async function handleCreateComment(content: string) {
+async function handleCreateComment(content: string, mediaJson?: CommentMediaJson | null) {
   if (!requireLogin() || !newsDetail.value) {
     return
   }
@@ -336,7 +336,10 @@ async function handleCreateComment(content: string) {
   submittingComment.value = true
 
   try {
-    await createNewsComment(newsDetail.value.id, { content })
+    await createNewsComment(newsDetail.value.id, {
+      content: content || ' ',
+      media_json: mediaJson ?? null,
+    })
     await loadComments()
     newsDetail.value = {
       ...newsDetail.value,

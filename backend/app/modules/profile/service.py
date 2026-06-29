@@ -1040,12 +1040,12 @@ def _db_comments(
             c.content,
             c.like_count,
             c.status,
-            c.create_time
+            c.created_at AS create_time
         FROM news_comment c
         LEFT JOIN news n ON n.id = c.news_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
         WHERE c.user_id = %s AND c.status <> 4
-        ORDER BY c.create_time DESC, c.id DESC
+        ORDER BY c.created_at DESC, c.id DESC
         """,
         [user_id],
     )
@@ -1132,6 +1132,7 @@ def _db_ai_records(
             source_news_id,
             source_title,
             input_text,
+            title_count,
             candidate_titles,
             summary_short,
             summary_long,
@@ -1160,6 +1161,7 @@ def _db_ai_records(
                 source_news_id=row.get("source_news_id"),
                 source_title=normalize_text(row.get("source_title")),
                 input_text=normalize_text(row["input_text"]),
+                title_count=int(row.get("title_count") or 3),
                 candidate_titles=_parse_json_field(row.get("candidate_titles"), default=[]),
                 summary_short=normalize_text(row.get("summary_short")),
                 summary_long=normalize_text(row.get("summary_long")) or None,
@@ -1705,7 +1707,7 @@ def get_recommendations(current_user: Optional[Any] = None, limit: int = 10) -> 
 
     try:
         result = _db_recommendations(user_id, limit=limit)
-        if result is not None and result.get("list"):
+        if result is not None:
             return result
     except Exception as exc:
         logger.warning("数据库推荐查询异常，回退 mock：%s", exc)

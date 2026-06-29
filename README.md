@@ -75,6 +75,12 @@ FLUSH PRIVILEGES;
 
 PowerShell 不能直接使用 `< database/schema.sql` 这种写法，请使用 `cmd /c`。
 
+如果是第一次初始化，或者本地数据库可以清空重建，建议先重建数据库。当前表结构已经统一使用 `created_at / updated_at`，不再使用 `create_time / update_time` 作为数据库字段。
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u root -p -e ""DROP DATABASE IF EXISTS llm_news_system; CREATE DATABASE llm_news_system DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON llm_news_system.* TO 'llm_news_user'@'localhost'; FLUSH PRIVILEGES;"""
+```
+
 在项目根目录执行：
 
 ```powershell
@@ -101,7 +107,9 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 
 ### 4. 执行数据库迁移
 
-如果数据库是旧版本，或者你是从别人更新后的代码继续运行，需要执行 migrations。
+如果你已经按当前最新版 `schema.sql` 重新建库并导入了 `seed.sql`，通常不需要再执行 migrations。
+
+只有在保留旧数据库、不想清空重建时，才需要按编号执行 migrations。当前项目已将时间字段统一为 `created_at / updated_at`，旧库如果还保留 `create_time / update_time`，建议优先重建数据库，避免字段不一致。
 
 按编号依次执行：
 
@@ -141,10 +149,6 @@ DB_PASSWORD=123456
 
 AI_SERVICE_URL=http://127.0.0.1:8001
 ```
-
-> ??????????????????????????? `database/migrations/*.sql`?????????? MySQL ??????????
-> ??????????????????????????????????
-> ? PowerShell ?????? `< database\xxx.sql`????????? `cmd /c` ????????? `cmd.exe` ????
 
 确认 `.env` 不要提交到 Git。
 
@@ -285,32 +289,34 @@ scripts/crawlers/rss_news_crawler.py
 预览，不入库：
 
 ```powershell
-python scripts/crawlers/rss_news_crawler.py --dry-run --max-items 3
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run --max-items 3
 ```
 
 抓取并写入数据库：
 
 ```powershell
-python scripts/crawlers/rss_news_crawler.py --max-items 5 --fetch-content
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
 ```
 
 补全文章正文：
 
 ```powershell
-python scripts/crawlers/rss_news_crawler.py --fetch-content --update-existing-content
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --fetch-content --update-existing-content
 ```
 
 归档旧新闻：
 
 ```powershell
-python scripts/crawlers/rss_news_crawler.py --cleanup-days 30
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --cleanup-days 30
 ```
 
-如果你使用 backend 虚拟环境运行爬虫：
+推荐始终使用 backend 虚拟环境运行爬虫，因为依赖安装在 `backend/.venv` 里。如果直接使用系统 `python`，可能会出现 `ModuleNotFoundError: No module named 'feedparser'`。
 
 ```powershell
 backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
 ```
+
+如果刚更新代码后爬虫报字段不存在，通常是数据库还没有按最新 `schema.sql` 重建。请回到上面的“导入数据库表结构和基础数据”步骤，重建数据库后重新导入 `schema.sql` 和 `seed.sql`。
 
 ## 六、验证数据库是否有数据
 
@@ -364,8 +370,10 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 1. MySQL 是否启动。
 2. `backend/.env` 是否存在。
 3. `backend/.env` 中数据库账号密码是否正确。
-4. 是否执行了 `schema.sql`、`seed.sql` 和 migrations。
+4. 是否已经按当前最新版 `schema.sql` 重新建库并导入 `seed.sql`。
 5. backend 是否重新启动。
+
+当前新建库表结构已经包含主要字段和社区富媒体评论字段；如果是全新重建库，通常不需要再额外执行 migrations。
 
 ### 3. 前端端口变成 5174
 

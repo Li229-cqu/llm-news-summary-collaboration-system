@@ -146,10 +146,10 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 
 - `GET /api/news/categories` 优先读取数据库 `news_category`，用于前端左侧分类栏。
 - `GET /api/news` 支持 `category_id` 参数，前端点击分类后会按数据库分类筛选新闻。
-- `GET /api/news/hot` 优先读取数据库真实新闻，并按 `view_count + like_count * 5 + favorite_count * 4 + comment_count * 6` 生成热榜。
+- `GET /api/news/hot` 直接基于数据库真实新闻统计生成首页热榜，排序规则为 `view_count + like_count * 5 + favorite_count * 4 + comment_count * 6`。
 - 新增 `user_category_subscription` 表，用于保存用户新闻分类订阅。
 - 新增 `GET /api/profile/subscriptions` 和 `POST /api/profile/subscriptions`，均需要登录。
-- 数据库不可用时继续保留 mock fallback，确保课程演示不被数据库异常阻断。
+- 数据库不可用时，除首页热榜外的其他相关能力仍可按原有策略保留 mock fallback；首页热榜在数据库无数据时返回空列表。
 ## A3 验收补充说明
 
 - 后端数据库访问层已接入 `DBUtils.PooledDB` 连接池，`get_connection()` 从连接池获取连接，`close()` 时归还连接池。

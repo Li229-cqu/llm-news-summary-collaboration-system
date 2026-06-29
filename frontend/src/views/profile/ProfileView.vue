@@ -988,75 +988,68 @@ onMounted(async () => {
       </el-tabs>
     </el-dialog>
 
-    <el-dialog v-model="aiDetailVisible" title="AI 生成详情" width="640px" class="ai-detail-dialog">
-      <div v-if="currentAIRecord" class="ai-detail-content">
-        <div class="ai-detail-header">
-          <div class="ai-detail-title-row">
-            <el-tag type="warning" effect="dark">AI 记录</el-tag>
-            <span class="ai-detail-title">
-              {{ currentAIRecord.source_title || `记录 #${currentAIRecord.id}` }}
+    <el-dialog v-model="aiDetailVisible" title="AI 生成详情" width="700px" class="ai-detail-dialog">
+      <div v-if="currentAIRecord" class="detail-body">
+        <!-- 标题行 -->
+        <div class="detail-header">
+          <div class="detail-header-left">
+            <span class="detail-source-label">
+              {{ currentAIRecord.source === 'news' ? '新闻导入' : '手动输入' }}
             </span>
+            <span class="detail-header-title">{{ currentAIRecord.source_title || `记录 #${currentAIRecord.id}` }}</span>
           </div>
           <el-tag
+            size="small"
             :type="currentAIRecord.risk_level === 'high' ? 'danger' : currentAIRecord.risk_level === 'medium' ? 'warning' : 'success'"
           >
             {{ currentAIRecord.risk_level === 'high' ? '高风险' : currentAIRecord.risk_level === 'medium' ? '中风险' : '低风险' }}
           </el-tag>
         </div>
 
-        <div class="ai-detail-section">
-          <div class="detail-section-label">
-            <View :size="16" />
-            <span>输入文本</span>
-          </div>
-          <div class="detail-section-content">
+        <!-- 输入文本 -->
+        <div class="detail-card">
+          <div class="detail-card-title">输入文本</div>
+          <div class="detail-card-body">
             <p>{{ currentAIRecord.input_text }}</p>
           </div>
         </div>
 
-        <div class="ai-detail-section">
-          <div class="detail-section-label">
-            <MagicStick :size="16" />
-            <span>候选标题</span>
-          </div>
-          <div class="detail-section-content">
-            <div class="candidate-tags">
-              <el-tag
+        <!-- 候选标题 -->
+        <div class="detail-card">
+          <div class="detail-card-title">候选标题</div>
+          <div class="detail-card-body">
+            <div class="title-list">
+              <div
                 v-for="(title, index) in currentAIRecord.candidate_titles"
                 :key="index"
-                type="info"
-                class="candidate-tag"
+                class="title-item"
               >
-                {{ title }}
-              </el-tag>
+                <span class="title-index">{{ index + 1 }}</span>
+                <span class="title-text">{{ title }}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="ai-detail-section">
-          <div class="detail-section-label">
-            <Files :size="16" />
-            <span>简短摘要</span>
-          </div>
-          <div class="detail-section-content">
+        <!-- 简短摘要 -->
+        <div class="detail-card">
+          <div class="detail-card-title">简短摘要</div>
+          <div class="detail-card-body">
             <p>{{ currentAIRecord.summary_short }}</p>
           </div>
         </div>
 
-        <div v-if="currentAIRecord.summary_long" class="ai-detail-section">
-          <div class="detail-section-label">
-            <Files :size="16" />
-            <span>详细摘要</span>
-          </div>
-          <div class="detail-section-content">
+        <!-- 详细摘要 -->
+        <div v-if="currentAIRecord.summary_long" class="detail-card">
+          <div class="detail-card-title">详细摘要</div>
+          <div class="detail-card-body">
             <p>{{ currentAIRecord.summary_long }}</p>
           </div>
         </div>
 
-        <div class="ai-detail-footer">
-          <span class="source-tag">{{ currentAIRecord.source === 'news' ? '新闻导入' : '手动输入' }}</span>
-          <span class="record-time">
-            <Clock :size="14" />
+        <!-- 底部元信息 -->
+        <div class="detail-meta">
+          <span class="detail-time">
             {{ currentAIRecord.create_time || '暂无时间' }}
           </span>
         </div>
@@ -1712,30 +1705,30 @@ onMounted(async () => {
 }
 
 .ai-detail-dialog :deep(.el-dialog__header) {
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .ai-detail-dialog :deep(.el-dialog__body) {
-  padding: 24px;
+  padding: 20px 24px 24px;
+  max-height: 72vh;
+  overflow-y: auto;
 }
 
-.ai-detail-content {
+.detail-body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.ai-detail-header {
+.detail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.ai-detail-title-row {
+.detail-header-left {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1743,8 +1736,18 @@ onMounted(async () => {
   flex: 1;
 }
 
-.ai-detail-title {
-  font-size: 18px;
+.detail-source-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #fff;
+  background: var(--el-color-warning);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.detail-header-title {
+  font-size: 16px;
   font-weight: 600;
   color: var(--el-text-color-primary);
   overflow: hidden;
@@ -1752,52 +1755,85 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.ai-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.detail-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.detail-section-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
+.detail-card-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary);
-}
-
-.detail-section-content {
-  padding: 16px;
+  padding: 10px 14px;
   background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  border-left: 3px solid var(--el-color-primary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.detail-section-content p {
+.detail-card-body {
+  padding: 14px;
+}
+
+.detail-card-body p {
   margin: 0;
-  color: var(--el-text-color-primary);
+  color: var(--el-text-color-regular);
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 1.7;
 }
 
-.candidate-tags {
+.title-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title-item {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+  transition: background 0.2s;
 }
 
-.candidate-tag {
-  font-size: 13px;
-  padding: 4px 12px;
+.title-item:hover {
+  background: var(--el-color-primary-light-9);
 }
 
-.ai-detail-footer {
+.title-index {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 16px;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--el-color-primary-light-8);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.title-text {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  line-height: 1.5;
+}
+
+.detail-meta {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
   border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.detail-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 @media (max-width: 768px) {

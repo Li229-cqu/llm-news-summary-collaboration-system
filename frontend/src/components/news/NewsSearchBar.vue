@@ -16,14 +16,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const keyword = ref('')
+
+const props = withDefaults(
+  defineProps<{
+    keyword?: string
+  }>(),
+  {
+    keyword: '',
+  },
+)
 
 const emit = defineEmits<{
   (event: 'search', keyword: string): void
   (event: 'reset'): void
 }>()
+
+watch(
+  () => props.keyword,
+  (value) => {
+    keyword.value = String(value ?? '')
+  },
+  { immediate: true },
+)
 
 function handleSearch() {
   emit('search', keyword.value.trim())

@@ -310,8 +310,6 @@ def _cached_timeline_from_db(topic_id: int) -> dict[str, Any] | None:
             topic_id,
             timeline_json,
             source_news_ids,
-            metadata_json,
-            relationships_json,
             generate_status,
             generated_at,
             updated_at
@@ -343,40 +341,73 @@ def _cached_timeline(topic_id: int) -> dict[str, Any] | None:
     return _cached_timeline_from_mock(topic_id)
 
 
-def _timeline_row_to_result(row: dict[str, Any], topic_name: str, source: str) -> TimelineGenerateResult:
+def _cached_timeline_matches_news(cached: dict[str, Any], news_rows: list[dict[str, Any]]) -> bool:
+    cached_ids: list[int] = []
+    for item in _parse_json_list(cached.get("source_news_ids"), []):
+        try:
+            cached_ids.append(int(item))
+        except (TypeError, ValueError):
+            continue
+
+    current_ids: list[int] = []
+    for row in news_rows:
+        try:
+            current_ids.append(int(row["id"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+
+    return bool(cached_ids) and cached_ids == current_ids
+
+
+def _build_timeline_extras(nodes: list[TimelineNode], overview_seed: str = "") -> tuple[str, list[str], list[TimelinePhase], list[TimelineRelationship]]:
+    overview = normalize_text(overview_seed)
+    if not overview and nodes:
+        overview = f"围绕“{nodes[0].source_title}”等新闻梳理形成的事件脉络，共包含 {len(nodes)} 个节点。"
+
+    key_figures = list(
+        dict.fromkeys([normalize_text(node.source_name) for node in nodes if normalize_text(node.source_name)])
+    )[:5]
+
+    phases: list[TimelinePhase] = []
+    n = len(nodes)
+    if n >= 4:
+        third = max(n // 3, 1)
+        phases = [
+            TimelinePhase(name="初始阶段", start_event_id=1, end_event_id=third),
+            TimelinePhase(name="发展阶段", start_event_id=third + 1, end_event_id=third * 2),
+            TimelinePhase(name="当前阶段", start_event_id=third * 2 + 1, end_event_id=n),
+        ]
+    elif n >= 2:
+        phases = [
+            TimelinePhase(name="起始阶段", start_event_id=1, end_event_id=max(1, n // 2)),
+            TimelinePhase(name="后续发展", start_event_id=max(2, n // 2 + 1), end_event_id=n),
+        ]
+
+    relationships: list[TimelineRelationship] = []
+    for index in range(1, n):
+        relationships.append(TimelineRelationship(from_id=index, to_id=index + 1, type="follows"))
+
+    return overview, key_figures, phases, relationships
+
+
+def _timeline_row_to_result(row: dict[str, Any], topic: dict[str, Any], source: str) -> TimelineGenerateResult:
     timeline_json = _parse_json_list(row.get("timeline_json"), [])
     timeline = [TimelineNode(**item) for item in timeline_json]
-
-    metadata_json = _parse_json_dict(row.get("metadata_json"), {})
-    relationships_json = _parse_json_list(row.get("relationships_json"), [])
+    overview, key_figures, phases, relationships = _build_timeline_extras(timeline, normalize_text(topic.get("summary", "")))
 
     return TimelineGenerateResult(
         topic_id=int(row["topic_id"]),
-        topic_name=topic_name,
+        topic_name=normalize_text(topic["topic_name"]),
         timeline=timeline,
         source=source,
         generated_at=normalize_text(row.get("generated_at")) or None,
         updated_at=normalize_text(row.get("updated_at")) or None,
         generate_status=_normalize_generate_status(row.get("generate_status")),
         schema_version="1.0",
-        overview=normalize_text(metadata_json.get("overview", "")),
-        key_figures=[str(item) for item in metadata_json.get("key_figures", [])],
-        phases=[
-            TimelinePhase(
-                name=normalize_text(p.get("name")),
-                start_event_id=int(p.get("start_event_id", 0)),
-                end_event_id=int(p.get("end_event_id", 0)),
-            )
-            for p in metadata_json.get("phases", [])
-        ],
-        relationships=[
-            TimelineRelationship(
-                from_id=int(r.get("from_id", 0)),
-                to_id=int(r.get("to_id", 0)),
-                type=normalize_text(r.get("type", "follows")),
-            )
-            for r in relationships_json
-        ],
+        overview=overview,
+        key_figures=key_figures,
+        phases=phases,
+        relationships=relationships,
     )
 
 
@@ -388,12 +419,6 @@ def _mock_result_to_cache_payload(result: TimelineGenerateResult) -> dict[str, A
         "generate_status": result.generate_status,
         "generated_at": result.generated_at,
         "updated_at": result.updated_at,
-        "metadata_json": {
-            "overview": result.overview,
-            "key_figures": result.key_figures,
-            "phases": [p.model_dump() for p in result.phases],
-        },
-        "relationships_json": [r.model_dump() for r in result.relationships],
     }
 
 
@@ -406,9 +431,8 @@ def _save_cache_to_db(result: TimelineGenerateResult) -> None:
             """
             INSERT INTO event_timeline (
                 topic_id, timeline_json, source_news_ids,
-                generate_status, generated_at, updated_at,
-                metadata_json, relationships_json
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                generate_status, generated_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s)
             """,
             [
                 payload["topic_id"],
@@ -417,8 +441,6 @@ def _save_cache_to_db(result: TimelineGenerateResult) -> None:
                 payload["generate_status"],
                 payload["generated_at"] or now,
                 payload["updated_at"] or now,
-                json.dumps(payload.get("metadata_json", {}), ensure_ascii=False),
-                json.dumps(payload.get("relationships_json", []), ensure_ascii=False),
             ],
         )
         return
@@ -430,9 +452,7 @@ def _save_cache_to_db(result: TimelineGenerateResult) -> None:
                source_news_ids = %s,
                generate_status = %s,
                generated_at = %s,
-               updated_at = %s,
-               metadata_json = %s,
-               relationships_json = %s
+               updated_at = %s
          WHERE topic_id = %s
         """,
         [
@@ -441,8 +461,6 @@ def _save_cache_to_db(result: TimelineGenerateResult) -> None:
             payload["generate_status"],
             payload["generated_at"] or now,
             payload["updated_at"] or now,
-            json.dumps(payload.get("metadata_json", {}), ensure_ascii=False),
-            json.dumps(payload.get("relationships_json", []), ensure_ascii=False),
             payload["topic_id"],
         ],
     )
@@ -712,7 +730,11 @@ async def _generate_with_ai_or_fallback(topic: dict[str, Any], news_rows: list[d
             ai_result = _build_ai_result(topic, payload["data"])
             if ai_result is not None:
                 ai_result.generate_status = "generated"
-                _save_cache_to_db(ai_result)
+                try:
+                    _save_cache_to_db(ai_result)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Timeline AI 缓存写入数据库失败，回退 mock：%s", exc)
+                    _save_cache_to_mock(ai_result)
                 return ai_result
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.warning("AI Timeline 调用失败，回退本地规则：%s", exc)
@@ -750,11 +772,16 @@ async def get_timeline_detail(topic_id: int) -> TimelineGenerateResult:
                 phases=[],
                 relationships=[],
             )
-        if cached.get("timeline_json"):
+        if cached.get("timeline_json") and _cached_timeline_matches_news(cached, news_rows):
             source = "cache"
             if cached.get("generate_status") == "mock":
                 source = "mock"
-            return _timeline_row_to_result(cached, normalize_text(topic["topic_name"]), source=source)
+            return _timeline_row_to_result(cached, topic, source=source)
+
+        logger.info(
+            "Timeline 缓存与当前数据库新闻不一致，忽略旧缓存并重新生成：topic_id=%s",
+            topic_id,
+        )
 
     return await _generate_with_ai_or_fallback(topic, news_rows)
 
@@ -772,28 +799,45 @@ async def generate_timeline(topic_id: int, current_user: Optional[UserInfo] = No
         raise AppException(code=400, message="同一话题下至少需要 2 篇新闻才能生成事件脉络")
 
     try:
-        execute_update(
-            """
-            INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, metadata_json, relationships_json, generate_status, generated_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                timeline_json = VALUES(timeline_json),
-                metadata_json = VALUES(metadata_json),
-                relationships_json = VALUES(relationships_json),
-                generate_status = VALUES(generate_status),
-                updated_at = VALUES(updated_at)
-            """,
-            [
-                topic_id,
-                json.dumps([]),
-                json.dumps([]),
-                json.dumps({}),
-                json.dumps([]),
-                "generating",
-                _now_text(),
-                _now_text(),
-            ],
-        )
+        now = _now_text()
+        existing = _cached_timeline_from_db(topic_id)
+        if existing is None:
+            execute_update(
+                """
+                INSERT INTO event_timeline (
+                    topic_id, timeline_json, source_news_ids,
+                    generate_status, generated_at, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    topic_id,
+                    json.dumps([], ensure_ascii=False),
+                    json.dumps([], ensure_ascii=False),
+                    "generating",
+                    now,
+                    now,
+                ],
+            )
+        else:
+            execute_update(
+                """
+                UPDATE event_timeline
+                   SET timeline_json = %s,
+                       source_news_ids = %s,
+                       generate_status = %s,
+                       generated_at = %s,
+                       updated_at = %s
+                 WHERE id = %s
+                """,
+                [
+                    json.dumps([], ensure_ascii=False),
+                    json.dumps([], ensure_ascii=False),
+                    "generating",
+                    now,
+                    now,
+                    int(existing["id"]),
+                ],
+            )
     except Exception as exc:
         logger.warning("设置生成中状态失败：%s", exc)
 

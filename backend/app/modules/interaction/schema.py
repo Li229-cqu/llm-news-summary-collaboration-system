@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class InteractionTestData(BaseModel):
@@ -25,17 +25,14 @@ class InteractionResult(BaseModel):
 
 
 class _CommentContentRequest(BaseModel):
-    """评论文本请求的公共校验规则。"""
+    """评论文本请求的公共校验规则（归一化）。"""
 
     content: str
 
     @field_validator("content")
     @classmethod
-    def validate_content(cls, value: str) -> str:
-        normalized_content = value.strip()
-        if not normalized_content:
-            raise ValueError("评论内容不能为空")
-        return normalized_content
+    def normalize_content(cls, value: str) -> str:
+        return value.strip() if value else ""
 
 
 class CommentMediaJson(BaseModel):
@@ -50,11 +47,29 @@ class CommentCreateRequest(_CommentContentRequest):
 
     media_json: Optional[CommentMediaJson] = None
 
+    @model_validator(mode="after")
+    def check_content_or_media(self) -> "CommentCreateRequest":
+        content = (self.content or "").strip()
+        has_images = bool(self.media_json and self.media_json.images)
+        has_emojis = bool(self.media_json and self.media_json.emojis)
+        if not content and not has_images and not has_emojis:
+            raise ValueError("评论内容不能为空")
+        return self
+
 
 class CommentReplyRequest(_CommentContentRequest):
     """回复新闻评论的请求模型。"""
 
     media_json: Optional[CommentMediaJson] = None
+
+    @model_validator(mode="after")
+    def check_content_or_media(self) -> "CommentReplyRequest":
+        content = (self.content or "").strip()
+        has_images = bool(self.media_json and self.media_json.images)
+        has_emojis = bool(self.media_json and self.media_json.emojis)
+        if not content and not has_images and not has_emojis:
+            raise ValueError("评论内容不能为空")
+        return self
 
 
 class CommentItem(BaseModel):

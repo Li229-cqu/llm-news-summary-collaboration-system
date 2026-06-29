@@ -122,14 +122,14 @@ def get_pending_posts(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
                 p.favorite_count,
                 p.heat_score,
                 p.status,
-                p.create_time,
-                p.update_time,
+                p.created_at AS create_time,
+                p.updated_at AS update_time,
                 COALESCE(u.username, '') AS username,
                 COALESCE(u.nickname, '') AS author
             FROM community_post p
             LEFT JOIN user u ON u.id = p.user_id
             WHERE p.status IN (0, 3)
-            ORDER BY p.create_time DESC, p.id DESC
+            ORDER BY p.created_at DESC, p.id DESC
         """
         rows = execute_query(sql)
         items = [_build_pending_post_item(row) for row in rows]

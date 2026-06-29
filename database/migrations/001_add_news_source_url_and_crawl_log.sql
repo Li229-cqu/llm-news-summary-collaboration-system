@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS `crawl_log` (
   `failed_count` INT NOT NULL DEFAULT 0,
   `status` VARCHAR(32) NOT NULL,
   `error_message` TEXT NULL,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_crawl_log_source_name` (`source_name`),
   KEY `idx_crawl_log_status` (`status`),
