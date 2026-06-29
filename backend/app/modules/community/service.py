@@ -674,26 +674,23 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     rows = execute_query(
         """
         SELECT
-            ht.id,
-            ht.title,
-            ht.target_type,
-            ht.target_id,
-            ht.rank_no,
-            ht.tag,
-            ht.update_time,
-            ht.create_time,
+            p.id,
+            p.title,
+            'community_post' AS target_type,
+            p.id AS target_id,
+            0 AS rank_no,
+            p.tags AS tags_json,
+            p.updated_at AS update_time,
+            p.created_at AS create_time,
             (
-                COALESCE(SUM(n.view_count), 0)
-                + COALESCE(SUM(n.like_count), 0) * 3
-                + COALESCE(SUM(n.comment_count), 0) * 5
-                + COALESCE(SUM(n.favorite_count), 0) * 4
+                COALESCE(p.heat_score, 0)
+                + COALESCE(p.like_count, 0) * 3
+                + COALESCE(p.comment_count, 0) * 5
+                + COALESCE(p.favorite_count, 0) * 4
             ) AS heat_score
-        FROM hot_topic ht
-        LEFT JOIN news n ON n.topic_id = ht.target_id AND n.status = 1
-        WHERE ht.status = 1
-        GROUP BY ht.id, ht.title, ht.target_type, ht.target_id,
-                 ht.rank_no, ht.tag, ht.update_time, ht.create_time
-        ORDER BY heat_score DESC, ht.rank_no ASC, ht.id ASC
+        FROM community_post p
+        WHERE p.status = 1
+        ORDER BY heat_score DESC, p.created_at DESC
         LIMIT %s
         """,
         [max(limit, 0)],
@@ -704,6 +701,15 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     items = []
     for index, row in enumerate(rows, start=1):
         heat = int(row.get("heat_score") or 0)
+        tags_json = row.get("tags_json")
+        tag_str = ""
+        if tags_json:
+            try:
+                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+                if isinstance(tags, list):
+                    tag_str = ", ".join(str(t) for t in tags)
+            except Exception:
+                tag_str = ""
         items.append(
             {
                 "id": int(row.get("id") or 0),
@@ -712,9 +718,9 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
                 "search_count": heat,
                 "trend": "up" if index <= 3 else "stable" if index <= 6 else "down",
                 "title": normalize_text(row.get("title")),
-                "target_type": normalize_text(row.get("target_type")),
+                "target_type": "community_post",
                 "target_id": int(row.get("target_id") or 0),
-                "tag": normalize_text(row.get("tag")),
+                "tag": tag_str,
                 "update_time": _format_datetime(row.get("update_time")),
                 "create_time": _format_datetime(row.get("create_time")),
             }
@@ -2298,10 +2304,9 @@ def unblock_user(blocked_user_id: int, current_user: Optional[Any] = None) -> Bl
 
 def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
     try:
-        if _db_has_hot_topics():
-            rows = _db_hot_topics(limit=limit)
-            if rows:
-                return [HotSearchItem(**row) for row in rows]
+        rows = _db_hot_topics(limit=limit)
+        if rows:
+            return [HotSearchItem(**row) for row in rows]
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取社区热搜失败，回退 mock：%s", exc)
     return [HotSearchItem(**row) for row in _mock_hot_search(limit=limit)]
@@ -2309,6 +2314,39 @@ def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
 
 def get_hot_topics(limit: int = 10) -> list[HotSearchItem]:
     return get_hot_search(limit=limit)
+
+
+def get_hot_tags(limit: int = 10) -> list[dict[str, Any]]:
+    try:
+        rows = execute_query(
+            """
+            SELECT tags FROM community_post WHERE status = 1 AND tags IS NOT NULL
+            """,
+            [],
+        )
+        if not rows:
+            return []
+
+        tag_counter: dict[str, int] = {}
+        for row in rows:
+            tags_json = row.get("tags")
+            if not tags_json:
+                continue
+            try:
+                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+                if isinstance(tags, list):
+                    for tag in tags:
+                        tag_name = str(tag).strip()
+                        if tag_name:
+                            tag_counter[tag_name] = tag_counter.get(tag_name, 0) + 1
+            except Exception:
+                continue
+
+        sorted_tags = sorted(tag_counter.items(), key=lambda x: -x[1])[:limit]
+        return [{"name": name, "count": count} for name, count in sorted_tags]
+    except Exception as exc:
+        logger.warning("读取热门标签失败：%s", exc)
+        return []
 
 
 async def ai_news_helper(question: str) -> AIHelperResponse:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, File, Header, UploadFile
 
 from app.common.response import ApiResponse, success_response
 from app.modules.ai.schema import (
@@ -11,12 +11,14 @@ from app.modules.ai.schema import (
     AIGenerateResponse,
     AIRecordListResponse,
     DeleteAIRecordResult,
+    FileUploadResponse,
 )
 from app.modules.ai.service import (
     delete_ai_record,
     generate_title_summary,
     get_ai_record_detail,
     get_ai_records,
+    handle_file_upload,
 )
 from app.modules.auth.schema import UserInfo
 from app.modules.auth.service import get_mock_user_by_token
@@ -92,3 +94,13 @@ async def delete_history(
         raise AppException(code=404, message="历史记录不存在")
 
     return success_response(DeleteAIRecordResult(success=True, message="历史记录已删除"))
+
+
+@router.post("/upload", response_model=ApiResponse[FileUploadResponse])
+async def upload_file(
+    file: UploadFile = File(...),
+) -> ApiResponse[FileUploadResponse]:
+    """上传文件并提取文本内容。"""
+    content = await file.read()
+    result = handle_file_upload(content, file.filename)
+    return success_response(result)
