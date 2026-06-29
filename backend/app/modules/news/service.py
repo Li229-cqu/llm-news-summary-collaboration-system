@@ -610,9 +610,7 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
 def get_categories() -> list[dict[str, Any]]:
     """获取新闻分类，优先数据库，失败时回退 mock。"""
     try:
-        rows = _db_categories()
-        if rows:
-            return rows
+        return _db_categories()
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻分类失败，回退 mock：%s", exc)
     return _mock_get_categories()
@@ -627,32 +625,26 @@ def get_news_list(
 ) -> dict[str, Any]:
     """获取新闻列表，优先数据库，必要时回退 mock。"""
     try:
-        result = _db_news_list(
+        return _db_news_list(
             category=category,
             category_id=category_id,
             keyword=keyword,
             page=page,
             page_size=page_size,
         )
-        if result["list"]:
-            return result
-        if not (category or category_id or (keyword or "").strip()):
-            return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
-        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻列表失败，回退 mock：%s", exc)
         return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
 
 
 def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    """获取新闻热榜，优先数据库，失败时回退 mock。"""
+    """获取新闻热榜，优先数据库；无数据时返回空列表，异常时向上抛出。"""
     try:
         rows = _db_hot_news(limit=limit)
-        if rows:
-            return rows
+        return rows or []
     except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻热榜失败，回退 mock：%s", exc)
-    return _mock_get_hot_news(limit=limit)
+        logger.warning("读取新闻热榜失败：%s", exc)
+        raise
 
 
 def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
@@ -673,6 +665,9 @@ def get_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail = _db_news_detail(news_id=news_id, current_user=current_user)
         if detail is not None:
             return detail
+        raise AppException(code=404, message="新闻不存在")
+    except AppException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻详情失败，回退 mock：%s", exc)
 
@@ -688,6 +683,9 @@ def record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str,
         result = _db_record_browse(news_id=news_id, current_user=current_user)
         if result is not None:
             return result
+        raise AppException(code=404, message="新闻不存在")
+    except AppException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("记录浏览失败，回退 mock：%s", exc)
 

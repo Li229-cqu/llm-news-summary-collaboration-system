@@ -1655,7 +1655,7 @@ def get_recommendations(current_user: Optional[Any] = None, limit: int = 10) -> 
 
     try:
         result = _db_recommendations(user_id, limit=limit)
-        if result is not None and result.get("list"):
+        if result is not None:
             return result
     except Exception as exc:
         logger.warning("数据库推荐查询异常，回退 mock：%s", exc)

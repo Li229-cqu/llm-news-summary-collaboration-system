@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 
 import feedparser
 import pymysql
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, UnicodeDammit
 from dateutil import parser as date_parser
 from dotenv import load_dotenv
 
@@ -206,6 +206,41 @@ NOISE_KEYWORDS = [
     "本文来源",
     "原文链接",
     "违法和不良信息举报",
+]
+
+BOILERPLATE_TERMINATORS = [
+    "责任编辑",
+    "责编",
+    "版权声明",
+    "免责声明",
+    "相关阅读",
+    "相关推荐",
+    "推荐阅读",
+    "热门推荐",
+    "更多精彩",
+    "客户端",
+    "扫一扫",
+    "分享到",
+    "参与互动",
+    "我要评论",
+    "原文链接",
+    "本文来源",
+    "违法和不良信息举报",
+]
+
+MOJIBAKE_MARKERS = [
+    "锟",
+    "�",
+    "Ã",
+    "Â",
+    "涓",
+    "鍥",
+    "鏂",
+    "绔",
+    "缃",
+    "璐",
+    "鐨",
+    "鈥",
 ]
 
 NOISE_ATTR_KEYWORDS = [
@@ -410,6 +445,61 @@ def normalize_whitespace(text: str) -> str:
     return " ".join(str(text).split()).strip()
 
 
+def looks_mojibake(text: str) -> bool:
+    if not text:
+        return False
+    marker_count = sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
+    chinese_count = len(re.findall(r"[\u4e00-\u9fff]", text))
+    odd_script_count = len(re.findall(r"[\u0370-\u03ff\u0400-\u052f\u0590-\u05ff\u02c0-\u02ff]", text))
+    if "�" in text:
+        return True
+    if odd_script_count >= 12 and odd_script_count >= max(chinese_count // 5, 8):
+        return True
+    return marker_count >= 3 and marker_count >= max(chinese_count // 8, 3)
+
+
+def repair_mojibake(text: str) -> str:
+    if not text or not looks_mojibake(text):
+        return text
+    for source_encoding in ("latin1", "gbk", "cp1252"):
+        for target_encoding in ("utf-8", "gb18030"):
+            try:
+                repaired = text.encode(source_encoding, errors="ignore").decode(target_encoding, errors="ignore")
+            except Exception:
+                continue
+            if repaired and not looks_mojibake(repaired):
+                return repaired
+    return text
+
+
+def is_unreadable_article_text(text: str) -> bool:
+    normalized = normalize_whitespace(text)
+    if not normalized:
+        return True
+    chinese_count = len(re.findall(r"[\u4e00-\u9fff]", normalized))
+    visible_count = len(re.findall(r"\S", normalized))
+    if looks_mojibake(normalized):
+        return True
+    if visible_count >= 10 and chinese_count == 0:
+        return True
+    if visible_count >= 40 and chinese_count < max(visible_count // 12, 12):
+        return True
+    return False
+
+
+def cut_boilerplate_tail(text: str) -> str:
+    if not text:
+        return ""
+    earliest = -1
+    for keyword in BOILERPLATE_TERMINATORS:
+        index = text.find(keyword)
+        if index >= 0 and (earliest < 0 or index < earliest):
+            earliest = index
+    if earliest >= 0:
+        text = text[:earliest]
+    return text.strip()
+
+
 def truncate_text(text: str, max_length: int) -> str:
     return text if len(text) <= max_length else text[:max_length].rstrip() + "..."
 
@@ -542,10 +632,12 @@ def strip_boilerplate_lines(text: str) -> str:
         line = normalize_whitespace(raw_line)
         if not line:
             continue
+        if any(keyword in line for keyword in BOILERPLATE_TERMINATORS):
+            break
         if is_noise_text(line):
             continue
         lines.append(line)
-    return "\n\n".join(lines)
+    return cut_boilerplate_tail("\n\n".join(lines))
 
 
 def remove_noise_nodes(soup: BeautifulSoup) -> None:
@@ -597,9 +689,35 @@ def extract_article_content(html_text: str, url: str = "") -> str:
 
     candidates.sort(key=lambda item: item[0], reverse=True)
     content = candidates[0][1].strip()
+    content = cut_boilerplate_tail(content)
+    content = repair_mojibake(content)
     if len(content) > 12000:
         content = content[:12000].rstrip()
     return "" if is_noisy_content(content) else content
+
+
+def decode_html_bytes(data: bytes, declared_charset: str | None = None) -> str:
+    candidates = [
+        declared_charset,
+        "utf-8",
+        "gb18030",
+        "gbk",
+        "gb2312",
+    ]
+    for charset in candidates:
+        if not charset:
+            continue
+        try:
+            text = data.decode(charset, errors="replace")
+        except LookupError:
+            continue
+        if text and not looks_mojibake(text):
+            return text
+
+    dammit = UnicodeDammit(data, is_html=True)
+    if dammit.unicode_markup:
+        return dammit.unicode_markup
+    return data.decode("utf-8", errors="ignore")
 
 
 def fetch_html(url: str, source_name: str) -> str:
@@ -616,7 +734,7 @@ def fetch_html(url: str, source_name: str) -> str:
         )
         with urlopen(request, timeout=20) as response:  # noqa: S310
             charset = response.headers.get_content_charset() or "utf-8"
-            return response.read().decode(charset, errors="ignore")
+            return decode_html_bytes(response.read(), charset)
     except Exception as exc:  # noqa: BLE001
         logger.warning("抓取原文失败：%s | %s | %s", source_name, url, exc)
         return ""
@@ -751,7 +869,10 @@ def build_content(entry: Any, summary: str, link: str, source_name: str, html_te
             content = article_content
     if not content:
         content = summary
-    return content.strip()
+    cleaned_content = repair_mojibake(cut_boilerplate_tail(content.strip()))
+    if is_unreadable_article_text(cleaned_content) and summary:
+        return repair_mojibake(cut_boilerplate_tail(summary.strip()))
+    return cleaned_content
 
 
 
@@ -844,10 +965,14 @@ def should_update_existing(existing_row: dict[str, Any], item: ParsedNewsItem, u
     if not update_existing_content:
         return False
     existing_content = str(existing_row.get("content") or "")
+    existing_title = str(existing_row.get("title") or "")
     existing_image = str(existing_row.get("cover_image") or "")
     existing_url = str(existing_row.get("source_url") or "")
     return (
         is_noisy_content(existing_content)
+        or looks_mojibake(existing_title)
+        or looks_mojibake(existing_content)
+        or cut_boilerplate_tail(existing_content) != existing_content.strip()
         or (not existing_image and bool(item.cover_image))
         or (bool(item.source_url) and existing_url != item.source_url)
     )
@@ -1230,6 +1355,62 @@ def print_image_statistics(connection: pymysql.connections.Connection) -> None:
         logger.exception("输出统计信息失败：%s", exc)
 
 
+def clean_existing_news_text(connection: pymysql.connections.Connection) -> int:
+    """清理已入库新闻中的乱码和正文尾部附录，不改动互动统计字段。"""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, summary, content, source, editor
+            FROM news
+            WHERE status = 1
+            """
+        )
+        rows = cursor.fetchall()
+
+    updated_count = 0
+    for row in rows:
+        summary_text = repair_mojibake(cut_boilerplate_tail(normalize_whitespace(str(row.get("summary") or ""))))
+        content_text = repair_mojibake(cut_boilerplate_tail(str(row.get("content") or "").strip()))
+        if is_unreadable_article_text(content_text) and summary_text:
+            content_text = summary_text
+        cleaned = {
+            "title": repair_mojibake(normalize_whitespace(str(row.get("title") or ""))),
+            "summary": summary_text,
+            "content": content_text,
+            "source": repair_mojibake(normalize_whitespace(str(row.get("source") or ""))),
+            "editor": repair_mojibake(normalize_whitespace(str(row.get("editor") or ""))),
+        }
+        changed = any(cleaned[field] != str(row.get(field) or "") for field in cleaned)
+        if not changed:
+            continue
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE news
+                   SET title = %s,
+                       summary = %s,
+                       content = %s,
+                       source = %s,
+                       editor = %s,
+                       update_time = NOW()
+                 WHERE id = %s
+                """,
+                (
+                    cleaned["title"],
+                    cleaned["summary"],
+                    cleaned["content"],
+                    cleaned["source"],
+                    cleaned["editor"],
+                    row["id"],
+                ),
+            )
+        updated_count += 1
+
+    connection.commit()
+    return updated_count
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RSS news crawler")
     parser.add_argument("--max-items", type=int, default=DEFAULT_MAX_ITEMS, help="Max items per RSS source")
@@ -1238,6 +1419,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--cleanup-days", type=int, default=0, help="Archive old news by days; 0 means disabled")
     parser.add_argument("--fetch-content", action="store_true", help="Fetch article page content and cover image")
     parser.add_argument("--update-existing-content", action="store_true", help="Update noisy existing content, empty cover image and bad source_url")
+    parser.add_argument("--clean-existing-text", action="store_true", help="Clean mojibake and appendix text in existing news rows")
     return parser.parse_args(argv)
 
 def main(argv: list[str] | None = None) -> int:
@@ -1260,39 +1442,46 @@ def main(argv: list[str] | None = None) -> int:
             archived_count = archive_old_news(connection, args.cleanup_days)
             logger.info("已归档旧新闻数量：%s", archived_count)
 
-        for feed_source in get_source_list(args.source):
-            stats = crawl_source(
-                connection,
-                feed_source,
-                args.max_items,
-                args.dry_run,
-                fetch_content=args.fetch_content,
-                update_existing_content=args.update_existing_content,
-            )
-            print_summary(feed_source["name"], stats)
+        if not args.dry_run and args.clean_existing_text:
+            cleaned_count = clean_existing_news_text(connection)
+            logger.info("已清理旧新闻文本：%s", cleaned_count)
 
-            total_stats["parsed"] += stats["parsed"]
-            total_stats["inserted"] += stats["inserted"]
-            total_stats["updated"] += stats["updated"]
-            total_stats["skipped"] += stats["skipped"]
-            total_stats["failed"] += stats["failed"]
-            total_stats["errors"].extend(stats["errors"])
-
-            if not args.dry_run:
-                write_crawl_log(
+        if args.max_items > 0:
+            for feed_source in get_source_list(args.source):
+                stats = crawl_source(
                     connection,
-                    source_name=feed_source["name"],
-                    rss_url=feed_source["url"],
-                    start_time=stats["start_time"],
-                    end_time=stats["end_time"],
-                    parsed_count=stats["parsed"],
-                    inserted_count=stats["inserted"],
-                    skipped_count=stats["skipped"],
-                    updated_count=stats["updated"],
-                    failed_count=stats["failed"],
-                    status=stats["status"],
-                    error_message="；".join(stats["errors"]) if stats["errors"] else None,
+                    feed_source,
+                    args.max_items,
+                    args.dry_run,
+                    fetch_content=args.fetch_content,
+                    update_existing_content=args.update_existing_content,
                 )
+                print_summary(feed_source["name"], stats)
+
+                total_stats["parsed"] += stats["parsed"]
+                total_stats["inserted"] += stats["inserted"]
+                total_stats["updated"] += stats["updated"]
+                total_stats["skipped"] += stats["skipped"]
+                total_stats["failed"] += stats["failed"]
+                total_stats["errors"].extend(stats["errors"])
+
+                if not args.dry_run:
+                    write_crawl_log(
+                        connection,
+                        source_name=feed_source["name"],
+                        rss_url=feed_source["url"],
+                        start_time=stats["start_time"],
+                        end_time=stats["end_time"],
+                        parsed_count=stats["parsed"],
+                        inserted_count=stats["inserted"],
+                        skipped_count=stats["skipped"],
+                        updated_count=stats["updated"],
+                        failed_count=stats["failed"],
+                        status=stats["status"],
+                        error_message="；".join(stats["errors"]) if stats["errors"] else None,
+                    )
+        else:
+            logger.info("max-items=0，跳过 RSS 抓取")
 
         # 爬虫完成后，过滤重复图片和输出统计
         if not args.dry_run:
