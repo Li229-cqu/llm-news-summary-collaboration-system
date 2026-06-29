@@ -39,18 +39,6 @@ from app.modules.community.schema import (
 
 logger = logging.getLogger(__name__)
 
-VALID_COMMUNITY_TAGS = {"时政", "经济", "科技", "教育", "军事", "社会", "国际", "体育", "娱乐", "健康"}
-
-
-def _validate_tags(tags: list[str]) -> list[str]:
-    if not tags:
-        return []
-    return [tag for tag in tags if tag in VALID_COMMUNITY_TAGS]
-
-
-def get_available_tags() -> list[dict[str, Any]]:
-    return [{"name": tag, "count": 0} for tag in sorted(VALID_COMMUNITY_TAGS)]
-
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -686,23 +674,26 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     rows = execute_query(
         """
         SELECT
-            p.id,
-            p.title,
-            'community_post' AS target_type,
-            p.id AS target_id,
-            0 AS rank_no,
-            p.tags AS tags_json,
-            p.updated_at AS update_time,
-            p.created_at AS create_time,
+            ht.id,
+            ht.title,
+            ht.target_type,
+            ht.target_id,
+            ht.rank_no,
+            ht.tag,
+            ht.update_time,
+            ht.create_time,
             (
-                COALESCE(p.heat_score, 0)
-                + COALESCE(p.like_count, 0) * 3
-                + COALESCE(p.comment_count, 0) * 5
-                + COALESCE(p.favorite_count, 0) * 4
+                COALESCE(SUM(n.view_count), 0)
+                + COALESCE(SUM(n.like_count), 0) * 3
+                + COALESCE(SUM(n.comment_count), 0) * 5
+                + COALESCE(SUM(n.favorite_count), 0) * 4
             ) AS heat_score
-        FROM community_post p
-        WHERE p.status = 1
-        ORDER BY heat_score DESC, p.created_at DESC
+        FROM hot_topic ht
+        LEFT JOIN news n ON n.topic_id = ht.target_id AND n.status = 1
+        WHERE ht.status = 1
+        GROUP BY ht.id, ht.title, ht.target_type, ht.target_id,
+                 ht.rank_no, ht.tag, ht.update_time, ht.create_time
+        ORDER BY heat_score DESC, ht.rank_no ASC, ht.id ASC
         LIMIT %s
         """,
         [max(limit, 0)],
@@ -713,15 +704,6 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
     items = []
     for index, row in enumerate(rows, start=1):
         heat = int(row.get("heat_score") or 0)
-        tags_json = row.get("tags_json")
-        tag_str = ""
-        if tags_json:
-            try:
-                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
-                if isinstance(tags, list):
-                    tag_str = ", ".join(str(t) for t in tags)
-            except Exception:
-                tag_str = ""
         items.append(
             {
                 "id": int(row.get("id") or 0),
@@ -730,9 +712,9 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
                 "search_count": heat,
                 "trend": "up" if index <= 3 else "stable" if index <= 6 else "down",
                 "title": normalize_text(row.get("title")),
-                "target_type": "community_post",
+                "target_type": normalize_text(row.get("target_type")),
                 "target_id": int(row.get("target_id") or 0),
-                "tag": tag_str,
+                "tag": normalize_text(row.get("tag")),
                 "update_time": _format_datetime(row.get("update_time")),
                 "create_time": _format_datetime(row.get("create_time")),
             }
@@ -1019,7 +1001,7 @@ def _post_create_row_from_request(request: CreatePostRequest, current_user: Opti
         "comment_count": 0,
         "favorite_count": 0,
         "heat_score": 0,
-        "status": 1,
+        "status": 0,
         "create_time": _now_text(),
         "update_time": _now_text(),
         "tags": request.tags or [],
@@ -1042,8 +1024,6 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
     if user_id is None:
         raise AppException(code=401, message="未登录或登录状态已失效")
 
-    validated_tags = _validate_tags(request.tags or [])
-
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
@@ -1054,7 +1034,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                         user_id, title, content, related_news_id, topic_id,
                         like_count, comment_count, favorite_count, heat_score,
                         status, create_time, update_time, tags
-                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
+                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 0, NOW(), NOW(), %s)
                     """,
                     [
                         user_id,
@@ -1062,7 +1042,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                         request.content,
                         request.related_news_id,
                         request.topic_id,
-                        json.dumps(validated_tags, ensure_ascii=False),
+                        json.dumps(request.tags or [], ensure_ascii=False),
                     ],
                 )
             else:
@@ -1072,7 +1052,7 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
                         user_id, title, content, related_news_id, topic_id,
                         like_count, comment_count, favorite_count, heat_score,
                         status, create_time, update_time
-                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW())
+                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 0, NOW(), NOW())
                     """,
                     [
                         user_id,
@@ -1129,7 +1109,7 @@ def create_post(request: CreatePostRequest, current_user: Optional[Any] = None) 
             "comment_count": 0,
             "favorite_count": 0,
             "heat_score": 0,
-            "status": 1,
+            "status": 0,
             "create_time": post["create_time"],
             "update_time": post["update_time"],
             "tags": request.tags or [],
@@ -1851,7 +1831,6 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
     new_id = max([int(item["id"]) for item in FALLBACK_POSTS], default=0) + 1
     now = _now_text()
     news_title_map = _mock_news_title_map()
-    validated_tags = _validate_tags(request.tags or [])
     post = {
         "id": new_id,
         "user_id": _current_user_id(current_user) or 0,
@@ -1867,10 +1846,10 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
         "comment_count": 0,
         "favorite_count": 0,
         "heat_score": 0,
-        "status": 1,
+        "status": 0,
         "create_time": now,
         "update_time": now,
-        "tags": validated_tags,
+        "tags": request.tags or [],
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -2319,9 +2298,10 @@ def unblock_user(blocked_user_id: int, current_user: Optional[Any] = None) -> Bl
 
 def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
     try:
-        rows = _db_hot_topics(limit=limit)
-        if rows:
-            return [HotSearchItem(**row) for row in rows]
+        if _db_has_hot_topics():
+            rows = _db_hot_topics(limit=limit)
+            if rows:
+                return [HotSearchItem(**row) for row in rows]
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取社区热搜失败，回退 mock：%s", exc)
     return [HotSearchItem(**row) for row in _mock_hot_search(limit=limit)]
@@ -2329,39 +2309,6 @@ def get_hot_search(limit: int = 10) -> list[HotSearchItem]:
 
 def get_hot_topics(limit: int = 10) -> list[HotSearchItem]:
     return get_hot_search(limit=limit)
-
-
-def get_hot_tags(limit: int = 10) -> list[dict[str, Any]]:
-    try:
-        rows = execute_query(
-            """
-            SELECT tags FROM community_post WHERE status = 1 AND tags IS NOT NULL
-            """,
-            [],
-        )
-        if not rows:
-            return []
-
-        tag_counter: dict[str, int] = {}
-        for row in rows:
-            tags_json = row.get("tags")
-            if not tags_json:
-                continue
-            try:
-                tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
-                if isinstance(tags, list):
-                    for tag in tags:
-                        tag_name = str(tag).strip()
-                        if tag_name:
-                            tag_counter[tag_name] = tag_counter.get(tag_name, 0) + 1
-            except Exception:
-                continue
-
-        sorted_tags = sorted(tag_counter.items(), key=lambda x: -x[1])[:limit]
-        return [{"name": name, "count": count} for name, count in sorted_tags]
-    except Exception as exc:
-        logger.warning("读取热门标签失败：%s", exc)
-        return []
 
 
 async def ai_news_helper(question: str) -> AIHelperResponse:

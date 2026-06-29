@@ -97,21 +97,3 @@ export function getAIRecordDetail(recordId: number | string) {
 export function deleteAIRecord(recordId: number | string) {
   return request.delete<DeleteAIRecordResult, DeleteAIRecordResult>(`/api/ai/records/${recordId}`)
 }
-
-export interface FileUploadResponse {
-  success: boolean
-  message: string
-  content: string
-  filename: string
-}
-
-/** 上传文件并提取文本内容。 */
-export function uploadFile(formData: FormData) {
-  return request.post<FileUploadResponse, FileUploadResponse, FormData>(
-    '/api/ai/upload',
-    formData,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }
-  )
-}

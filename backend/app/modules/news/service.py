@@ -139,6 +139,8 @@ def _format_hot_row(row: dict[str, Any], rank: int) -> dict[str, Any]:
         "publish_time": format_datetime(row.get("publish_time")),
         "heat_score": int(row.get("heat_score") or 0),
         "rank": rank,
+        "managed": bool(int(row.get("managed") or 0)),
+        "topic_id": int(row.get("topic_id") or 0) if row.get("topic_id") is not None else None,
     }
 
 
@@ -418,35 +420,69 @@ def _db_hot_news(limit: int = 10) -> list[dict[str, Any]]:
     normalized_limit = max(limit, 0)
     if normalized_limit == 0:
         return []
+    # 合并 news 表热度计算 + hot_topic 手动管理的新闻热搜
     rows = execute_query(
         """
-        SELECT
-            n.id,
-            n.title,
-            n.cover_image,
-            COALESCE(nc.name, '未分类') AS category_name,
-            n.source,
-            n.view_count,
-            n.comment_count,
-            n.like_count,
-            n.favorite_count,
-            n.publish_time,
-            (
-                COALESCE(n.view_count, 0)
-                + COALESCE(n.like_count, 0) * 5
-                + COALESCE(n.favorite_count, 0) * 4
-                + COALESCE(n.comment_count, 0) * 6
-            ) AS heat_score
-        FROM news n
-        LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE n.status = 1
+        SELECT * FROM (
+            -- 手动管理的新闻热搜（hot_topic 表，优先级最高）
+            SELECT
+                COALESCE(n.id, ht.target_id) AS id,
+                ht.title,
+                n.cover_image,
+                COALESCE(nc.name, '未分类') AS category_name,
+                n.source,
+                COALESCE(n.view_count, 0) AS view_count,
+                COALESCE(n.comment_count, 0) AS comment_count,
+                COALESCE(n.like_count, 0) AS like_count,
+                COALESCE(n.favorite_count, 0) AS favorite_count,
+                n.publish_time,
+                (ht.heat_score + 100000) AS heat_score,
+                ht.rank_no,
+                1 AS managed,
+                ht.id AS topic_id
+            FROM hot_topic ht
+            LEFT JOIN news n ON n.id = ht.target_id AND n.status = 1
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            WHERE ht.target_type = 'news' AND ht.status = 1
+
+            UNION ALL
+
+            -- 自动计算的新闻热度
+            SELECT
+                n.id,
+                n.title,
+                n.cover_image,
+                COALESCE(nc.name, '未分类') AS category_name,
+                n.source,
+                n.view_count,
+                n.comment_count,
+                n.like_count,
+                n.favorite_count,
+                n.publish_time,
+                (
+                    COALESCE(n.view_count, 0)
+                    + COALESCE(n.like_count, 0) * 5
+                    + COALESCE(n.favorite_count, 0) * 4
+                    + COALESCE(n.comment_count, 0) * 6
+                ) AS heat_score,
+                99 AS rank_no,
+                0 AS managed,
+                NULL AS topic_id
+            FROM news n
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            WHERE n.status = 1
+              AND n.id NOT IN (
+                  SELECT target_id FROM hot_topic
+                  WHERE target_type = 'news' AND status = 1 AND target_id IS NOT NULL
+              )
+        ) combined
         ORDER BY heat_score DESC,
-                 n.view_count DESC,
-                 n.like_count DESC,
-                 n.favorite_count DESC,
-                 n.comment_count DESC,
-                 n.publish_time DESC,
-                 n.id DESC
+                 view_count DESC,
+                 like_count DESC,
+                 favorite_count DESC,
+                 comment_count DESC,
+                 publish_time DESC,
+                 id DESC
         LIMIT %s
         """,
         [normalized_limit],
@@ -610,7 +646,9 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
 def get_categories() -> list[dict[str, Any]]:
     """获取新闻分类，优先数据库，失败时回退 mock。"""
     try:
-        return _db_categories()
+        rows = _db_categories()
+        if rows:
+            return rows
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻分类失败，回退 mock：%s", exc)
     return _mock_get_categories()
@@ -625,26 +663,32 @@ def get_news_list(
 ) -> dict[str, Any]:
     """获取新闻列表，优先数据库，必要时回退 mock。"""
     try:
-        return _db_news_list(
+        result = _db_news_list(
             category=category,
             category_id=category_id,
             keyword=keyword,
             page=page,
             page_size=page_size,
         )
+        if result["list"]:
+            return result
+        if not (category or category_id or (keyword or "").strip()):
+            return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻列表失败，回退 mock：%s", exc)
         return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
 
 
 def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    """获取新闻热榜，优先数据库；无数据时返回空列表，异常时向上抛出。"""
+    """获取新闻热榜，优先数据库，失败时回退 mock。"""
     try:
         rows = _db_hot_news(limit=limit)
-        return rows or []
+        if rows:
+            return rows
     except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻热榜失败：%s", exc)
-        raise
+        logger.warning("读取新闻热榜失败，回退 mock：%s", exc)
+    return _mock_get_hot_news(limit=limit)
 
 
 def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
@@ -665,9 +709,6 @@ def get_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail = _db_news_detail(news_id=news_id, current_user=current_user)
         if detail is not None:
             return detail
-        raise AppException(code=404, message="新闻不存在")
-    except AppException:
-        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取新闻详情失败，回退 mock：%s", exc)
 
@@ -683,9 +724,6 @@ def record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str,
         result = _db_record_browse(news_id=news_id, current_user=current_user)
         if result is not None:
             return result
-        raise AppException(code=404, message="新闻不存在")
-    except AppException:
-        raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("记录浏览失败，回退 mock：%s", exc)
 

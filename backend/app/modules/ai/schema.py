@@ -76,10 +76,3 @@ class AIRecordListResponse(BaseModel):
 class DeleteAIRecordResult(BaseModel):
     success: bool
     message: str
-
-
-class FileUploadResponse(BaseModel):
-    success: bool
-    message: str
-    content: str
-    filename: str

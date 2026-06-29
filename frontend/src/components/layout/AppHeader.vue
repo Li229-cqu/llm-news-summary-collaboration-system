@@ -18,27 +18,24 @@
       <el-menu-item v-if="userStore.isEditorOrAdmin" index="/admin">管理后台</el-menu-item>
     </el-menu>
 
-    <form v-if="isHomePage" class="app-header__search" @submit.prevent="handleSearch">
-      <el-input
-        v-model="searchKeyword"
-        class="app-header__search-input"
-        clearable
-        placeholder="搜索新闻、标题、摘要、来源、标签"
-        @keyup.enter="handleSearch"
-      />
-      <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
-      <el-button plain @click="handleReset">重置</el-button>
-    </form>
-
     <div class="app-header__actions">
+      <div class="app-header__search-wrapper">
+        <el-input
+          class="app-header__search"
+          v-model="searchKeyword"
+          placeholder="搜索新闻、话题或关键词"
+          @keyup.enter="handleSearch"
+        />
+        <el-button type="primary" :loading="searchLoading" @click="handleSearch">搜索</el-button>
+        <el-button @click="handleSearchClear">清空</el-button>
+      </div>
       <el-button
         circle
         :aria-label="themeStore.theme === 'light' ? '切换至深色模式' : '切换至浅色模式'"
         @click="themeStore.toggleTheme"
       >
-        {{ themeStore.theme === 'light' ? '☀' : '☾' }}
+        {{ themeStore.theme === 'light' ? '◐' : '☼' }}
       </el-button>
-
       <el-dropdown v-if="userStore.isLoggedIn && userStore.userInfo" trigger="click" @command="handleUserCommand">
         <div class="app-header__user-state app-header__user-trigger">
           <el-avatar aria-label="用户头像">
@@ -64,9 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Search } from '@element-plus/icons-vue'
+import { ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { logoutApi } from '@/api/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -76,39 +72,15 @@ const router = useRouter()
 const route = useRoute()
 const themeStore = useThemeStore()
 const userStore = useUserStore()
-const searchStorageKey = 'home_global_search_keyword'
 const searchKeyword = ref('')
-const isHomePage = computed(() => route.name === 'home')
-
-onMounted(() => {
-  const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword.trim() : ''
-  const storedKeyword = sessionStorage.getItem(searchStorageKey)?.trim() || ''
-
-  if (route.path === '/home' && !routeKeyword) {
-    searchKeyword.value = ''
-    sessionStorage.removeItem(searchStorageKey)
-    return
-  }
-
-  searchKeyword.value = routeKeyword || storedKeyword
-})
+const searchLoading = ref(false)
 
 watch(
-  () => [route.path, route.query.keyword],
-  ([path, keyword]) => {
-    const normalizedKeyword = typeof keyword === 'string' ? keyword.trim() : ''
-
-    if (normalizedKeyword) {
-      searchKeyword.value = normalizedKeyword
-      sessionStorage.setItem(searchStorageKey, normalizedKeyword)
-      return
-    }
-
-    if (path === '/home') {
-      searchKeyword.value = ''
-      sessionStorage.removeItem(searchStorageKey)
-    }
+  () => route.query.keyword,
+  (newKeyword) => {
+    searchKeyword.value = String(newKeyword || '')
   },
+  { immediate: true }
 )
 
 function getRoleLabel(role: string) {
@@ -121,25 +93,21 @@ function getRoleLabel(role: string) {
   return roleLabels[role] ?? role
 }
 
-async function handleSearch() {
+function handleSearch() {
+  searchLoading.value = true
   const keyword = searchKeyword.value.trim()
-
-  if (!keyword) {
-    await handleReset()
-    return
+  if (keyword) {
+    router.push({ path: '/home', query: { keyword } })
+  } else {
+    router.push({ path: '/home', query: {} })
   }
-
-  sessionStorage.setItem(searchStorageKey, keyword)
-  await router.push({
-    path: '/home',
-    query: { keyword },
-  })
+  setTimeout(() => {
+    searchLoading.value = false
+  }, 500)
 }
 
-async function handleReset() {
-  searchKeyword.value = ''
-  sessionStorage.removeItem(searchStorageKey)
-  await router.push({ path: '/home', query: {} })
+function handleSearchClear() {
+  router.push({ path: '/home', query: {} })
 }
 
 async function handleUserCommand(command: string) {
@@ -170,7 +138,7 @@ async function handleUserCommand(command: string) {
   min-width: 0;
   height: var(--header-height);
   flex: 0 0 var(--header-height);
-  gap: 16px;
+  gap: 24px;
   padding: 0 24px;
   background: var(--color-bg-card);
   border-bottom: 1px solid var(--color-border);
@@ -197,20 +165,6 @@ async function handleUserCommand(command: string) {
   border-bottom: 0;
 }
 
-.app-header__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 320px;
-  max-width: 520px;
-  flex: 1 1 420px;
-}
-
-.app-header__search-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .app-header__actions {
   display: flex;
   align-items: center;
@@ -218,6 +172,20 @@ async function handleUserCommand(command: string) {
   gap: 12px;
   min-width: 0;
   margin-left: auto;
+}
+
+.app-header__search {
+  width: 220px;
+}
+
+.app-header__search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header__search-wrapper > :nth-child(3) {
+  margin-left: -2px;
 }
 
 .app-header__user-state {
@@ -248,16 +216,20 @@ async function handleUserCommand(command: string) {
     flex-basis: 240px;
   }
 
-  .app-header__user-state span {
-    display: none;
+  .app-header__search {
+    width: 160px;
   }
 
-  .app-header__search {
-    min-width: 220px;
+  .app-header__user-state span {
+    display: none;
   }
 }
 
 @media (max-width: 840px) {
+  .app-header__search {
+    display: none;
+  }
+
   .app-header__brand {
     flex-basis: 180px;
     font-size: 15px;
@@ -265,10 +237,6 @@ async function handleUserCommand(command: string) {
 
   .app-header__menu :deep(.el-menu-item) {
     padding: 0 10px;
-  }
-
-  .app-header__search {
-    display: none;
   }
 }
 </style>

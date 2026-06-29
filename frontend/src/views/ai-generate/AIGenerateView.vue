@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AIInputPanel from '@/components/ai/AIInputPanel.vue'
@@ -109,11 +109,6 @@ const handleGenerate = async () => {
 
 onMounted(() => {
   syncDraftFromNewsRoute()
-})
-
-onUnmounted(() => {
-  aiDraft.resetDraft()
-  sessionStorage.removeItem('ai_draft_from_news')
 })
 
 watch(

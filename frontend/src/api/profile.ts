@@ -37,8 +37,8 @@ export interface CommentRecordItem {
 }
 
 export interface AIRecordItem {
-  id: number | string
-  source: 'manual' | 'news'
+  id: number
+  source: string
   source_news_id?: number | string | null
   source_title: string
   input_text: string
@@ -47,7 +47,6 @@ export interface AIRecordItem {
   summary_long?: string
   risk_level?: string
   create_time?: string
-  title_count?: number
 }
 
 export interface SubscriptionCategory {

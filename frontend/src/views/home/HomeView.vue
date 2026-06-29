@@ -27,20 +27,23 @@
         <el-card class="featured-section" shadow="never">
           <div class="section-header">
             <div>
-              <h2>{{ sectionTitle }}</h2>
-              <p>{{ sectionDescription }}</p>
+              <h2>{{ searchKeyword ? `搜索结果: ${searchKeyword}` : activeCategoryId ? '精选新闻' : '为你推荐' }}</h2>
+              <p>{{ searchKeyword ? '找到 ' + total + ' 条相关新闻' : activeCategoryId ? '实时更新的精选内容，点击即可查看详情' : '基于你的浏览、收藏、点赞推荐' }}</p>
             </div>
+            <el-button text type="primary" :disabled="!hasMoreNews" @click="handleLoadMore">
+              查看更多
+            </el-button>
           </div>
 
           <NewsList
             :list="newsList"
             :loading="loadingNews"
-            :empty-text="emptyNewsText"
+            :empty-text="searchKeyword ? '未找到相关新闻，请尝试其他关键词' : '暂无新闻数据'"
           />
 
           <div class="load-more">
             <el-button plain type="primary" :loading="loadingNews" :disabled="!hasMoreNews" @click="handleLoadMore">
-              {{ loadMoreText }}
+              查看更多新闻
             </el-button>
           </div>
         </el-card>
@@ -51,7 +54,31 @@
           <NewsHotList :list="hotNewsList" :loading="loadingHot" @refresh="loadHotNews" />
         </el-card>
 
-        <NewsRecommendPanel :topics="timelineTopics" :loading="loadingTimelineTopics" @open="openTimeline" />
+        <el-card class="aside-card" shadow="never">
+          <div class="timeline-entry">
+            <div class="timeline-entry__header">
+              <h3>热点事件脉络</h3>
+              <span>从热门话题中查看事件发展过程</span>
+            </div>
+
+            <el-skeleton v-if="loadingTimelineTopics" animated :rows="4" />
+            <el-empty v-else-if="!timelineTopics.length" description="暂无事件脉络话题" />
+            <div v-else class="timeline-entry__list">
+              <div v-for="topic in timelineTopics" :key="topic.topic_id" class="timeline-entry__item">
+                <div class="timeline-entry__item-main">
+                  <div class="timeline-entry__item-title">{{ topic.topic_name }}</div>
+                  <div class="timeline-entry__item-meta">
+                    <span>热度 {{ topic.heat_score }}</span>
+                    <span>{{ topic.news_count }} 篇新闻</span>
+                  </div>
+                </div>
+                <el-button type="primary" link @click="openTimeline(topic)">查看脉络</el-button>
+              </div>
+            </div>
+          </div>
+        </el-card>
+
+        <NewsRecommendPanel :recent-items="recentNews" />
       </aside>
     </div>
 
@@ -70,7 +97,6 @@ import { ElMessage } from 'element-plus'
 import {
   getHotNews,
   getNewsList,
-  searchNews,
   type HotNewsItem,
   type NewsItem,
 } from '@/api/news'
@@ -92,74 +118,26 @@ const timelineTopics = ref<TimelineTopic[]>([])
 const loadingNews = ref(false)
 const loadingHot = ref(false)
 const loadingTimelineTopics = ref(false)
-const isRecommendationFeed = ref(false)
-const recommendationHasMore = ref(false)
 const page = ref(1)
 const pageSize = ref(6)
 const total = ref(0)
 
-const hasMoreNews = computed(() => {
-  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
-    return recommendationHasMore.value
-  }
-
-  return total.value === 0 || newsList.value.length < total.value
-})
+const recentNews = computed(() => newsList.value.slice(0, 3))
+const hasMoreNews = computed(() => total.value === 0 || newsList.value.length < total.value)
 const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
 const searchKeyword = computed(() => String(route.query.keyword ?? '').trim())
-const sectionTitle = computed(() =>
-  searchKeyword.value
-    ? `全站搜索结果：${searchKeyword.value}`
-    : activeCategoryId.value
-      ? '精选新闻'
-      : '为你推荐',
-)
-const sectionDescription = computed(() =>
-  searchKeyword.value
-    ? `找到 ${total.value} 条相关新闻`
-    : activeCategoryId.value
-      ? '实时更新的精选内容，点击即可查看详情'
-      : '基于你的浏览、收藏、点赞推荐',
-)
-const emptyNewsText = computed(() =>
-  searchKeyword.value ? '未找到全站相关新闻，请尝试其他关键词' : '暂无新闻数据',
-)
 
 const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 
-const loadMoreText = computed(() => {
-  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
-    return '加载更多推荐'
-  }
-
-  if (searchKeyword.value) {
-    return '加载更多搜索结果'
-  }
-
-  return '加载更多新闻'
-})
-
 async function loadNews() {
   loadingNews.value = true
-  isRecommendationFeed.value = false
-  recommendationHasMore.value = false
 
   try {
     const keyword = searchKeyword.value || undefined
 
-    if (keyword) {
-      const result = await searchNews({
-        keyword,
-        page: page.value,
-        page_size: pageSize.value,
-      })
-      newsList.value = result.list
-      total.value = result.total
-      page.value = result.page
-      pageSize.value = result.page_size
-    } else if (!activeCategoryId.value) {
+    if (!activeCategoryId.value && !keyword) {
       if (!userStore.isLoggedIn) {
         const result = await getNewsList({
           page: page.value,
@@ -172,22 +150,9 @@ async function loadNews() {
       } else {
         try {
           const result = await getRecommendations(pageSize.value)
-          if (result.list.length) {
-            newsList.value = result.list
-            total.value = Math.max(result.total, result.list.length)
-            page.value = 1
-            isRecommendationFeed.value = true
-            recommendationHasMore.value = result.list.length >= pageSize.value && result.list.length < 50
-          } else {
-            const fallback = await getNewsList({
-              page: page.value,
-              page_size: pageSize.value,
-            })
-            newsList.value = fallback.list
-            total.value = fallback.total
-            page.value = fallback.page
-            pageSize.value = fallback.page_size
-          }
+          newsList.value = result.list
+          total.value = result.total
+          page.value = 1
         } catch (recommendError) {
           console.error('推荐接口失败，已切换为最新新闻:', recommendError)
           ElMessage.info('个性化推荐暂时不可用，已为你展示最新新闻')
@@ -204,6 +169,7 @@ async function loadNews() {
     } else {
       const result = await getNewsList({
         category_id: activeCategoryId.value || undefined,
+        keyword,
         page: page.value,
         page_size: pageSize.value,
       })
@@ -254,49 +220,23 @@ async function handleLoadMore() {
     return
   }
 
-  const previousPage = page.value
+  page.value += 1
   loadingNews.value = true
 
   try {
-    if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
-      const currentCount = newsList.value.length
-      const nextLimit = Math.min(currentCount + pageSize.value, 50)
+    const result = await getNewsList({
+      category_id: activeCategoryId.value || undefined,
+      keyword: searchKeyword.value || undefined,
+      page: page.value,
+      page_size: pageSize.value,
+    })
 
-      if (nextLimit <= currentCount) {
-        recommendationHasMore.value = false
-        return
-      }
-
-      const result = await getRecommendations(nextLimit)
-      const existingIds = new Set(newsList.value.map((item) => item.id))
-      const appendedList = result.list.filter((item) => !existingIds.has(item.id))
-
-      newsList.value = [...newsList.value, ...appendedList]
-      total.value = Math.max(result.total, newsList.value.length)
-      page.value = 1
-      recommendationHasMore.value =
-        appendedList.length > 0 && result.list.length > currentCount && result.list.length < 50
-    } else {
-      const nextPage = page.value + 1
-      const result = searchKeyword.value
-        ? await searchNews({
-            keyword: searchKeyword.value,
-            page: nextPage,
-            page_size: pageSize.value,
-          })
-        : await getNewsList({
-            category_id: activeCategoryId.value || undefined,
-            page: nextPage,
-            page_size: pageSize.value,
-          })
-
-      newsList.value = [...newsList.value, ...result.list]
-      total.value = result.total
-      page.value = result.page
-      pageSize.value = result.page_size
-    }
+    newsList.value = [...newsList.value, ...result.list]
+    total.value = result.total
+    page.value = result.page
+    pageSize.value = result.page_size
   } catch (error) {
-    page.value = previousPage
+    page.value = Math.max(1, page.value - 1)
     ElMessage.error(error instanceof Error ? error.message : '获取更多新闻失败')
   } finally {
     loadingNews.value = false

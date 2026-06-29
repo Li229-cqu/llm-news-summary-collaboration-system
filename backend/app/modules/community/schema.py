@@ -107,11 +107,6 @@ class HotSearchItem(BaseModel):
     target_id: int = 0
     tag: str = ""
     update_time: str | datetime | None = None
-
-
-class TagCount(BaseModel):
-    name: str
-    count: int
     create_time: str | datetime | None = None
 
 
