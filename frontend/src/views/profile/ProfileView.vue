@@ -60,6 +60,7 @@ const pageSize = 10
 const totalCount = ref(0)
 
 const editDialogVisible = ref(false)
+const editLoading = ref(false)
 const editForm = reactive({
   nickname: '',
   email: '',
@@ -290,20 +291,47 @@ function handleAvatarChange(file: File) {
   return false
 }
 
-function handleEditSubmit() {
+async function handleEditSubmit() {
   if (!editForm.nickname.trim()) {
     ElMessage.warning('昵称不能为空')
     return
   }
-  if (userStore.userInfo) {
-    userStore.userInfo.nickname = editForm.nickname
-    if (editForm.avatar) {
-      userStore.userInfo.avatar = editForm.avatar
-    }
-    userStore.setUserInfo(userStore.userInfo)
+
+  if (editForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) {
+    ElMessage.warning('请输入有效的邮箱地址')
+    return
   }
-  ElMessage.success('资料修改成功')
-  editDialogVisible.value = false
+
+  if (editForm.phone && !/^1[3-9]\d{9}$/.test(editForm.phone)) {
+    ElMessage.warning('请输入有效的手机号码')
+    return
+  }
+
+  editLoading.value = true
+  try {
+    const result = await updateUserProfileApi({
+      nickname: editForm.nickname,
+      avatar: editForm.avatar || undefined,
+      email: editForm.email || undefined,
+      phone: editForm.phone || undefined,
+    })
+
+    if (userStore.userInfo) {
+      userStore.userInfo.nickname = result.nickname
+      ;(userStore.userInfo as any).email = result.email ?? ''
+      ;(userStore.userInfo as any).phone = result.phone ?? ''
+      userStore.userInfo.avatar = result.avatar || ''
+      userStore.setUserInfo(userStore.userInfo)
+    }
+
+    ElMessage.success('资料保存成功')
+    editDialogVisible.value = false
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '资料保存失败'
+    ElMessage.error(message)
+  } finally {
+    editLoading.value = false
+  }
 }
 
 function openAIRecordDetail(record: AIRecordItem) {
@@ -1042,7 +1070,7 @@ onMounted(() => {
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleEditSubmit">保存</el-button>
+        <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">保存</el-button>
       </template>
     </el-dialog>
 
