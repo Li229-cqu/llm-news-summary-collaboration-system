@@ -17,14 +17,6 @@
     </el-card>
 
     <el-card class="news-detail-side-panel__card" shadow="never">
-      <div class="news-detail-side-panel__ai">
-        <div class="news-detail-side-panel__title">AI 工具入口</div>
-        <p class="news-detail-side-panel__desc">点击可跳转到 AI 标题和摘要生成页</p>
-        <el-button type="primary" @click="goToAiGenerate">用 AI 生成标题和摘要</el-button>
-      </div>
-    </el-card>
-
-    <el-card class="news-detail-side-panel__card" shadow="never">
       <RelatedNewsList title="相关文章" :list="relatedNews" />
     </el-card>
 
@@ -35,7 +27,6 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
 import RelatedNewsList, { type RelatedNewsItem } from './RelatedNewsList.vue'
 
 const props = defineProps<{
@@ -48,12 +39,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'viewTimeline'): void
 }>()
-
-const router = useRouter()
-
-function goToAiGenerate() {
-  router.push('/ai/title-summary')
-}
 
 function handleViewTimeline() {
   if (!props.timelineTopicId) {
@@ -80,7 +65,6 @@ function handleViewTimeline() {
   gap: 14px;
 }
 
-.news-detail-side-panel__ai,
 .news-detail-side-panel__timeline {
   display: grid;
   gap: 10px;
