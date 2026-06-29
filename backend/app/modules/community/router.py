@@ -16,6 +16,7 @@ from app.modules.community.schema import (
     BlockResponse,
     CommentItem,
     CommentListResponse,
+    CommentsSummaryRequest,
     CommentsSummaryResponse,
     CommunityPost,
     CreateCommentRequest,
@@ -31,6 +32,7 @@ from app.modules.community.service import (
     create_comment,
     delete_comment,
     create_post,
+    generate_comments_summary,
     get_comments,
     get_comments_summary,
     get_hot_search,
@@ -206,4 +208,13 @@ async def get_post_comments_summary(
 ) -> ApiResponse[CommentsSummaryResponse]:
     """获取帖子评论区的 AI 总结。"""
     summary = await get_comments_summary(post_id)
+    return success_response(summary)
+
+
+@router.post("/comments/summary", response_model=ApiResponse[CommentsSummaryResponse])
+async def create_comments_summary(
+    request: CommentsSummaryRequest = Body(..., description="评论总结请求"),
+) -> ApiResponse[CommentsSummaryResponse]:
+    """生成评论总结（接收评论列表，调用 AI 服务）。"""
+    summary = await generate_comments_summary(request.comments)
     return success_response(summary)

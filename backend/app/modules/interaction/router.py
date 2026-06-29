@@ -138,7 +138,7 @@ MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # backend/
+BASE_DIR = Path(__file__).resolve().parents[4]  # 项目根目录
 UPLOADS_DIR = BASE_DIR / "uploads" / "comments"
 
 

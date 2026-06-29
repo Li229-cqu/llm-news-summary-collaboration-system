@@ -42,6 +42,10 @@ export interface CommentItem {
   is_liked: boolean
   replies: CommentItem[]
   media_json?: CommentMediaJson | null
+  reply_to_user_id?: number | null
+  reply_to_username?: string
+  reply_to_nickname?: string
+  reply_to_content?: string
 }
 
 export interface CommentMediaUploadResponse {
@@ -123,8 +127,5 @@ export function uploadCommentMedia(file: File) {
   return request.post<CommentMediaUploadResponse, CommentMediaUploadResponse>(
     '/api/comments/media/upload',
     formData,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    },
   )
 }

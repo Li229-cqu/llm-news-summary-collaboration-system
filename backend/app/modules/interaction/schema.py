@@ -32,10 +32,7 @@ class _CommentContentRequest(BaseModel):
     @field_validator("content")
     @classmethod
     def validate_content(cls, value: str) -> str:
-        normalized_content = value.strip()
-        if not normalized_content:
-            raise ValueError("评论内容不能为空")
-        return normalized_content
+        return value.strip()
 
 
 class CommentMediaJson(BaseModel):
@@ -74,6 +71,10 @@ class CommentItem(BaseModel):
     is_liked: bool = False
     media_json: Optional[CommentMediaJson] = None
     replies: List["CommentItem"] = Field(default_factory=list)
+    reply_to_user_id: Optional[int] = None
+    reply_to_username: str = ""
+    reply_to_nickname: str = ""
+    reply_to_content: str = ""
 
 
 class CommentListResponse(BaseModel):

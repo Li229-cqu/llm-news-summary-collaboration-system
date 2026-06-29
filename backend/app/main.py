@@ -1,9 +1,11 @@
 import logging
 import json
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.common.exceptions import AppException, register_exception_handlers
 from app.common.response import success_response
@@ -12,6 +14,10 @@ from app.db.database import check_db_connection
 
 logger = logging.getLogger(__name__)
 _db_connected: bool = False
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 from app.modules.admin.router import router as admin_router
 from app.modules.ai.router import router as ai_router
 from app.modules.auth.router import router as auth_router
@@ -50,6 +56,8 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 
 @app.options("/{full_path:path}")

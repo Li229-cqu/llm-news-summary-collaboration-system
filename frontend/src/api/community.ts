@@ -50,6 +50,10 @@ export interface CommentItem {
   author_id?: number
   created_at?: string
   likes?: number
+  reply_to_user_id?: number | null
+  reply_to_username?: string
+  reply_to_nickname?: string
+  reply_to_content?: string
 }
 
 export interface CreateCommentRequest {
@@ -82,6 +86,8 @@ export interface CommentsSummaryResponse {
   summary: string
   sentiment: 'positive' | 'negative' | 'neutral'
   keyword: string
+  keywords: string[]
+  key_points: string[]
   source: 'llm' | 'fallback'
 }
 
@@ -165,4 +171,12 @@ export function aiNewsHelper(question: string) {
 
 export function getCommentsSummary(postId: number | string) {
   return request.get<CommentsSummaryResponse, CommentsSummaryResponse>(`/api/community/posts/${postId}/comments-summary`)
+}
+
+export function generateCommentsSummary(comments: string[]) {
+  return request.post<CommentsSummaryResponse, CommentsSummaryResponse>(
+    '/api/community/comments/summary',
+    { comments },
+    { timeout: 30000 }
+  )
 }

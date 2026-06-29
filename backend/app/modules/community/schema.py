@@ -72,6 +72,10 @@ class CommentItem(BaseModel):
     status: int = 1
     create_time: str | datetime
     media_json: Any | None = None
+    reply_to_user_id: int | None = None
+    reply_to_username: str = ""
+    reply_to_nickname: str = ""
+    reply_to_content: str = ""
 
     # 前端兼容字段
     author: str = ""
@@ -134,10 +138,16 @@ class BlockResponse(BaseModel):
     user_id: int
 
 
+class CommentsSummaryRequest(BaseModel):
+    comments: list[str] = Field(default_factory=list, description="评论内容列表")
+
+
 class CommentsSummaryResponse(BaseModel):
     summary: str
     sentiment: Literal["positive", "negative", "neutral"] = "neutral"
     keyword: str = ""
+    keywords: list[str] = Field(default_factory=list, description="讨论热点关键词")
+    key_points: list[str] = Field(default_factory=list, description="主要观点")
     source: Literal["llm", "fallback"] = "fallback"
 
 
