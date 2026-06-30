@@ -1,4 +1,4 @@
-﻿"""新闻模块服务层：只读取数据库，避免新闻数据与 mock 混用。"""
+"""新闻模块服务层：只读取数据库，避免新闻数据与 mock 混用。"""
 
 from __future__ import annotations
 
@@ -249,6 +249,81 @@ def _db_news_list(
         "page_size": normalized_page_size,
     }
 
+def _db_subscribed_news(
+    current_user: Optional[Any],
+    page: int = 1,
+    page_size: int = 10,
+) -> dict[str, Any]:
+    current_user_id = _get_current_user_id(current_user)
+    if current_user_id is None:
+        raise AppException(code=401, message="请先登录后查看订阅新闻")
+
+    normalized_page = max(page, 1)
+    normalized_page_size = max(page_size, 1)
+    subscription_count = execute_one(
+        """
+        SELECT COUNT(*) AS total
+        FROM user_category_subscription
+        WHERE user_id = %s
+        """,
+        [current_user_id],
+    )
+    if int((subscription_count or {}).get("total") or 0) == 0:
+        return {
+            "list": [],
+            "total": 0,
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+        }
+
+    total_row = execute_one(
+        """
+        SELECT COUNT(*) AS total
+        FROM news n
+        INNER JOIN user_category_subscription ucs
+          ON ucs.category_id = n.category_id AND ucs.user_id = %s
+        WHERE n.status = 1
+        """,
+        [current_user_id],
+    )
+    total = int((total_row or {}).get("total") or 0)
+    rows = execute_query(
+        f"""
+        SELECT
+            n.id,
+            n.title,
+            n.summary,
+            n.content,
+            n.cover_image,
+            n.category_id,
+            COALESCE(nc.name, '未分类') AS category_name,
+            n.topic_id,
+            n.source,
+            n.editor,
+            n.publish_time,
+            n.view_count,
+            n.like_count,
+            n.comment_count,
+            n.favorite_count,
+            n.status,
+            n.tags,
+            {_news_source_url_select()}
+        FROM news n
+        INNER JOIN user_category_subscription ucs
+          ON ucs.category_id = n.category_id AND ucs.user_id = %s
+        LEFT JOIN news_category nc ON nc.id = n.category_id
+        WHERE n.status = 1
+        ORDER BY n.publish_time DESC, n.updated_at DESC, n.id DESC
+        LIMIT %s OFFSET %s
+        """,
+        [current_user_id, normalized_page_size, (normalized_page - 1) * normalized_page_size],
+    )
+    return {
+        "list": [_format_news_row(row) for row in rows],
+        "total": total,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
 
 def _db_hot_news(limit: int = 10) -> list[dict[str, Any]]:
     normalized_limit = max(limit, 0)
@@ -518,6 +593,13 @@ def get_news_list(
         page_size=page_size,
     )
 
+def get_subscribed_news(
+    current_user: Optional[Any],
+    page: int = 1,
+    page_size: int = 10,
+) -> dict[str, Any]:
+    """获取当前登录用户订阅分类下的新闻，只读取数据库。"""
+    return _db_subscribed_news(current_user=current_user, page=page, page_size=page_size)
 
 def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
     """获取新闻热榜，只读取数据库。"""
@@ -546,6 +628,3 @@ def record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str,
     if result is not None:
         return result
     raise AppException(code=404, message="新闻不存在")
-
-
-

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 
+from app.common.auth import require_login
 from app.common.response import ApiResponse, success_response
 from app.modules.auth.schema import UserInfo
 from app.modules.auth.service import get_mock_user_by_token
@@ -14,6 +15,7 @@ from app.modules.news.service import (
     get_hot_news,
     get_news_detail,
     get_news_list,
+    get_subscribed_news,
     record_browse,
     search_news,
 )
@@ -70,6 +72,15 @@ async def news_search(
 ) -> ApiResponse[Any]:
     return success_response(search_news(keyword=keyword, page=page, page_size=page_size))
 
+@router.get("/subscribed")
+async def subscribed_news(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[Any]:
+    return success_response(
+        get_subscribed_news(current_user=current_user, page=page, page_size=page_size)
+    )
 
 @router.get("/{news_id}")
 async def news_detail(
@@ -87,4 +98,3 @@ async def browse_news(
 ) -> ApiResponse[Any]:
     current_user = _get_optional_current_user(authorization)
     return success_response(record_browse(news_id=news_id, current_user=current_user))
-

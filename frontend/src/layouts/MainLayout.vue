@@ -3,7 +3,7 @@
     <AppHeader />
 
     <div class="layout-body">
-      <aside class="layout-sidebar">
+      <aside v-if="isHomeRoute" class="layout-sidebar">
         <AppSidebar />
       </aside>
 
@@ -15,8 +15,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+
+const route = useRoute()
+const isHomeRoute = computed(() => route.name === 'home' || route.path === '/home')
 </script>
 
 <style scoped>

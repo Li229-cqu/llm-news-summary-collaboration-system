@@ -70,6 +70,7 @@ import { ElMessage } from 'element-plus'
 import {
   getHotNews,
   getNewsList,
+  getSubscribedNews,
   searchNews,
   type HotNewsItem,
   type NewsItem,
@@ -98,44 +99,70 @@ const page = ref(1)
 const pageSize = ref(6)
 const total = ref(0)
 
+const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
+const activeTab = computed(() => String(route.query.tab ?? '').trim())
+const isSubscriptionTab = computed(() => activeTab.value === 'subscription')
+const searchKeyword = computed(() => String(route.query.keyword ?? '').trim())
 const hasMoreNews = computed(() => {
-  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
+  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
     return recommendationHasMore.value
   }
 
-  return total.value === 0 || newsList.value.length < total.value
+  return newsList.value.length < total.value
 })
-const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
-const searchKeyword = computed(() => String(route.query.keyword ?? '').trim())
-const sectionTitle = computed(() =>
-  searchKeyword.value
-    ? `全站搜索结果：${searchKeyword.value}`
-    : activeCategoryId.value
-      ? '精选新闻'
-      : '为你推荐',
-)
-const sectionDescription = computed(() =>
-  searchKeyword.value
-    ? `找到 ${total.value} 条相关新闻`
-    : activeCategoryId.value
-      ? '实时更新的精选内容，点击即可查看详情'
-      : '基于你的浏览、收藏、点赞推荐',
-)
-const emptyNewsText = computed(() =>
-  searchKeyword.value ? '未找到全站相关新闻，请尝试其他关键词' : '暂无新闻数据',
-)
+const sectionTitle = computed(() => {
+  if (searchKeyword.value) {
+    return `全站搜索结果：${searchKeyword.value}`
+  }
+
+  if (isSubscriptionTab.value) {
+    return '我的订阅'
+  }
+
+  return activeCategoryId.value ? '精选新闻' : '为你推荐'
+})
+const sectionDescription = computed(() => {
+  if (searchKeyword.value) {
+    return `找到 ${total.value} 条相关新闻`
+  }
+
+  if (isSubscriptionTab.value) {
+    return total.value > 0
+      ? `找到 ${total.value} 条订阅相关新闻`
+      : '根据你订阅的新闻分类，为你展示相关内容'
+  }
+
+  return activeCategoryId.value ? '实时更新的精选内容，点击即可查看详情' : '基于你的浏览、收藏、点赞推荐'
+})
+const emptyNewsText = computed(() => {
+  if (searchKeyword.value) {
+    return '未找到全站相关新闻，请尝试其他关键词'
+  }
+
+  if (isSubscriptionTab.value) {
+    return userStore.isLoggedIn
+      ? '你还没有订阅新闻分类，或订阅分类下暂无新闻'
+      : '登录后可查看你的订阅内容'
+  }
+
+  return '暂无新闻数据'
+})
 
 const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 
 const loadMoreText = computed(() => {
-  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
+  if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
     return '加载更多推荐'
   }
 
   if (searchKeyword.value) {
     return '加载更多搜索结果'
+  }
+
+  if (isSubscriptionTab.value) {
+    return '加载更多订阅新闻'
   }
 
   return '加载更多新闻'
@@ -152,6 +179,23 @@ async function loadNews() {
     if (keyword) {
       const result = await searchNews({
         keyword,
+        page: page.value,
+        page_size: pageSize.value,
+      })
+      newsList.value = result.list
+      total.value = result.total
+      page.value = result.page
+      pageSize.value = result.page_size
+    } else if (isSubscriptionTab.value) {
+      if (!userStore.isLoggedIn) {
+        newsList.value = []
+        total.value = 0
+        page.value = 1
+        ElMessage.warning('请先登录后查看订阅新闻')
+        return
+      }
+
+      const result = await getSubscribedNews({
         page: page.value,
         page_size: pageSize.value,
       })
@@ -258,7 +302,7 @@ async function handleLoadMore() {
   loadingNews.value = true
 
   try {
-    if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value) {
+    if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
       const currentCount = newsList.value.length
       const nextLimit = Math.min(currentCount + pageSize.value, 50)
 
@@ -284,13 +328,20 @@ async function handleLoadMore() {
             page: nextPage,
             page_size: pageSize.value,
           })
-        : await getNewsList({
-            category_id: activeCategoryId.value || undefined,
-            page: nextPage,
-            page_size: pageSize.value,
-          })
+        : isSubscriptionTab.value
+          ? await getSubscribedNews({
+              page: nextPage,
+              page_size: pageSize.value,
+            })
+          : await getNewsList({
+              category_id: activeCategoryId.value || undefined,
+              page: nextPage,
+              page_size: pageSize.value,
+            })
+      const existingIds = new Set(newsList.value.map((item) => item.id))
+      const appendedList = result.list.filter((item) => !existingIds.has(item.id))
 
-      newsList.value = [...newsList.value, ...result.list]
+      newsList.value = [...newsList.value, ...appendedList]
       total.value = result.total
       page.value = result.page
       pageSize.value = result.page_size
@@ -340,6 +391,22 @@ watch(
 
 watch(
   () => route.query.keyword,
+  () => {
+    page.value = 1
+    loadNews()
+  },
+)
+
+watch(
+  () => route.query.tab,
+  () => {
+    page.value = 1
+    loadNews()
+  },
+)
+
+watch(
+  () => route.query.subscription_updated,
   () => {
     page.value = 1
     loadNews()

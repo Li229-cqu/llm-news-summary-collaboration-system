@@ -98,6 +98,11 @@ export function getNewsList(params: NewsListParams = {}) {
   return request.get<NewsListResponse, NewsListResponse>('/api/news', { params })
 }
 
+/** 获取当前登录用户订阅分类下的新闻列表。*/
+export function getSubscribedNews(params: Pick<NewsListParams, 'page' | 'page_size'> = {}) {
+  return request.get<NewsListResponse, NewsListResponse>('/api/news/subscribed', { params })
+}
+
 /** 获取新闻热榜。 */
 export function getHotNews(params: HotNewsParams = {}) {
   return request.get<HotNewsItem[], HotNewsItem[]>('/api/news/hot', { params })
