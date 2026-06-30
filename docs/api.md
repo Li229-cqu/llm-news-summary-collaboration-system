@@ -155,6 +155,7 @@ Authorization: Bearer mock-token-user
 | --- | --- | --- | --- | --- |
 | GET | `/api/news/categories` | 否 | 获取新闻分类 | 直接读取数据库 `news_category` |
 | GET | `/api/news` | 否 | 获取新闻列表 | 直接读取数据库 `news` + `news_category` |
+| GET | `/api/news/subscribed` | 是 | 获取当前登录用户订阅分类下的新闻列表 | 直接读取数据库 `news` + `news_category` + `user_category_subscription`，不回退 mock |
 | GET | `/api/news/hot` | 否 | 获取新闻热榜 Top10 | 直接读取数据库真实新闻统计，不再回退 mock |
 | GET | `/api/news/search` | 否 | 搜索新闻 | 直接读取数据库 `news` + `news_category` |
 | GET | `/api/news/{news_id}` | 否 | 获取新闻详情 | 数据库 `news` + `news_category` + `user_like` + `favorite`，不存在时返回 404，不回退 mock |
@@ -175,6 +176,22 @@ Authorization: Bearer mock-token-user
 
 - 返回新闻列表、总数、页码和每页数量。
 - 当前数据来自数据库 `news` 表。
+
+### GET `/api/news/subscribed`
+
+请求参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `page` | 页码 |
+| `page_size` | 每页数量 |
+
+返回说明：
+
+- 需要登录，未登录返回 `401`。
+- 根据当前用户在 `user_category_subscription` 中订阅的 `category_id` 查询 `news` 表。
+- 仅返回 `status = 1` 的新闻，按 `publish_time DESC`、`updated_at DESC` 排序。
+- 用户未订阅分类或订阅分类下暂无新闻时返回空列表，不回退 mock 新闻。
 
 ### GET `/api/news/hot`
 

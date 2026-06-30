@@ -1510,12 +1510,8 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             pc.content,
             pc.like_count,
             pc.status,
-<<<<<<< HEAD
-            pc.create_time,
+            pc.created_at AS create_time,
             {media_json_column}
-=======
-            pc.created_at AS create_time
->>>>>>> develop
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
         WHERE pc.id = %s

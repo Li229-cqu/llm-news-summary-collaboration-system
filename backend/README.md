@@ -149,6 +149,8 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - `GET /api/news/hot` 直接基于数据库真实新闻统计生成首页热榜，排序规则为 `view_count + like_count * 5 + favorite_count * 4 + comment_count * 6`。
 - 新增 `user_category_subscription` 表，用于保存用户新闻分类订阅。
 - 新增 `GET /api/profile/subscriptions` 和 `POST /api/profile/subscriptions`，均需要登录。
+- 首页左侧分类新增“订阅”栏目，使用 `/home?tab=subscription` 表示当前处于订阅新闻流。
+- 新增 `GET /api/news/subscribed`，需要登录，根据 `user_category_subscription.category_id` 查询数据库 `news` 表，不回退 mock 新闻。
 - 首页热榜、新闻列表、新闻详情、搜索和推荐均不再使用 mock 新闻 fallback；数据库无数据时返回空列表，详情不存在时返回 404。
 ## A3 验收补充说明
 

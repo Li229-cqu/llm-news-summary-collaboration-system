@@ -25,13 +25,14 @@ const categories = ref<SidebarCategory[]>([
 ])
 const loadingCategories = ref(false)
 
-const subscriptionVisible = ref(false)
+const subscriptionExpanded = ref(false)
 const loadingSubscriptions = ref(false)
 const savingSubscriptions = ref(false)
 const subscriptionCategories = ref<SubscriptionCategory[]>([])
 const selectedSubscriptionIds = ref<number[]>([])
 
 const activeCategory = computed(() => String(route.query.category_id ?? ''))
+const isSubscriptionActive = computed(() => route.query.tab === 'subscription')
 
 function normalizeCategory(category: NewsCategory): SidebarCategory {
   if (category.code === 'recommend') {
@@ -79,12 +80,28 @@ async function loadCategories() {
 
 function selectCategory(categoryId: string) {
   const nextQuery = { ...route.query }
+  delete nextQuery.keyword
+  delete nextQuery.tab
+  delete nextQuery.subscription_updated
 
   if (categoryId) {
     nextQuery.category_id = categoryId
   } else {
     delete nextQuery.category_id
   }
+
+  router.push({
+    path: '/home',
+    query: nextQuery,
+  })
+}
+
+function selectSubscriptionTab() {
+  const nextQuery = { ...route.query }
+  delete nextQuery.keyword
+  delete nextQuery.category_id
+  delete nextQuery.subscription_updated
+  nextQuery.tab = 'subscription'
 
   router.push({
     path: '/home',
@@ -105,12 +122,7 @@ function ensureLogin() {
   return false
 }
 
-async function openSubscriptionDialog() {
-  if (!ensureLogin()) {
-    return
-  }
-
-  subscriptionVisible.value = true
+async function loadSubscriptionOptions() {
   loadingSubscriptions.value = true
   try {
     const data = await getSubscriptions()
@@ -123,6 +135,20 @@ async function openSubscriptionDialog() {
   }
 }
 
+async function handleSubscriptionClick() {
+  selectSubscriptionTab()
+
+  if (!ensureLogin()) {
+    subscriptionExpanded.value = false
+    return
+  }
+
+  subscriptionExpanded.value = !subscriptionExpanded.value
+  if (subscriptionExpanded.value && !subscriptionCategories.value.length) {
+    await loadSubscriptionOptions()
+  }
+}
+
 async function saveSubscriptions() {
   savingSubscriptions.value = true
   try {
@@ -130,19 +156,21 @@ async function saveSubscriptions() {
     subscriptionCategories.value = data.categories
     selectedSubscriptionIds.value = [...data.subscribed_category_ids]
     ElMessage.success('订阅已更新')
-    subscriptionVisible.value = false
+    if (isSubscriptionActive.value) {
+      router.replace({
+        path: '/home',
+        query: {
+          ...route.query,
+          tab: 'subscription',
+          subscription_updated: String(Date.now()),
+        },
+      })
+    }
   } catch {
     ElMessage.error('订阅更新失败，请稍后重试')
   } finally {
     savingSubscriptions.value = false
   }
-}
-
-function goProfile() {
-  if (!ensureLogin()) {
-    return
-  }
-  router.push('/profile')
 }
 
 onMounted(loadCategories)
@@ -163,45 +191,51 @@ onMounted(loadCategories)
       </el-menu-item>
     </el-menu>
 
-    <div class="app-sidebar__quick-links">
-      <el-card class="app-sidebar__quick-card" shadow="never" @click="goProfile">
-        <span class="app-sidebar__quick-title">生成历史</span>
-        <span class="app-sidebar__quick-description">查看个人中心中的 AI 生成记录</span>
-      </el-card>
-      <el-card class="app-sidebar__quick-card" shadow="never" @click="openSubscriptionDialog">
-        <span class="app-sidebar__quick-title">订阅管理</span>
-        <span class="app-sidebar__quick-description">管理关注的新闻分类</span>
-      </el-card>
+    <div class="app-sidebar__subscription">
+      <button
+        class="app-sidebar__subscription-trigger"
+        :class="{ 'is-active': isSubscriptionActive }"
+        type="button"
+        @click="handleSubscriptionClick"
+      >
+        <span class="app-sidebar__dot" aria-hidden="true"></span>
+        <span>订阅</span>
+        <span class="app-sidebar__subscription-action">{{ subscriptionExpanded ? '收起' : '展开' }}</span>
+      </button>
+
+      <el-collapse-transition>
+        <div v-show="subscriptionExpanded" class="app-sidebar__subscription-panel">
+          <el-skeleton v-if="loadingSubscriptions" animated :rows="3" />
+          <el-empty
+            v-else-if="!subscriptionCategories.length"
+            description="暂无可订阅分类"
+          />
+          <template v-else>
+            <el-checkbox-group v-model="selectedSubscriptionIds" class="subscription-list">
+              <el-checkbox
+                v-for="category in subscriptionCategories"
+                :key="category.id"
+                :label="category.id"
+              >
+                {{ category.name }}
+              </el-checkbox>
+            </el-checkbox-group>
+            <div class="app-sidebar__subscription-footer">
+              <el-button size="small" plain @click.stop="loadSubscriptionOptions">重置</el-button>
+              <el-button size="small" type="primary" :loading="savingSubscriptions" @click.stop="saveSubscriptions">
+                保存订阅
+              </el-button>
+            </div>
+          </template>
+        </div>
+      </el-collapse-transition>
     </div>
-
-    <el-dialog v-model="subscriptionVisible" title="订阅管理" width="420px">
-      <el-skeleton v-if="loadingSubscriptions" animated :rows="4" />
-      <el-empty
-        v-else-if="!subscriptionCategories.length"
-        description="暂无可订阅分类"
-      />
-      <el-checkbox-group v-else v-model="selectedSubscriptionIds" class="subscription-list">
-        <el-checkbox
-          v-for="category in subscriptionCategories"
-          :key="category.id"
-          :label="category.id"
-        >
-          {{ category.name }}
-        </el-checkbox>
-      </el-checkbox-group>
-
-      <template #footer>
-        <el-button @click="subscriptionVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingSubscriptions" @click="saveSubscriptions">
-          保存
-        </el-button>
-      </template>
-    </el-dialog>
   </aside>
 </template>
 
 <style scoped>
 .app-sidebar {
+  width: 100%;
   padding: 20px 0;
 }
 
@@ -212,6 +246,7 @@ onMounted(loadCategories)
 }
 
 .app-sidebar__menu {
+  width: 100%;
   min-height: 160px;
   border-right: 0;
 }
@@ -219,6 +254,7 @@ onMounted(loadCategories)
 .app-sidebar__menu :deep(.el-menu-item) {
   gap: 10px;
   height: 44px;
+  padding: 0 20px !important;
   line-height: 44px;
 }
 
@@ -238,44 +274,55 @@ onMounted(loadCategories)
   background: var(--color-primary);
 }
 
-.app-sidebar__quick-links {
-  display: grid;
+.app-sidebar__subscription {
+  padding: 0 12px;
+}
+
+.app-sidebar__subscription-trigger {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  margin-top: 16px;
-  padding: 16px;
-}
-
-.app-sidebar__quick-card {
-  border-color: var(--color-border);
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-
-.app-sidebar__quick-card:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-  box-shadow: 0 8px 18px rgb(15 23 42 / 8%);
-  transform: translateY(-1px);
-}
-
-.app-sidebar__quick-card :deep(.el-card__body) {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-}
-
-.app-sidebar__quick-title {
+  width: 100%;
+  height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--color-text-primary);
   font-size: 14px;
-  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
 }
 
-.app-sidebar__quick-description {
+.app-sidebar__subscription-trigger:hover,
+.app-sidebar__subscription-trigger.is-active {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.app-sidebar__subscription-trigger.is-active .app-sidebar__dot {
+  background: var(--color-primary);
+}
+
+.app-sidebar__subscription-action {
+  margin-left: auto;
   color: var(--color-text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+}
+
+.app-sidebar__subscription-panel {
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+}
+
+.app-sidebar__subscription-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .subscription-list {
@@ -285,5 +332,7 @@ onMounted(loadCategories)
 
 .subscription-list :deep(.el-checkbox) {
   height: auto;
+  margin-right: 0;
+  white-space: normal;
 }
 </style>
