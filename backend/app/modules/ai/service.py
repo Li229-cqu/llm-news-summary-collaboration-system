@@ -162,6 +162,7 @@ def _save_ai_record(
         "news_elements": _dump_json(result.elements.model_dump()),
         "risk_level": result.consistency.risk_level,
         "check_result": _dump_json(result.consistency.model_dump()),
+        "ai_source": result.source or "mock",
         "created_at": _now_text(),
         "updated_at": _now_text(),
         "status": 1,
@@ -174,12 +175,12 @@ def _save_ai_record(
                 user_id, source, source_news_id, source_title, input_text, title_count, summary_type,
                 summary_style, title_style, summary_length, candidate_titles,
                 summary_short, summary_long, summary_points, keywords,
-                news_elements, risk_level, check_result, created_at, updated_at, status
+                news_elements, risk_level, check_result, ai_source, created_at, updated_at, status
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s
             )
             """,
             [
@@ -201,6 +202,7 @@ def _save_ai_record(
                 record_payload["news_elements"],
                 record_payload["risk_level"],
                 record_payload["check_result"],
+                record_payload["ai_source"],
                 record_payload["created_at"],
                 record_payload["updated_at"],
                 record_payload["status"],
@@ -257,6 +259,7 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
             news_elements,
             risk_level,
             check_result,
+            ai_source,
             created_at,
             status
         FROM ai_generate_record
@@ -278,6 +281,7 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
                 "source_title": row["source_title"],
                 "title_count": row["title_count"],
                 "risk_level": row["risk_level"] or "low",
+                "ai_source": row.get("ai_source") or "mock",
                 "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
                 "candidate_titles": _load_json(row.get("candidate_titles"), []),
                 "summary_short": str(row.get("summary_short") or ""),
@@ -319,6 +323,7 @@ def _query_ai_record_detail_from_db(
             news_elements,
             risk_level,
             check_result,
+            ai_source,
             created_at,
             status
         FROM ai_generate_record
@@ -330,6 +335,7 @@ def _query_ai_record_detail_from_db(
         return None
 
     result = _build_result_from_row(row)
+    result.source = row.get("ai_source") or "mock"
     return {
         "id": row["id"],
         "source": row["source"],
@@ -399,6 +405,7 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
                 source_title=row["source_title"],
                 title_count=row["title_count"],
                 risk_level=row["risk_level"],
+                ai_source=row.get("ai_source") or "mock",
                 created_at=row["created_at"],
                 candidate_titles=row.get("candidate_titles", []),
                 summary_short=row.get("summary_short", ""),

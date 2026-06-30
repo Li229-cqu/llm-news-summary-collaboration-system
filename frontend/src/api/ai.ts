@@ -59,6 +59,7 @@ export interface AIGenerateRecordItem {
   source_title: string
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
+  ai_source?: 'mock' | 'llm'
   created_at: string
   candidate_titles?: string[]
   summary_short?: string

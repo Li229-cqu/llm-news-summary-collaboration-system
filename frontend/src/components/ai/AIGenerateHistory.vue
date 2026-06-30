@@ -451,9 +451,14 @@ defineExpose({ loadHistory })
 
           <div class="item-header">
             <div class="item-title">{{ record.source_title }}</div>
-            <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
-              {{ record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险' }}
-            </el-tag>
+            <div class="header-tags">
+              <el-tag :type="record.ai_source === 'llm' ? 'success' : 'info'" size="small">
+                {{ record.ai_source === 'llm' ? '真实AI' : 'Mock演示' }}
+              </el-tag>
+              <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
+                {{ record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险' }}
+              </el-tag>
+            </div>
           </div>
 
           <div class="item-meta">
@@ -649,6 +654,7 @@ defineExpose({ loadHistory })
 .item-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -659,6 +665,12 @@ defineExpose({ loadHistory })
   color: var(--color-text-primary);
   flex: 1;
   word-break: break-word;
+}
+
+.header-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .history-title {
