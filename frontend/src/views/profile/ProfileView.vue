@@ -59,6 +59,23 @@ const comments = ref<CommentRecordItem[]>([])
 const aiRecords = ref<AIRecordItem[]>([])
 const subscriptions = ref<SubscriptionCategory[]>([])
 
+const readingTags = computed(() => {
+  const tags: string[] = []
+  if ((profileOverview.value?.browse_count ?? 0) > 0) tags.push('新闻探索者')
+  if ((profileOverview.value?.favorite_count ?? 0) > 0) tags.push('内容收藏者')
+  if ((profileOverview.value?.comment_count ?? 0) > 0) tags.push('社区互动者')
+  if ((profileOverview.value?.ai_generate_count ?? 0) > 0) tags.push('AI 摘要使用者')
+  if (tags.length === 0) tags.push('新用户')
+  return tags
+})
+
+const statCards = [
+  { key: 'history', icon: Clock, label: '浏览历史', count: () => profileOverview.value?.browse_count ?? 0, desc: '新闻与帖子浏览足迹' },
+  { key: 'favorites', icon: Star, label: '收藏记录', count: () => profileOverview.value?.favorite_count ?? 0, desc: '保存的新闻与社区帖子' },
+  { key: 'comments', icon: ChatDotRound, label: '评论记录', count: () => profileOverview.value?.comment_count ?? 0, desc: '你的新闻与社区互动' },
+  { key: 'ai-records', icon: MagicStick, label: 'AI生成记录', count: () => profileOverview.value?.ai_generate_count ?? 0, desc: '标题摘要生成历史' },
+]
+
 const browseSearchKeyword = ref('')
 const favoriteSearchKeyword = ref('')
 const commentSearchKeyword = ref('')
@@ -617,71 +634,121 @@ onMounted(async () => {
 
 <template>
   <main class="page-container">
-    <div class="profile-header">
-      <div class="header-bg"></div>
-      <div class="header-content">
-        <div class="header-top-row">
-          <div class="user-profile">
+    <!-- ===== 顶部个人名片横幅 ===== -->
+    <div class="dashboard-hero">
+      <div class="hero-bg"></div>
+      <div class="hero-content">
+        <div class="hero-left">
+          <div class="hero-avatar-col">
             <div class="avatar-wrapper">
-              <el-avatar :size="80" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
+              <el-avatar :size="88" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
                 {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
               </el-avatar>
             </div>
-            <div class="user-info">
-              <div class="user-name-row">
-                <h1 class="user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
-              </div>
-            <div class="user-tags">
-              <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round>
-                {{
-                  userStore.isAdmin
-                    ? '管理员'
-                    : userStore.isEditor
-                      ? '审核/编辑'
-                      : '普通用户'
-                }}
+          </div>
+          <div class="hero-info-col">
+            <div class="hero-name-row">
+              <h1 class="hero-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
+              <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round size="default">
+                {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
               </el-tag>
-              <span class="user-id">ID: {{ userStore.userInfo?.id || '-' }}</span>
             </div>
-            <p class="user-desc">欢迎回来，继续探索精彩内容</p>
+            <div class="hero-meta-row">
+              <span class="hero-meta-item">
+                <el-icon><User /></el-icon>
+                <span>ID: {{ userStore.userInfo?.id || '-' }}</span>
+              </span>
+              <span v-if="(userStore.userInfo as any)?.email" class="hero-meta-item">
+                <el-icon><Message /></el-icon>
+                <span>{{ (userStore.userInfo as any)?.email }}</span>
+              </span>
+            </div>
+            <div class="hero-tags-row">
+              <el-tag
+                v-for="tag in readingTags"
+                :key="tag"
+                size="small"
+                effect="plain"
+                class="hero-reading-tag"
+                :type="tag === '新用户' ? 'info' : ''"
+              >
+                {{ tag }}
+              </el-tag>
+            </div>
+            <p class="hero-desc">欢迎回来，继续探索你的新闻阅读足迹</p>
           </div>
         </div>
-        <div class="header-actions">
-          <el-button
-            type="primary"
-            :icon="Edit"
-            size="default"
-            class="header-edit-btn"
-            @click="openEditDialog()"
-          >
+        <div class="hero-right">
+          <el-button class="hero-edit-btn" :icon="Edit" @click="openEditDialog()">
             编辑资料
           </el-button>
         </div>
       </div>
-      <div class="quick-stats">
-          <div class="quick-stat-item" @click="handleStatCardClick('history')">
-            <span class="quick-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
-            <span class="quick-stat-label">浏览</span>
+
+      <!-- ===== 数据概览卡片 ===== -->
+      <div class="dashboard-stats">
+        <div
+          v-for="card in statCards"
+          :key="card.key"
+          class="dash-stat-card"
+          :class="{ 'dash-stat-card--active': activeTab === card.key }"
+          @click="handleStatCardClick(card.key)"
+        >
+          <div class="dash-stat-card__icon">
+            <el-icon :size="24"><component :is="card.icon" /></el-icon>
           </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('favorites')">
-            <span class="quick-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
-            <span class="quick-stat-label">收藏</span>
+          <div class="dash-stat-card__body">
+            <span class="dash-stat-card__count">{{ card.count() }}</span>
+            <span class="dash-stat-card__label">{{ card.label }}</span>
+            <span class="dash-stat-card__desc">{{ card.desc }}</span>
           </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('comments')">
-            <span class="quick-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
-            <span class="quick-stat-label">评论</span>
-          </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('ai-records')">
-            <span class="quick-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
-            <span class="quick-stat-label">AI生成</span>
-          </div>
+          <div class="dash-stat-card__hint">点击查看 →</div>
         </div>
       </div>
     </div>
 
+    <!-- ===== 阅读画像占位区 ===== -->
+    <div class="reading-portrait-placeholder">
+      <div class="portrait-header">
+        <h2 class="portrait-title">
+          <el-icon><Grid /></el-icon>
+          阅读画像
+        </h2>
+        <p class="portrait-subtitle">基于你的浏览、收藏、评论和 AI 生成记录，展示你的阅读趋势与兴趣分布</p>
+      </div>
+      <div class="portrait-skeletons">
+        <div class="portrait-skeleton-card">
+          <div class="skeleton-icon-wrapper">
+            <el-icon :size="32"><Files /></el-icon>
+          </div>
+          <span class="skeleton-label">最近 7 天阅读趋势</span>
+          <span class="skeleton-hint">将在下一阶段接入阅读时间线数据</span>
+        </div>
+        <div class="portrait-skeleton-card">
+          <div class="skeleton-icon-wrapper">
+            <el-icon :size="32"><Grid /></el-icon>
+          </div>
+          <span class="skeleton-label">兴趣分类分布</span>
+          <span class="skeleton-hint">将在下一阶段展示常读分类</span>
+        </div>
+        <div class="portrait-skeleton-card">
+          <div class="skeleton-icon-wrapper">
+            <el-icon :size="32"><Setting /></el-icon>
+          </div>
+          <span class="skeleton-label">我的订阅</span>
+          <span class="skeleton-hint">将在后续展示订阅分类</span>
+        </div>
+        <div class="portrait-skeleton-card">
+          <div class="skeleton-icon-wrapper">
+            <el-icon :size="32"><MagicStick /></el-icon>
+          </div>
+          <span class="skeleton-label">AI 使用概览</span>
+          <span class="skeleton-hint">将在后续展示 AI 生成偏好</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 内容记录 Tab 区域 ===== -->
     <el-card class="content-card" shadow="never">
       <el-tabs v-model="activeTab" class="profile-tabs" @tab-change="handleTabChange">
         <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key">
@@ -1146,89 +1213,55 @@ onMounted(async () => {
   padding: 0 24px 24px;
 }
 
-.profile-header {
+/* ===== 顶部个人名片横幅 ===== */
+.dashboard-hero {
   position: relative;
   margin-bottom: 24px;
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
 }
 
-.header-bg {
+.hero-bg {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 140px;
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 45%, #38bdf8 100%);
-  opacity: 1;
+  height: 220px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #6366f1 100%);
 }
 
-.header-bg::after {
+.hero-bg::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.15) 100%);
+  background:
+    radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.05) 0%, transparent 40%);
 }
 
-.header-bg::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(30px, -30px) rotate(180deg); }
-}
-
-.header-content {
+.hero-content {
   position: relative;
   z-index: 1;
-  padding: 28px 28px 20px;
-}
-
-.header-top-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 24px;
+  padding: 32px 32px 24px;
 }
 
-.header-actions {
-  flex-shrink: 0;
+.hero-left {
   display: flex;
   align-items: flex-start;
-  padding-top: 4px;
-}
-
-.header-edit-btn {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.35);
-  color: #fff;
-  font-weight: 600;
-  backdrop-filter: blur(8px);
-}
-
-.header-edit-btn:hover {
-  background: rgba(255, 255, 255, 0.32) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  color: #fff !important;
-}
-
-.user-profile {
-  display: flex;
-  align-items: center;
-  gap: 20px;
+  gap: 24px;
   flex: 1;
   min-width: 0;
+}
+
+.hero-avatar-col {
+  flex-shrink: 0;
 }
 
 .avatar-wrapper {
@@ -1237,97 +1270,263 @@ onMounted(async () => {
 }
 
 .user-avatar {
-  border: 4px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
 }
 
-.user-info {
+.hero-info-col {
   flex: 1;
   min-width: 0;
-}
-
-.user-name-row {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.user-name {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-}
-
-.user-tags {
+.hero-name-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
-.user-id {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.user-desc {
+.hero-name {
   margin: 0;
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 15px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  line-height: 1.3;
 }
 
-.quick-stats {
+.hero-meta-row {
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.quick-stat-item {
-  display: flex;
-  flex-direction: column;
+.hero-meta-item {
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 16px;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+}
+
+.hero-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hero-reading-tag {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.hero-desc {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.hero-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.hero-edit-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
   border-radius: 10px;
-  transition: background 0.25s ease, transform 0.25s ease;
+  padding: 8px 20px;
+  transition: all 0.25s ease;
+}
+
+.hero-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
+/* ===== 数据概览卡片 ===== */
+.dashboard-stats {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 0 24px 24px;
+  margin-top: -12px;
+}
+
+.dash-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 18px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
   cursor: pointer;
   user-select: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-.quick-stat-item:hover {
-  background: rgba(37, 99, 235, 0.08);
-  transform: translateY(-2px);
+.dash-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
+  border-color: #bfdbfe;
 }
 
-.quick-stat-num {
-  font-size: 28px;
+.dash-stat-card--active {
+  border-color: #2563eb;
+  background: #f0f5ff;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
+}
+
+.dash-stat-card--active .dash-stat-card__icon {
+  background: #2563eb;
+  color: #fff;
+}
+
+.dash-stat-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.dash-stat-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-stat-card__count {
+  font-size: 26px;
   font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.dash-stat-card__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.dash-stat-card__desc {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dash-stat-card__hint {
+  font-size: 12px;
+  color: #cbd5e1;
+  flex-shrink: 0;
+  transition: color 0.3s ease;
+}
+
+.dash-stat-card:hover .dash-stat-card__hint {
   color: #2563eb;
 }
 
-.quick-stat-label {
+/* ===== 阅读画像占位区 ===== */
+.reading-portrait-placeholder {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+}
+
+.portrait-header {
+  margin-bottom: 20px;
+}
+
+.portrait-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portrait-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.portrait-skeletons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.portrait-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  transition: background 0.3s ease;
+}
+
+.portrait-skeleton-card:hover {
+  background: #f0f5ff;
+}
+
+.skeleton-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #93c5fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeleton-label {
   font-size: 14px;
-  color: #64748b;
+  font-weight: 600;
+  color: #475569;
 }
 
-.divider {
-  width: 1px;
-  height: 40px;
-  background: rgba(148, 163, 184, 0.30);
+.skeleton-hint {
+  font-size: 12px;
+  color: #cbd5e1;
 }
 
+/* ===== 内容 Tab 区域 ===== */
 .content-card {
-  border-radius: 18px;
+  border-radius: 16px;
   overflow: hidden;
   border-color: #e5e7eb;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -1975,41 +2174,47 @@ onMounted(async () => {
     padding: 0 16px 16px;
   }
 
-  .header-content {
+  .hero-content {
+    flex-direction: column;
     padding: 24px 20px 20px;
   }
 
-  .user-profile {
+  .hero-left {
     flex-direction: column;
+    align-items: center;
     text-align: center;
   }
 
-  .header-top-row {
-    flex-direction: column;
-    align-items: center;
+  .hero-name-row {
+    justify-content: center;
   }
 
-  .header-actions {
+  .hero-meta-row {
+    justify-content: center;
+  }
+
+  .hero-tags-row {
+    justify-content: center;
+  }
+
+  .hero-right {
     padding-top: 0;
-  }
-
-  .user-name-row {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .user-tags {
+    width: 100%;
+    display: flex;
     justify-content: center;
   }
 
-  .quick-stats {
-    padding: 16px;
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .quick-stat-num {
-    font-size: 22px;
+  .portrait-skeletons {
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  .dash-stat-card {
+    padding: 14px;
+  }
 
   .tab-toolbar {
     flex-direction: column;
@@ -2022,8 +2227,21 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+  }
 
+  .portrait-skeletons {
+    grid-template-columns: 1fr;
+  }
 
+  .dash-stat-card__count {
+    font-size: 22px;
+  }
+
+  .hero-name {
+    font-size: 22px;
+  }
 }
 
 .edit-tabs {
