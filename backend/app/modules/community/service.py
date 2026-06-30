@@ -26,6 +26,7 @@ from app.modules.community.schema import (
     AIHelperResponse,
     BlockResponse,
     CommentItem,
+    CommentLikeResult,
     CommentListResponse,
     CommentsSummaryResponse,
     CommunityPost,
@@ -234,6 +235,7 @@ def _post_row_to_item(
     comment_count = int(row.get("comment_count") or 0)
     favorite_count = int(row.get("favorite_count") or 0)
     heat_score = int(row.get("heat_score") or 0)
+    view_count = int(row.get("view_count") or 0)
     author_name = _resolve_post_author(
         int(row.get("user_id") or 0),
         normalize_text(row.get("nickname")),
@@ -256,6 +258,7 @@ def _post_row_to_item(
         "like_count": like_count,
         "comment_count": comment_count,
         "favorite_count": favorite_count,
+        "view_count": view_count,
         "heat_score": heat_score,
         "status": int(row.get("status") or 0),
         "create_time": _format_datetime(row.get("create_time")),
@@ -267,7 +270,7 @@ def _post_row_to_item(
         "updated_at": _format_datetime(row.get("update_time")),
         "likes": like_count,
         "comments": comment_count,
-        "views": heat_score,
+        "views": view_count,
         "liked": liked,
         "is_liked": liked,
         "is_favorited": favorited,
@@ -336,6 +339,10 @@ def _build_comment_tree(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             roots.append(node)
         else:
             nodes[int(parent_id)]["replies"].append(node)
+
+    roots.sort(key=lambda item: (-int(item.get("like_count") or 0), item.get("create_time"), int(item.get("id") or 0)))
+    for node in nodes.values():
+        node["replies"].sort(key=lambda reply: (-int(reply.get("like_count") or 0), reply.get("create_time"), int(reply.get("id") or 0)))
     return roots
 
 
@@ -494,6 +501,7 @@ def _db_get_posts(
             cp.like_count,
             cp.comment_count,
             cp.favorite_count,
+            cp.view_count,
             cp.heat_score,
             cp.status,
             cp.created_at AS create_time,
@@ -565,6 +573,7 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
             cp.like_count,
             cp.comment_count,
             cp.favorite_count,
+            cp.view_count,
             cp.heat_score,
             cp.status,
             cp.created_at AS create_time,
@@ -704,11 +713,13 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
             p.tags AS tags_json,
             p.updated_at AS update_time,
             p.created_at AS create_time,
+            COALESCE(p.view_count, 0) AS view_count,
+            COALESCE(p.favorite_count, 0) AS favorite_count,
             (
-                COALESCE(p.heat_score, 0)
-                + COALESCE(p.like_count, 0) * 3
-                + COALESCE(p.comment_count, 0) * 5
-                + COALESCE(p.favorite_count, 0) * 4
+                COALESCE(p.like_count, 0) * 4
+                + COALESCE(p.favorite_count, 0) * 5
+                + COALESCE(p.comment_count, 0) * 6
+                + COALESCE(p.view_count, 0) * 3
             ) AS heat_score
         FROM community_post p
         WHERE p.status = 1
@@ -745,6 +756,7 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
                 "tag": tag_str,
                 "update_time": _format_datetime(row.get("update_time")),
                 "create_time": _format_datetime(row.get("create_time")),
+                "view_count": int(row.get("view_count") or 0),
             }
         )
     return items
@@ -904,7 +916,7 @@ def _mock_get_posts(
         item["updated_at"] = _format_datetime(item.get("update_time"))
         item["likes"] = int(item.get("like_count") or 0)
         item["comments"] = int(item.get("comment_count") or 0)
-        item["views"] = int(item.get("heat_score") or 0)
+        item["views"] = int(item.get("view_count") or item.get("heat_score") or 0)
         item["liked"] = _mock_is_post_liked(post_id, user_id)
         item["is_liked"] = item["liked"]
         item["is_favorited"] = _mock_is_post_favorited(post_id, user_id)
@@ -933,7 +945,7 @@ def _mock_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str
     item["updated_at"] = _format_datetime(item.get("update_time"))
     item["likes"] = int(item.get("like_count") or 0)
     item["comments"] = int(item.get("comment_count") or 0)
-    item["views"] = int(item.get("heat_score") or 0)
+    item["views"] = int(item.get("view_count") or item.get("heat_score") or 0)
     item["liked"] = _mock_is_post_liked(post_id, user_id)
     item["is_liked"] = item["liked"]
     item["is_favorited"] = _mock_is_post_favorited(post_id, user_id)
@@ -1002,19 +1014,39 @@ def _mock_get_comments(post_id: int, current_user: Optional[Any] = None) -> list
 def _mock_hot_search(limit: int = 10) -> list[dict[str, Any]]:
     items = []
     for item in _mock_hot_topics()[: max(limit, 0)]:
+        heat_score = int(item.get("heat_score") or 0)
+        target_type = normalize_text(item.get("target_type"))
+        target_id = int(item.get("target_id") or 0)
+
+        view_count = heat_score
+        like_count = 0
+        comment_count = 0
+        favorite_count = 0
+
+        if target_type == "community_post":
+            post = _mock_find_post(target_id)
+            if post:
+                like_count = int(post.get("like_count") or 0)
+                comment_count = int(post.get("comment_count") or 0)
+                favorite_count = int(post.get("favorite_count") or 0)
+                view_count = int(post.get("view_count") or post.get("heat_score") or 0)
+
+        search_count = like_count * 4 + favorite_count * 5 + comment_count * 6 + view_count * 3
+
         items.append(
             {
                 "id": int(item["id"]),
                 "keyword": normalize_text(item.get("title")),
                 "rank": int(item.get("rank_no") or 0),
-                "search_count": int(item.get("heat_score") or 0),
+                "search_count": search_count,
                 "trend": "up" if int(item.get("rank_no") or 0) <= 3 else "stable" if int(item.get("rank_no") or 0) <= 6 else "down",
                 "title": normalize_text(item.get("title")),
-                "target_type": normalize_text(item.get("target_type")),
-                "target_id": int(item.get("target_id") or 0),
+                "target_type": target_type,
+                "target_id": target_id,
                 "tag": normalize_text(item.get("tag")),
-                "update_time": normalize_text(item.get("update_time")),
-                "create_time": normalize_text(item.get("update_time")),
+                "update_time": update_time,
+                "create_time": update_time,
+                "view_count": view_count,
             }
         )
     return items
@@ -1186,11 +1218,11 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
             post = _db_get_post(post_id, current_user=current_user)
             if post is not None:
                 execute_update(
-                    "UPDATE community_post SET heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
+                    "UPDATE community_post SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s",
                     [post_id],
                 )
-                post["heat_score"] = int(post.get("heat_score") or 0) + 1
-                post["views"] = int(post.get("views") or 0) + 1
+                post["view_count"] = int(post.get("view_count") or 0) + 1
+                post["views"] = post["view_count"]
                 return CommunityPost(**post)
             return None
     except Exception as exc:  # noqa: BLE001
@@ -1753,7 +1785,9 @@ def _db_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteRe
     return FavoriteResponse(success=True, favorited=False, count=count)
 
 
-def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> LikeResponse:
+def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> CommentLikeResult:
+    from app.modules.community.schema import CommentLikeResult
+
     user_id = _current_user_id(current_user)
     if user_id is None:
         raise AppException(code=401, message="未登录或登录状态已失效")
@@ -1791,7 +1825,7 @@ def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> Lik
                 )
                 connection.commit()
                 count = max(0, int(comment.get("like_count") or 0) - 1)
-                return LikeResponse(success=True, liked=False, count=count)
+                return CommentLikeResult(comment_id=comment_id, liked=False, like_count=count)
 
             cursor.execute(
                 """
@@ -1806,7 +1840,7 @@ def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> Lik
             )
             connection.commit()
             count = int(comment.get("like_count") or 0) + 1
-            return LikeResponse(success=True, liked=True, count=count)
+            return CommentLikeResult(comment_id=comment_id, liked=True, like_count=count)
     except Exception:
         connection.rollback()
         raise
@@ -2042,7 +2076,9 @@ def _mock_unfavorite_post(post_id: int, current_user: Optional[Any]) -> Favorite
     return FavoriteResponse(success=True, favorited=False, count=max(0, int(post.get("favorite_count") or 0) - 1))
 
 
-def _mock_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> LikeResponse:
+def _mock_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> CommentLikeResult:
+    from app.modules.community.schema import CommentLikeResult
+
     global FALLBACK_COMMENT_LIKES
     user_id = _current_user_id(current_user)
     if user_id is None:
@@ -2055,11 +2091,11 @@ def _mock_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> L
     if existed:
         FALLBACK_COMMENT_LIKES = [item for item in FALLBACK_COMMENT_LIKES if not (item["user_id"] == user_id and item["comment_id"] == comment_id)]
         comment["like_count"] = max(0, int(comment.get("like_count") or 0) - 1)
-        return LikeResponse(success=True, liked=False, count=int(comment.get("like_count") or 0))
+        return CommentLikeResult(comment_id=comment_id, liked=False, like_count=int(comment.get("like_count") or 0))
 
     FALLBACK_COMMENT_LIKES.append({"user_id": user_id, "comment_id": comment_id})
     comment["like_count"] = int(comment.get("like_count") or 0) + 1
-    return LikeResponse(success=True, liked=True, count=int(comment.get("like_count") or 0))
+    return CommentLikeResult(comment_id=comment_id, liked=True, like_count=int(comment.get("like_count") or 0))
 
 
 def _mock_delete_comment(comment_id: int, current_user: Optional[Any]) -> dict[str, Any]:
@@ -2181,13 +2217,13 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
             if post is not None:
                 try:
                     execute_update(
-                        "UPDATE community_post SET heat_score = heat_score + 1, updated_at = NOW() WHERE id = %s",
+                        "UPDATE community_post SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s",
                         [post_id],
                     )
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("更新社区帖子热度失败：%s", exc)
-                post["heat_score"] = int(post.get("heat_score") or 0) + 1
-                post["views"] = int(post.get("views") or 0) + 1
+                    logger.warning("更新社区帖子浏览数失败：%s", exc)
+                post["view_count"] = int(post.get("view_count") or 0) + 1
+                post["views"] = post["view_count"]
                 post["update_time"] = _now_text()
                 post["updated_at"] = post["update_time"]
                 return CommunityPost(**post)
@@ -2365,7 +2401,7 @@ def get_post_favorite_status(post_id: int, current_user: Optional[Any] = None) -
     return {"favorited": False}
 
 
-def toggle_comment_like(comment_id: int, current_user: Optional[Any] = None) -> LikeResponse:
+def toggle_comment_like(comment_id: int, current_user: Optional[Any] = None) -> CommentLikeResult:
     try:
         if _db_has_posts():
             return _db_toggle_comment_like(comment_id, current_user)

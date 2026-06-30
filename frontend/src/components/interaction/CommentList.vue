@@ -62,14 +62,17 @@
         :key="comment.id"
         :comment="comment"
         :replying-id="replyingId"
-        :loading-like="loadingLike"
+        :loading-like-id="loadingLikeId"
         :loading-reply="loadingReply"
         :deleting-id="deletingId"
         :current-user-id="currentUserId"
         :current-user-role="currentUserRole"
+        :show-reply="showReply"
+        :show-replies="showReplies"
         @like="handleLike"
         @reply="handleReply"
         @delete="handleDelete"
+        @reload-comments="handleReloadComments"
       />
     </div>
     <div v-if="total > 0" class="comment-list__total">共 {{ total }} 条评论</div>
@@ -80,7 +83,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, ChatDotRound, Close } from '@element-plus/icons-vue'
-import CommentItem, { type CommentItemData } from './CommentItem.vue'
+import CommentItem, { type CommentItemData, type CommentMediaJson } from './CommentItem.vue'
 import { generateCommentsSummary, type CommentsSummaryResponse } from '@/api/community'
 
 const props = withDefaults(
@@ -89,28 +92,33 @@ const props = withDefaults(
     loading?: boolean
     total?: number
     replyingId?: number | null
-    loadingLike?: boolean
+    loadingLikeId?: number | null
     loadingReply?: boolean
     deletingId?: number | null
     currentUserId?: number | null
     currentUserRole?: string
+    showReply?: boolean
+    showReplies?: boolean
   }>(),
   {
     loading: false,
     total: 0,
     replyingId: null,
-    loadingLike: false,
+    loadingLikeId: null,
     loadingReply: false,
     deletingId: null,
     currentUserId: null,
     currentUserRole: '',
+    showReply: true,
+    showReplies: true,
   },
 )
 
 const emit = defineEmits<{
   (event: 'like', comment: CommentItemData): void
-  (event: 'reply', comment: CommentItemData, content: string): void
+  (event: 'reply', comment: CommentItemData, content: string, mediaJson?: CommentMediaJson | null): void
   (event: 'delete', comment: CommentItemData): void
+  (event: 'reload-comments'): void
 }>()
 
 const summarizing = ref(false)
@@ -174,12 +182,16 @@ function handleLike(comment: CommentItemData) {
   emit('like', comment)
 }
 
-function handleReply(comment: CommentItemData, content: string) {
-  emit('reply', comment, content)
+function handleReply(comment: CommentItemData, content: string, mediaJson?: CommentMediaJson | null) {
+  emit('reply', comment, content, mediaJson)
 }
 
 function handleDelete(comment: CommentItemData) {
   emit('delete', comment)
+}
+
+function handleReloadComments() {
+  emit('reload-comments')
 }
 </script>
 

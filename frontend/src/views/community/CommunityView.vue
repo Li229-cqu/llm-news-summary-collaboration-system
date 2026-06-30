@@ -205,7 +205,7 @@
               v-for="item in hotSearchList"
               :key="item.id"
               class="hot-search-item"
-              @click="handleHotSearch(item.keyword)"
+              @click="handleHotSearchClick(item)"
             >
               <div :class="['rank', getRankClass(item.rank)]">{{ item.rank }}</div>
               <div class="hot-search-content">
@@ -222,9 +222,6 @@
                   <span>排名 {{ item.rank }}</span>
                 </div>
               </div>
-              <el-button class="timeline-link" type="primary" link @click.stop="openPostDetail(item)">
-                查看帖子详情
-              </el-button>
             </div>
           </div>
         </el-card>
@@ -386,7 +383,7 @@
             :key="comment.id"
             :comment="comment"
             :replying-id="replyingCommentId"
-            :loading-like="commentLikeLoadingId === comment.id"
+            :loading-like-id="commentLikeLoadingId"
             :loading-reply="commentReplyLoadingId === comment.id"
             :deleting-id="commentDeleteLoadingId"
             :current-user-id="userStore.userInfo?.id ?? null"
@@ -394,6 +391,7 @@
             @like="handleCommentLike"
             @reply="handleCommentReply"
             @delete="handleCommentDelete"
+            @reload-comments="handleReloadComments"
           />
         </div>
       </div>
@@ -712,6 +710,14 @@ function handleHotSearch(keyword: string) {
   loadPosts(1)
 }
 
+function handleHotSearchClick(item: HotSearchItem) {
+  if (item.target_type === 'post' || item.target_type === 'community_post') {
+    openPostDetail(item)
+  } else {
+    handleHotSearch(item.keyword)
+  }
+}
+
 function findTimelineTopic(keyword: string) {
   const lowerKeyword = keyword.trim().toLowerCase()
 
@@ -780,13 +786,18 @@ async function sendAIQuestion() {
 }
 
 async function showPostDetail(post: CommunityPost) {
-  selectedPost.value = post
   replyingCommentId.value = null
   showPostModal.value = true
   commentsSummary.value = null
+
+  try {
+    const detail = await getPostDetail(post.id)
+    selectedPost.value = detail
+  } catch {
+    selectedPost.value = post
+  }
+
   await loadComments(post.id)
-  // 异步记录浏览，不影响详情展示
-  recordPostBrowse(post.id).catch(() => {})
 }
 
 async function handleGenerateSummary() {
@@ -848,6 +859,12 @@ async function loadComments(postId: number) {
   }
 }
 
+function handleReloadComments() {
+  if (selectedPost.value) {
+    loadComments(selectedPost.value.id)
+  }
+}
+
 async function handleCreateComment(content: string, mediaJson: CommentMediaJson | null) {
   if (!selectedPost.value) return
 
@@ -877,7 +894,6 @@ async function handleCommentLike(comment: RichCommentItemData) {
   commentLikeLoadingId.value = comment.id
   try {
     await likeComment(comment.id)
-    await loadComments(selectedPost.value.id)
   } catch (e) {
     console.error('评论点赞失败', e)
     ElMessage.error(e instanceof Error ? e.message : '评论点赞失败，请稍后重试')
@@ -894,7 +910,7 @@ async function handleCommentReply(comment: RichCommentItemData, content: string,
     return
   }
 
-  if (!content.trim()) {
+  if (!content.trim() && !mediaJson) {
     replyingCommentId.value = null
     return
   }

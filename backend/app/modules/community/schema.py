@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class CommunityPost(BaseModel):
@@ -59,6 +59,11 @@ class PostListResponse(BaseModel):
     page_size: int
 
 
+class CommentMediaJson(BaseModel):
+    images: Optional[List[str]] = None
+    emojis: Optional[List[str]] = None
+
+
 class CommentItem(BaseModel):
     id: int
     post_id: int
@@ -87,8 +92,22 @@ class CommentItem(BaseModel):
 
 
 class CreateCommentRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=1000, description="评论内容")
-    media_json: Any | None = Field(default=None, description="评论富媒体数据")
+    content: str = Field(..., max_length=1000, description="评论内容")
+    media_json: Optional[CommentMediaJson] = None
+
+    @field_validator("content")
+    @classmethod
+    def normalize_content(cls, value: str) -> str:
+        return value.strip() if value else ""
+
+    @model_validator(mode="after")
+    def check_content_or_media(self) -> "CreateCommentRequest":
+        content = (self.content or "").strip()
+        has_images = bool(self.media_json and self.media_json.images)
+        has_emojis = bool(self.media_json and self.media_json.emojis)
+        if not content and not has_images and not has_emojis:
+            raise ValueError("评论内容不能为空")
+        return self
 
 
 class CommentListResponse(BaseModel):
@@ -111,6 +130,7 @@ class HotSearchItem(BaseModel):
     target_id: int = 0
     tag: str = ""
     update_time: str | datetime | None = None
+    view_count: int = 0
 
 
 class TagCount(BaseModel):
@@ -129,6 +149,12 @@ class LikeResponse(BaseModel):
     success: bool
     liked: bool
     count: int
+
+
+class CommentLikeResult(BaseModel):
+    comment_id: int
+    liked: bool
+    like_count: int
 
 
 class FavoriteResponse(BaseModel):

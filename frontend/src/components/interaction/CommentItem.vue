@@ -10,7 +10,7 @@
         <div class="comment-item__user">
           <div class="comment-item__nickname-row">
             <span class="comment-item__nickname">{{ displayNickname }}</span>
-            <el-tag v-if="comment.is_liked" size="small" effect="plain" type="success">已点赞</el-tag>
+            <el-tag v-if="localIsLiked" size="small" effect="plain" type="success">已点赞</el-tag>
             <el-tag v-if="isFolded" size="small" effect="plain" type="warning">已折叠</el-tag>
             <el-tag v-if="isDeleted" size="small" effect="plain" type="info">已删除</el-tag>
           </div>
@@ -52,10 +52,10 @@
 
       <div v-if="!isDeleted" class="comment-item__actions">
         <el-button text type="primary" :loading="loadingLike" @click="handleLike">
-          点赞 {{ comment.like_count }}
+          点赞 {{ localLikeCount }}
         </el-button>
-        <span class="comment-item__action-divider">·</span>
-        <el-button text type="primary" @click="toggleReply">
+
+        <el-button v-if="showReply" text type="primary" @click="toggleReply">
           回复
         </el-button>
         <span v-if="canDelete" class="comment-item__action-divider">·</span>
@@ -74,7 +74,7 @@
         </el-popconfirm>
       </div>
 
-      <div v-if="showReplyBox && !isDeleted" class="comment-item__reply-box">
+      <div v-if="showReply && showReplyBox && !isDeleted" class="comment-item__reply-box">
         <CommentBox
           placeholder="写下你的回复"
           button-text="回复"
@@ -86,23 +86,26 @@
         </div>
       </div>
 
-      <div v-if="allReplies.length" class="comment-item__replies">
+      <div v-if="showReplies && allReplies.length" class="comment-item__replies">
         <CommentItem
-          v-for="reply in visibleReplies"
-          :key="reply.id"
-          :comment="reply"
-          :replying-id="replyingId"
-          :loading-like="loadingLike"
-          :loading-reply="loadingReply"
-          :deleting-id="deletingId"
-          :current-user-id="currentUserId"
-          :current-user-role="currentUserRole"
-          :level="level + 1"
-          :root-comment-id="level === 0 ? props.comment.id : props.rootCommentId"
-          @like="handleLike"
-          @reply="handleReplyEvent"
-          @delete="handleDeleteEvent"
-        />
+            v-for="reply in visibleReplies"
+            :key="reply.id"
+            :comment="reply"
+            :replying-id="replyingId"
+            :loading-like="loadingLikeIds.has(reply.id)"
+            :loading-reply="loadingReply"
+            :deleting-id="deletingId"
+            :current-user-id="currentUserId"
+            :current-user-role="currentUserRole"
+            :level="level + 1"
+            :root-comment-id="level === 0 ? props.comment.id : props.rootCommentId"
+            :show-reply="showReply"
+            :show-replies="showReplies"
+            @like="handleChildLike"
+            @reply="handleReplyEvent"
+            @delete="handleDeleteEvent"
+            @reload-comments="handleReloadComments"
+          />
 
         <div class="comment-item__expand-btn">
           <el-button
@@ -130,6 +133,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CommentBox from './CommentBox.vue'
+
+export interface LikeResult {
+  comment_id: number
+  liked: boolean
+  like_count: number
+}
 
 export interface CommentMediaJson {
   images?: string[]
@@ -167,33 +176,40 @@ const props = withDefaults(
   defineProps<{
     comment: CommentItemData
     replyingId?: number | null
-    loadingLike?: boolean
+    loadingLikeId?: number | null
     loadingReply?: boolean
     deletingId?: number | null
     currentUserId?: number | null
     currentUserRole?: string
     level?: number
     rootCommentId?: number | null
+    showReply?: boolean
+    showReplies?: boolean
   }>(),
   {
     replyingId: null,
-    loadingLike: false,
+    loadingLikeId: null,
     loadingReply: false,
     deletingId: null,
     currentUserId: null,
     currentUserRole: '',
     level: 0,
     rootCommentId: null,
+    showReply: true,
+    showReplies: true,
   },
 )
 
 const emit = defineEmits<{
   (event: 'like', comment: CommentItemData): void
+  (event: 'like-done', result: LikeResult): void
   (event: 'reply', comment: CommentItemData, content: string, mediaJson?: CommentMediaJson | null): void
   (event: 'delete', comment: CommentItemData): void
+  (event: 'reload-comments'): void
 }>()
 
 const expandedCount = ref(0)
+const loadingLikeIds = new Set<number>()
 
 interface ExpandState {
   expandedCount: number
@@ -208,6 +224,23 @@ watch(
     expandedCount.value = stored?.expandedCount ?? 0
   },
   { immediate: true }
+)
+
+const localLikeCount = ref(props.comment.like_count)
+const localIsLiked = ref(props.comment.is_liked)
+
+watch(
+  () => props.comment.like_count,
+  (newVal) => {
+    localLikeCount.value = newVal
+  }
+)
+
+watch(
+  () => props.comment.is_liked,
+  (newVal) => {
+    localIsLiked.value = newVal
+  }
 )
 
 function getExpandedCount(): number {
@@ -231,6 +264,7 @@ const canDelete = computed(() => {
   return isOwner.value || role === 'admin' || role === 'editor'
 })
 const loadingDelete = computed(() => props.deletingId === props.comment.id)
+const loadingLike = computed(() => props.loadingLikeId === props.comment.id)
 
 const allReplies = computed(() => {
   if (props.level >= 1) {
@@ -389,7 +423,15 @@ const displayContent = computed(() => {
 })
 
 function handleLike() {
+  const delta = localIsLiked.value ? -1 : 1
+  localLikeCount.value = Math.max(0, localLikeCount.value + delta)
+  localIsLiked.value = !localIsLiked.value
   emit('like', props.comment)
+  emit('like-done', {
+    comment_id: props.comment.id,
+    liked: localIsLiked.value,
+    like_count: localLikeCount.value,
+  })
 }
 
 function handleDelete() {
@@ -422,6 +464,14 @@ function handleReplyEvent(comment: CommentItemData, content: string, mediaJson?:
 
 function handleDeleteEvent(comment: CommentItemData) {
   emit('delete', comment)
+}
+
+function handleChildLike(childComment: CommentItemData) {
+  emit('like', childComment)
+}
+
+function handleReloadComments() {
+  emit('reload-comments')
 }
 </script>
 
