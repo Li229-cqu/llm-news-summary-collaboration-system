@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -426,7 +426,8 @@ function normalizeAvatarUrl(url?: string): string {
     return url
   }
   if (url.startsWith('/uploads/')) {
-    return 'http://127.0.0.1:8000' + url
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+    return baseURL.replace(/\/$/, '') + url
   }
   return url
 }
@@ -536,6 +537,46 @@ function handleClearHistory() {
     .catch(() => {})
 }
 
+async function handleStatCardClick(targetTab: string) {
+  activeTab.value = targetTab
+  browseSearchKeyword.value = ''
+  favoriteSearchKeyword.value = ''
+  commentSearchKeyword.value = ''
+  aiSearchKeyword.value = ''
+  currentPage.value = 1
+  await nextTick()
+  if (targetTab === 'history') {
+    loadBrowseHistory()
+  } else if (targetTab === 'favorites') {
+    loadFavorites()
+  } else if (targetTab === 'comments') {
+    loadComments()
+  } else if (targetTab === 'ai-records') {
+    loadAIRecords()
+  }
+}
+
+function getVisiblePages(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const pages: (number | string)[] = [1]
+  const start = Math.max(2, current - 2)
+  const end = Math.min(total - 1, current + 2)
+
+  if (start > 2) {
+    pages.push('...')
+  }
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  if (end < total - 1) {
+    pages.push('...')
+  }
+  pages.push(total)
+  return pages
+}
+
 onMounted(async () => {
   await loadCurrentUserProfile()
   // Load overview stats for quick stats display in header (not for overview tab)
@@ -543,6 +584,10 @@ onMounted(async () => {
     profileOverview.value = await getProfileOverview()
   } catch (error) {
     console.error('加载概览统计失败:', error)
+  }
+  // Auto-load default tab data so browse history shows immediately
+  if (activeTab.value === 'history') {
+    await loadBrowseHistory()
   }
 })
 </script>
@@ -591,22 +636,22 @@ onMounted(async () => {
         </div>
       </div>
       <div class="quick-stats">
-          <div class="quick-stat-item">
+          <div class="quick-stat-item" @click="handleStatCardClick('history')">
             <span class="quick-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
             <span class="quick-stat-label">浏览</span>
           </div>
           <div class="divider"></div>
-          <div class="quick-stat-item">
+          <div class="quick-stat-item" @click="handleStatCardClick('favorites')">
             <span class="quick-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
             <span class="quick-stat-label">收藏</span>
           </div>
           <div class="divider"></div>
-          <div class="quick-stat-item">
+          <div class="quick-stat-item" @click="handleStatCardClick('comments')">
             <span class="quick-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
             <span class="quick-stat-label">评论</span>
           </div>
           <div class="divider"></div>
-          <div class="quick-stat-item">
+          <div class="quick-stat-item" @click="handleStatCardClick('ai-records')">
             <span class="quick-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
             <span class="quick-stat-label">AI生成</span>
           </div>
@@ -629,7 +674,7 @@ onMounted(async () => {
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1">
+                <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
@@ -691,21 +736,22 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="totalCount > pageSize" class="pagination-wrapper">
-              <el-pagination
-                v-model:current-page="currentPage"
-                :page-size="pageSize"
-                :total="totalCount"
-                layout="prev, pager, next, total"
-                @current-change="handlePageChange"
-              />
+            <div v-if="totalCount > pageSize && filteredBrowseHistory.length > 0" class="profile-pagination">
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(1)" title="首页">&lt;&lt;</button>
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(currentPage - 1)" title="上一页">&lt;</button>
+              <template v-for="item in getVisiblePages(currentPage, Math.ceil(totalCount / pageSize))" :key="item">
+                <span v-if="item === '...'" class="page-ellipsis">...</span>
+                <button v-else class="page-btn" :class="{ active: item === currentPage }" @click="handlePageChange(Number(item))">{{ item }}</button>
+              </template>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(currentPage + 1)" title="下一页">&gt;</button>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(Math.ceil(totalCount / pageSize))" title="尾页">&gt;&gt;</button>
             </div>
           </template>
 
           <template v-else-if="tab.key === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="favoriteType" size="small" class="segmented-control" @change="favoriteSearchKeyword = ''; currentPage = 1; loadFavorites()">
+                <el-radio-group v-model="favoriteType" size="small" class="segmented-control" @change="favoriteSearchKeyword = ''; currentPage = 1; favorites = []; totalCount = 0; loadFavorites()">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
@@ -760,14 +806,15 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="totalCount > pageSize" class="pagination-wrapper">
-              <el-pagination
-                v-model:current-page="currentPage"
-                :page-size="pageSize"
-                :total="totalCount"
-                layout="prev, pager, next, total"
-                @current-change="handlePageChange"
-              />
+            <div v-if="totalCount > pageSize && filteredFavorites.length > 0" class="profile-pagination">
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(1)" title="首页">&lt;&lt;</button>
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(currentPage - 1)" title="上一页">&lt;</button>
+              <template v-for="item in getVisiblePages(currentPage, Math.ceil(totalCount / pageSize))" :key="item">
+                <span v-if="item === '...'" class="page-ellipsis">...</span>
+                <button v-else class="page-btn" :class="{ active: item === currentPage }" @click="handlePageChange(Number(item))">{{ item }}</button>
+              </template>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(currentPage + 1)" title="下一页">&gt;</button>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(Math.ceil(totalCount / pageSize))" title="尾页">&gt;&gt;</button>
             </div>
           </template>
 
@@ -819,14 +866,15 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="totalCount > pageSize" class="pagination-wrapper">
-              <el-pagination
-                v-model:current-page="currentPage"
-                :page-size="pageSize"
-                :total="totalCount"
-                layout="prev, pager, next, total"
-                @current-change="handlePageChange"
-              />
+            <div v-if="totalCount > pageSize && filteredComments.length > 0" class="profile-pagination">
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(1)" title="首页">&lt;&lt;</button>
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(currentPage - 1)" title="上一页">&lt;</button>
+              <template v-for="item in getVisiblePages(currentPage, Math.ceil(totalCount / pageSize))" :key="item">
+                <span v-if="item === '...'" class="page-ellipsis">...</span>
+                <button v-else class="page-btn" :class="{ active: item === currentPage }" @click="handlePageChange(Number(item))">{{ item }}</button>
+              </template>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(currentPage + 1)" title="下一页">&gt;</button>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(Math.ceil(totalCount / pageSize))" title="尾页">&gt;&gt;</button>
             </div>
           </template>
 
@@ -905,14 +953,15 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="totalCount > pageSize" class="pagination-wrapper">
-              <el-pagination
-                v-model:current-page="currentPage"
-                :page-size="pageSize"
-                :total="totalCount"
-                layout="prev, pager, next, total"
-                @current-change="handlePageChange"
-              />
+            <div v-if="totalCount > pageSize && filteredAIRecords.length > 0" class="profile-pagination">
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(1)" title="首页">&lt;&lt;</button>
+              <button class="page-btn" :disabled="currentPage <= 1" @click="handlePageChange(currentPage - 1)" title="上一页">&lt;</button>
+              <template v-for="item in getVisiblePages(currentPage, Math.ceil(totalCount / pageSize))" :key="item">
+                <span v-if="item === '...'" class="page-ellipsis">...</span>
+                <button v-else class="page-btn" :class="{ active: item === currentPage }" @click="handlePageChange(Number(item))">{{ item }}</button>
+              </template>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(currentPage + 1)" title="下一页">&gt;</button>
+              <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(Math.ceil(totalCount / pageSize))" title="尾页">&gt;&gt;</button>
             </div>
           </template>
 
@@ -1060,7 +1109,7 @@ onMounted(async () => {
 
 <style scoped>
 .page-container {
-  max-width: 1080px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px 24px;
 }
@@ -1219,7 +1268,8 @@ onMounted(async () => {
   padding: 4px 16px;
   border-radius: 10px;
   transition: background 0.25s ease, transform 0.25s ease;
-  cursor: default;
+  cursor: pointer;
+  user-select: none;
 }
 
 .quick-stat-item:hover {
@@ -1601,11 +1651,63 @@ onMounted(async () => {
   color: var(--el-text-color-secondary);
 }
 
-.pagination-wrapper {
+.profile-pagination {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 4px;
   margin-top: 32px;
   padding-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-pagination .page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.profile-pagination .page-btn:hover:not(:disabled):not(.active) {
+  background: #f3f4f6;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.profile-pagination .page-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.profile-pagination .page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+.profile-pagination .page-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: #9ca3af;
+  font-size: 14px;
+  user-select: none;
 }
 
 .edit-dialog :deep(.el-dialog__header) {
