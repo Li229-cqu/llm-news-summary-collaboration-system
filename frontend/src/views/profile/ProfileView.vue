@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -21,18 +21,21 @@ import {
   ZoomIn,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import * as echarts from 'echarts'
 import {
   type AIRecordItem,
   type BrowseHistoryItem,
   type CommentRecordItem,
   type FavoriteItem,
   type ProfileOverview,
+  type ReadingTimelineResponse,
   type SubscriptionCategory,
   getAIRecords,
   getBrowseHistory,
   getComments,
   getFavorites,
   getProfileOverview,
+  getReadingTimeline,
   getSubscriptions,
   updateSubscriptions,
 } from '@/api/profile'
@@ -45,7 +48,7 @@ import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('history')
+const activeTab = ref('insights')
 const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
@@ -58,6 +61,224 @@ const favorites = ref<FavoriteItem[]>([])
 const comments = ref<CommentRecordItem[]>([])
 const aiRecords = ref<AIRecordItem[]>([])
 const subscriptions = ref<SubscriptionCategory[]>([])
+
+const readingTags = computed(() => {
+  const tags: string[] = []
+  if ((profileOverview.value?.browse_count ?? 0) > 0) tags.push('新闻探索者')
+  if ((profileOverview.value?.favorite_count ?? 0) > 0) tags.push('内容收藏者')
+  if ((profileOverview.value?.comment_count ?? 0) > 0) tags.push('社区互动者')
+  if ((profileOverview.value?.ai_generate_count ?? 0) > 0) tags.push('AI 摘要使用者')
+  if (tags.length === 0) tags.push('新用户')
+  return tags
+})
+
+const statCards = [
+  { key: 'history', icon: Clock, label: '浏览历史', count: () => profileOverview.value?.browse_count ?? 0, desc: '新闻与帖子浏览足迹' },
+  { key: 'favorites', icon: Star, label: '收藏记录', count: () => profileOverview.value?.favorite_count ?? 0, desc: '保存的新闻与社区帖子' },
+  { key: 'comments', icon: ChatDotRound, label: '评论记录', count: () => profileOverview.value?.comment_count ?? 0, desc: '你的新闻与社区互动' },
+  { key: 'ai-records', icon: MagicStick, label: 'AI生成记录', count: () => profileOverview.value?.ai_generate_count ?? 0, desc: '标题摘要生成历史' },
+]
+
+// ===== 阅读画像状态 =====
+const readingRange = ref<30 | 60>(30)
+const selectedReadingDay = ref<string | null>(null)
+const readingTimelineLoading = ref(false)
+const readingTimelineData = ref<ReadingTimelineResponse | null>(null)
+const aiInsightLoading = ref(false)
+const recentAIRecords = ref<AIRecordItem[]>([])
+const categoryRadarRef = ref<HTMLDivElement | null>(null)
+let categoryRadarChart: echarts.ECharts | null = null
+
+const behaviorTotal = computed(() => {
+  const overview = profileOverview.value
+  if (!overview) return 0
+  return (overview.browse_count || 0) + (overview.favorite_count || 0) + (overview.comment_count || 0) + (overview.ai_generate_count || 0)
+})
+
+const behaviorRingSegments = computed(() => {
+  const overview = profileOverview.value
+  if (!overview || behaviorTotal.value === 0) return []
+  const total = behaviorTotal.value
+  return [
+    { key: 'history' as const, label: '浏览', count: overview.browse_count, pct: Math.round((overview.browse_count / total) * 100), color: '#3b82f6' },
+    { key: 'favorites' as const, label: '收藏', count: overview.favorite_count, pct: Math.round((overview.favorite_count / total) * 100), color: '#f59e0b' },
+    { key: 'comments' as const, label: '评论', count: overview.comment_count, pct: Math.round((overview.comment_count / total) * 100), color: '#10b981' },
+    { key: 'ai-records' as const, label: 'AI生成', count: overview.ai_generate_count, pct: Math.round((overview.ai_generate_count / total) * 100), color: '#8b5cf6' },
+  ]
+})
+
+const behaviorConicGradient = computed(() => {
+  if (behaviorRingSegments.value.length === 0) return 'conic-gradient(#e5e7eb 0deg 360deg)'
+  let acc = 0
+  const parts = behaviorRingSegments.value.map((s) => {
+    const start = acc
+    acc += (s.count / behaviorTotal.value) * 360
+    return `${s.color} ${start.toFixed(1)}deg ${acc.toFixed(1)}deg`
+  })
+  return `conic-gradient(${parts.join(', ')})`
+})
+
+const heatmapWeeks = computed(() => {
+  if (!readingTimelineData.value) return { weeks: [] as { days: { date: string; weekday: number; reads: number; level: number; isEmpty: boolean }[] }[], totalReads: 0, maxReads: 0 }
+  const data = readingTimelineData.value
+  const dateMap = new Map<string, number>()
+  let totalReads = 0
+  for (const item of data.items) { dateMap.set(item.date, item.total_reads); totalReads += item.total_reads }
+  const maxReads = Math.max(...Array.from(dateMap.values()), 1)
+  const days: { date: string; weekday: number; reads: number; level: number }[] = []
+  const now = new Date()
+  for (let i = readingRange.value - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const reads = dateMap.get(key) || 0
+    let level = 0
+    if (reads > 0) { const r = reads / maxReads; level = r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4 }
+    days.push({ date: key, weekday: d.getDay(), reads, level })
+  }
+  const firstWeekday = days[0]?.weekday ?? 0
+  const padStart = Array.from({ length: firstWeekday }, (_, p) => ({ date: '', weekday: p, reads: 0, level: 0, isEmpty: true }))
+  const allDays = [...padStart, ...days.map(d => ({ ...d, isEmpty: false }))]
+  const weeks: { days: typeof allDays }[] = []
+  for (let i = 0; i < allDays.length; i += 7) weeks.push({ days: allDays.slice(i, i + 7) })
+  return { weeks, totalReads, maxReads }
+})
+
+const heatmapMonths = computed(() => {
+  const months: { name: string; colStart: number }[] = []
+  let lastMonth = ''
+  heatmapWeeks.value.weeks.forEach((week, wi) => {
+    const firstDay = week.days.find(d => !d.isEmpty)
+    if (!firstDay) return
+    const d = new Date(firstDay.date); const mk = `${d.getFullYear()}-${d.getMonth()}`
+    if (mk !== lastMonth) { lastMonth = mk; months.push({ name: `${d.getMonth() + 1}月`, colStart: wi }) }
+  })
+  return months
+})
+
+const selectedDayInfo = computed(() => {
+  if (!selectedReadingDay.value || !readingTimelineData.value) return null
+  const data = readingTimelineData.value
+  const item = data.items.find(i => i.date === selectedReadingDay.value)
+  return item ? { date: selectedReadingDay.value, reads: item.total_reads } : null
+})
+
+const categoryRadarData = computed(() => {
+  if (!readingTimelineData.value) return []
+  const catMap = new Map<string, number>()
+  for (const item of readingTimelineData.value.items) {
+    for (const cat of item.categories) {
+      const name = cat.category_name || '未分类'
+      catMap.set(name, (catMap.get(name) || 0) + cat.read_count)
+    }
+  }
+  return Array.from(catMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, count]) => ({ name, count }))
+})
+
+const aiInsightSummary = computed(() => {
+  if (recentAIRecords.value.length === 0) return null
+  const records = recentAIRecords.value
+  const manualCount = records.filter((r) => r.source === 'manual').length
+  const newsCount = records.filter((r) => r.source === 'news').length
+  const lowCount = records.filter((r) => (r.risk_level || 'low') === 'low').length
+  const mediumCount = records.filter((r) => r.risk_level === 'medium').length
+  const highCount = records.filter((r) => r.risk_level === 'high').length
+  const lastRecord = records[0]
+  return { total: records.length, manualCount, newsCount, lowCount, mediumCount, highCount, lastRecord }
+})
+
+async function loadReadingInsights() {
+  readingTimelineLoading.value = true
+  try {
+    readingTimelineData.value = await getReadingTimeline({ days: readingRange.value })
+  } catch {
+    readingTimelineData.value = null
+  } finally {
+    readingTimelineLoading.value = false
+    scheduleRadarRender()
+  }
+}
+
+async function loadAIInsight() {
+  aiInsightLoading.value = true
+  try {
+    const result = await getAIRecords(1, 50)
+    recentAIRecords.value = result.list || []
+  } catch {
+    recentAIRecords.value = []
+  } finally {
+    aiInsightLoading.value = false
+  }
+}
+
+function handleReadingRangeChange(days: 30 | 60) {
+  readingRange.value = days
+  loadReadingInsights()
+}
+
+function handleBehaviorSegmentClick(tabKey: string) {
+  handleStatCardClick(tabKey)
+}
+
+function renderCategoryRadar() {
+  const el = categoryRadarRef.value
+  if (!el) return
+  const { clientWidth, clientHeight } = el
+  if (clientWidth === 0 || clientHeight === 0) {
+    requestAnimationFrame(() => renderCategoryRadar())
+    return
+  }
+  if (categoryRadarChart) {
+    categoryRadarChart.dispose()
+    categoryRadarChart = null
+  }
+  const data = categoryRadarData.value
+  if (data.length < 3) return
+  const indicators = data.map((d) => ({ name: d.name, max: Math.max(...data.map((x) => x.count)) * 1.2 || 10 }))
+  categoryRadarChart = echarts.init(el)
+  categoryRadarChart.setOption({
+    tooltip: { trigger: 'item' },
+    legend: { show: true, bottom: 0, textStyle: { fontSize: 11 } },
+    radar: {
+      center: ['50%', '48%'],
+      radius: '65%',
+      indicator: indicators,
+      axisName: { fontSize: 11 },
+    },
+    series: [{
+      type: 'radar',
+      data: [{ value: data.map((d) => d.count), name: '阅读分布', areaStyle: { color: 'rgba(37,99,235,0.2)' }, lineStyle: { color: '#2563eb', width: 2 }, itemStyle: { color: '#2563eb' } }],
+    }],
+  })
+}
+
+function scheduleRadarRender() {
+  nextTick(() => { requestAnimationFrame(() => renderCategoryRadar()) })
+}
+
+function handleResize() {
+  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
+    categoryRadarChart.resize()
+  } else {
+    scheduleRadarRender()
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'insights') scheduleRadarRender()
+})
+
+watch(readingRange, () => {}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
+    categoryRadarChart.dispose()
+    categoryRadarChart = null
+  }
+  window.removeEventListener('resize', handleResize)
+})
 
 const browseSearchKeyword = ref('')
 const favoriteSearchKeyword = ref('')
@@ -126,12 +347,13 @@ const categoryDescs: Record<string, string> = {
   social: '社会热点、民生关注、公益活动',
 }
 
-const tabs = [
-  { key: 'history', label: '浏览历史', icon: Clock },
-  { key: 'favorites', label: '收藏记录', icon: Star },
-  { key: 'comments', label: '评论记录', icon: ChatDotRound },
-  { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick },
-  { key: 'trajectory', label: '阅读脉络', icon: View },
+const profileNavItems = [
+  { key: 'insights', label: '阅读画像', icon: Grid, desc: '趋势与兴趣分析' },
+  { key: 'history', label: '浏览记录', icon: Clock, desc: '新闻与帖子足迹' },
+  { key: 'favorites', label: '收藏记录', icon: Star, desc: '保存的新闻与帖子' },
+  { key: 'comments', label: '评论记录', icon: ChatDotRound, desc: '你的互动发言' },
+  { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick, desc: '标题摘要历史' },
+  { key: 'trajectory', label: '阅读脉络', icon: View, desc: '主题与阅读路径' },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -144,6 +366,52 @@ const filteredBrowseHistory = computed(() => {
     (item as any).category_name?.toLowerCase().includes(query)
   )
 })
+
+// ===== 浏览分类胶囊比例条 =====
+interface CategorySegment { name: string; count: number; pct: number }
+const catSegmentColors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#0ea5e9', '#94a3b8']
+const browseCapsuleLoading = ref(false)
+const newsCapsuleItems = ref<BrowseHistoryItem[]>([])
+const postCapsuleItems = ref<BrowseHistoryItem[]>([])
+
+function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string): CategorySegment[] {
+  const catMap = new Map<string, number>()
+  let total = 0
+  items.forEach(item => {
+    const cat = (item as any).category_name || defaultLabel
+    catMap.set(cat, (catMap.get(cat) || 0) + 1)
+    total++
+  })
+  if (total === 0) return []
+  const sorted = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, 5)
+  const result = top.map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }))
+  if (sorted.length > 5) {
+    const otherCount = sorted.slice(5).reduce((s, [, c]) => s + c, 0)
+    result.push({ name: '其他', count: otherCount, pct: Math.round((otherCount / total) * 100) })
+  }
+  return result
+}
+
+const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻'))
+const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览'))
+
+async function loadBrowseCapsuleData() {
+  browseCapsuleLoading.value = true
+  try {
+    const [newsRes, postRes] = await Promise.all([
+      getBrowseHistory(1, 50, 'news'),
+      getBrowseHistory(1, 50, 'post'),
+    ])
+    newsCapsuleItems.value = (newsRes as any).list || []
+    postCapsuleItems.value = (postRes as any).list || []
+  } catch {
+    newsCapsuleItems.value = []
+    postCapsuleItems.value = []
+  } finally {
+    browseCapsuleLoading.value = false
+  }
+}
 
 const filteredFavorites = computed(() => {
   if (!favoriteSearchKeyword.value) return favorites.value
@@ -537,6 +805,27 @@ function handleTabChange(key: string) {
   currentPage.value = 1
   if (key === 'history') {
     loadBrowseHistory()
+    loadBrowseCapsuleData()
+  } else if (key === 'favorites') {
+    loadFavorites()
+  } else if (key === 'comments') {
+    loadComments()
+  } else if (key === 'ai-records') {
+    loadAIRecords()
+  }
+}
+
+function handleNavClick(key: string) {
+  if (key === activeTab.value) return
+  activeTab.value = key
+  browseSearchKeyword.value = ''
+  favoriteSearchKeyword.value = ''
+  commentSearchKeyword.value = ''
+  aiSearchKeyword.value = ''
+  currentPage.value = 1
+  if (key === 'history') {
+    loadBrowseHistory()
+    loadBrowseCapsuleData()
   } else if (key === 'favorites') {
     loadFavorites()
   } else if (key === 'comments') {
@@ -555,6 +844,7 @@ function handleClearHistory() {
     .then(() => {
       browseHistory.value = []
       totalCount.value = 0
+      loadBrowseCapsuleData()
       ElMessage.success('浏览历史已清空')
     })
     .catch(() => {})
@@ -612,89 +902,299 @@ onMounted(async () => {
   if (activeTab.value === 'history') {
     await loadBrowseHistory()
   }
+  // Load reading portrait insights (non-blocking)
+  loadReadingInsights()
+  loadAIInsight()
+  window.addEventListener('resize', handleResize)
 })
 </script>
 
 <template>
-  <main class="page-container">
-    <div class="profile-header">
-      <div class="header-bg"></div>
-      <div class="header-content">
-        <div class="header-top-row">
-          <div class="user-profile">
-            <div class="avatar-wrapper">
-              <el-avatar :size="80" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
-                {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
-              </el-avatar>
+  <main class="profile-page">
+    <!-- ===== 左侧个人中心栏 ===== -->
+    <aside class="profile-sidebar">
+      <div class="sidebar-user-card">
+        <div class="sidebar-avatar-col">
+          <el-avatar :size="88" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="sidebar-avatar">
+            {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
+          </el-avatar>
+        </div>
+        <div class="sidebar-user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</div>
+        <div class="sidebar-user-role">
+          <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round size="small">
+            {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
+          </el-tag>
+        </div>
+        <div class="sidebar-user-meta">
+          <span>ID: {{ userStore.userInfo?.id || '-' }}</span>
+          <span v-if="(userStore.userInfo as any)?.email">{{ (userStore.userInfo as any)?.email }}</span>
+        </div>
+        <div class="sidebar-user-tags">
+          <el-tag v-for="tag in readingTags" :key="tag" size="small" effect="plain" class="sidebar-reading-tag" :type="tag === '新用户' ? 'info' : ''">
+            {{ tag }}
+          </el-tag>
+        </div>
+        <div class="sidebar-user-stats">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('history')">
+            <span class="sidebar-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">浏览</span>
+          </div>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('favorites')">
+            <span class="sidebar-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">收藏</span>
+          </div>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('comments')">
+            <span class="sidebar-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">评论</span>
+          </div>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('ai-records')">
+            <span class="sidebar-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">AI</span>
+          </div>
+        </div>
+        <el-button class="sidebar-edit-btn" :icon="Edit" size="small" @click="openEditDialog()">编辑资料</el-button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-nav-title">导航</div>
+        <div
+          v-for="item in profileNavItems"
+          :key="item.key"
+          class="sidebar-nav-item"
+          :class="{ 'sidebar-nav-item--active': activeTab === item.key }"
+          @click="handleNavClick(item.key)"
+        >
+          <el-icon :size="18"><component :is="item.icon" /></el-icon>
+          <span class="sidebar-nav-label">{{ item.label }}</span>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ===== 右侧主内容区 ===== -->
+    <section class="profile-main-panel">
+      <div class="profile-module-body">
+
+        <!-- ===== 阅读画像模块 ===== -->
+        <div v-if="activeTab === 'insights'" class="module-content">
+          <div class="module-header">
+            <h2 class="module-title"><el-icon><Grid /></el-icon> 阅读画像</h2>
+            <p class="module-desc">通过浏览、收藏、评论和 AI 生成记录，了解你的内容行为偏好</p>
+          </div>
+          <div class="reading-portrait">
+            <div class="portrait-header-right">
+              <el-radio-group v-model="readingRange" size="small" @change="handleReadingRangeChange">
+                <el-radio-button :value="30">近30天</el-radio-button>
+                <el-radio-button :value="60">近60天</el-radio-button>
+              </el-radio-group>
             </div>
-            <div class="user-info">
-              <div class="user-name-row">
-                <h1 class="user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
+            <div class="portrait-grid">
+              <!-- 1. 阅读活跃日历 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Files /></el-icon> 阅读活跃日历</span>
+                </div>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
+                  <div v-else-if="!readingTimelineData || heatmapWeeks.totalReads === 0" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无阅读记录</span>
+                  </div>
+                  <div v-else class="activity-calendar">
+                    <div class="heatmap-title-row">
+                      <span class="heatmap-title">近 {{ readingRange }} 天阅读活跃 · 共 {{ heatmapWeeks.totalReads }} 次阅读</span>
+                    </div>
+                    <div class="heatmap-grid-wrap" :class="`range-${readingRange}`">
+                      <div class="heatmap-y-labels">
+                        <span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span><span></span>
+                      </div>
+                      <div class="heatmap-scroll">
+                        <div class="heatmap-months">
+                          <span v-for="m in heatmapMonths" :key="m.name" :style="{ gridColumn: `${m.colStart + 1} / span 1` }" class="heatmap-month-label">{{ m.name }}</span>
+                        </div>
+                        <div class="heatmap-board">
+                          <div class="heatmap-weeks" :style="{ gridTemplateColumns: `repeat(${heatmapWeeks.weeks.length}, var(--cell-size))` }">
+                            <template v-for="(week, wi) in heatmapWeeks.weeks" :key="wi">
+                              <div
+                                v-for="(day, di) in week.days"
+                                :key="`${wi}-${di}`"
+                                class="heatmap-cell"
+                                :class="{ [`heat-${day.level}`]: !day.isEmpty, 'heat-empty': day.isEmpty, 'heat-selected': selectedReadingDay === day.date }"
+                                :style="{ gridColumn: wi + 1, gridRow: di + 1 }"
+                                :title="day.isEmpty ? '' : `${day.date}: ${day.reads} 次阅读`"
+                                @click="day.isEmpty ? null : selectedReadingDay = selectedReadingDay === day.date ? null : day.date"
+                              ></div>
+                            </template>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="heatmap-footer">
+                      <span v-if="selectedDayInfo" class="heatmap-selected-info">{{ selectedDayInfo.date }} · 阅读 {{ selectedDayInfo.reads }} 篇</span>
+                      <span v-else class="heatmap-hint">点击日期查看当天活跃情况</span>
+                      <div class="heatmap-legend">
+                        <span class="legend-label">少</span>
+                        <span class="legend-dot heat-0"></span><span class="legend-dot heat-1"></span><span class="legend-dot heat-2"></span><span class="legend-dot heat-3"></span><span class="legend-dot heat-4"></span>
+                        <span class="legend-label">多</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            <div class="user-tags">
-              <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round>
-                {{
-                  userStore.isAdmin
-                    ? '管理员'
-                    : userStore.isEditor
-                      ? '审核/编辑'
-                      : '普通用户'
-                }}
-              </el-tag>
-              <span class="user-id">ID: {{ userStore.userInfo?.id || '-' }}</span>
+              <!-- 2. 兴趣星盘 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Grid /></el-icon> 兴趣星盘</span>
+                </div>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
+                  <div v-else-if="categoryRadarData.length < 3" class="portrait-empty">
+                    <span class="portrait-empty__icon">📡</span>
+                    <span class="portrait-empty__text">阅读分类不足，暂无法生成星盘</span>
+                    <span class="portrait-empty__hint">多阅读几个分类的文章吧</span>
+                  </div>
+                  <div v-else ref="categoryRadarRef" class="radar-chart"></div>
+                </div>
+              </div>
+              <!-- 3. 行为能量环 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Setting /></el-icon> 行为能量环</span>
+                </div>
+                <div class="portrait-card__body">
+                  <div v-if="behaviorTotal === 0" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无行为数据</span>
+                    <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
+                  </div>
+                  <div v-else class="behavior-ring-wrap">
+                    <div class="ring-chart" :style="{ background: behaviorConicGradient }">
+                      <div class="ring-center">
+                        <span class="ring-total">{{ behaviorTotal }}</span>
+                        <span class="ring-label">总行为</span>
+                      </div>
+                    </div>
+                    <div class="ring-legend">
+                      <div v-for="seg in behaviorRingSegments" :key="seg.key" class="ring-legend-item" @click="handleBehaviorSegmentClick(seg.key)">
+                        <span class="legend-dot" :style="{ background: seg.color }"></span>
+                        <span class="legend-name">{{ seg.label }}</span>
+                        <span class="legend-count">{{ seg.count }}</span>
+                        <span class="legend-pct">{{ seg.pct }}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 4. AI 使用洞察 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><MagicStick /></el-icon> AI 使用洞察</span>
+                </div>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="aiInsightLoading" :rows="3" animated />
+                  <div v-else-if="!aiInsightSummary" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无 AI 生成记录</span>
+                    <span class="portrait-empty__hint">去 AI 生成页面体验智能摘要吧</span>
+                  </div>
+                  <div v-else class="ai-insight">
+                    <div class="ai-insight__total">
+                      <span class="ai-insight__big-num">{{ aiInsightSummary.total }}</span>
+                      <span class="ai-insight__big-label">AI 生成总次数</span>
+                    </div>
+                    <div class="ai-insight__bars">
+                      <div class="ai-bar-row">
+                        <span class="ai-bar-label">新闻导入</span>
+                        <div class="ai-bar-track"><div class="ai-bar-fill news" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.newsCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
+                        <span class="ai-bar-val">{{ aiInsightSummary.newsCount }}</span>
+                      </div>
+                      <div class="ai-bar-row">
+                        <span class="ai-bar-label">手动输入</span>
+                        <div class="ai-bar-track"><div class="ai-bar-fill manual" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.manualCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
+                        <span class="ai-bar-val">{{ aiInsightSummary.manualCount }}</span>
+                      </div>
+                    </div>
+                    <div class="ai-insight__risk">
+                      <span class="risk-label">风险分布</span>
+                      <div class="risk-tags">
+                        <el-tag size="small" type="success" round>低 {{ aiInsightSummary.lowCount }}</el-tag>
+                        <el-tag size="small" type="warning" round>中 {{ aiInsightSummary.mediumCount }}</el-tag>
+                        <el-tag size="small" type="danger" round>高 {{ aiInsightSummary.highCount }}</el-tag>
+                      </div>
+                    </div>
+                    <div v-if="aiInsightSummary.lastRecord" class="ai-insight__last">
+                      <span class="last-label">最近生成：</span>
+                      <span class="last-title">{{ aiInsightSummary.lastRecord.source_title || `记录 #${aiInsightSummary.lastRecord.id}` }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p class="user-desc">欢迎回来，继续探索精彩内容</p>
           </div>
         </div>
-        <div class="header-actions">
-          <el-button
-            type="primary"
-            :icon="Edit"
-            size="default"
-            class="header-edit-btn"
-            @click="openEditDialog()"
-          >
-            编辑资料
-          </el-button>
-        </div>
-      </div>
-      <div class="quick-stats">
-          <div class="quick-stat-item" @click="handleStatCardClick('history')">
-            <span class="quick-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
-            <span class="quick-stat-label">浏览</span>
-          </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('favorites')">
-            <span class="quick-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
-            <span class="quick-stat-label">收藏</span>
-          </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('comments')">
-            <span class="quick-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
-            <span class="quick-stat-label">评论</span>
-          </div>
-          <div class="divider"></div>
-          <div class="quick-stat-item" @click="handleStatCardClick('ai-records')">
-            <span class="quick-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
-            <span class="quick-stat-label">AI生成</span>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <el-card class="content-card" shadow="never">
-      <el-tabs v-model="activeTab" class="profile-tabs" @tab-change="handleTabChange">
-        <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key">
-          <template #label>
-            <component :is="tab.icon" :size="18" class="tab-icon" />
-            <span>{{ tab.label }}</span>
-          </template>
+        <!-- ===== 记录模块（浏览/收藏/评论/AI/阅读脉络） ===== -->
+        <div v-else class="module-content">
+          <div class="module-header">
+            <h2 class="module-title">
+              <el-icon><component :is="profileNavItems.find(i => i.key === activeTab)?.icon || Clock" /></el-icon>
+              {{ profileNavItems.find(i => i.key === activeTab)?.label || '' }}
+            </h2>
+            <p class="module-desc">{{ profileNavItems.find(i => i.key === activeTab)?.desc || '' }}</p>
+          </div>
 
-          <div v-if="loadingTab === tab.key" class="loading-container">
+          <div v-if="loadingTab === activeTab" class="loading-container">
             <el-skeleton :rows="6" animated />
           </div>
 
-          <template v-else-if="tab.key === 'history'">
+          <template v-else-if="activeTab === 'history'">
+            <!-- ===== 浏览分类胶囊比例条 ===== -->
+            <div class="browse-capsule-panel">
+              <div v-if="browseCapsuleLoading" class="capsule-loading">
+                <el-skeleton :rows="2" animated />
+              </div>
+              <div class="capsule-row">
+                <span class="capsule-title">新闻浏览分类分布</span>
+                <span class="capsule-subtitle">基于最近浏览记录样本统计</span>
+                <div v-if="newsCategorySegments.length > 0" class="capsule-bar-wrap">
+                  <div class="capsule-bar">
+                    <div
+                      v-for="(seg, idx) in newsCategorySegments"
+                      :key="seg.name"
+                      class="capsule-seg"
+                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
+                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                    ></div>
+                  </div>
+                  <div class="capsule-legend">
+                    <span v-for="(seg, idx) in newsCategorySegments" :key="seg.name" class="capsule-legend-item">
+                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
+                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="capsule-empty">暂无新闻浏览分类数据</div>
+              </div>
+              <div class="capsule-row">
+                <span class="capsule-title">帖子浏览标签分布</span>
+                <span class="capsule-subtitle">基于当前已加载浏览记录统计</span>
+                <div v-if="postCategorySegments.length > 0" class="capsule-bar-wrap">
+                  <div class="capsule-bar">
+                    <div
+                      v-for="(seg, idx) in postCategorySegments"
+                      :key="seg.name"
+                      class="capsule-seg"
+                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
+                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                    ></div>
+                  </div>
+                  <div class="capsule-legend">
+                    <span v-for="(seg, idx) in postCategorySegments" :key="seg.name" class="capsule-legend-item">
+                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
+                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="capsule-empty">暂无帖子浏览标签数据</div>
+              </div>
+            </div>
+
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0; loadBrowseHistory()">
@@ -771,7 +1271,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'favorites'">
+          <template v-else-if="activeTab === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="favoriteType" size="small" class="segmented-control" @change="favoriteSearchKeyword = ''; currentPage = 1; favorites = []; totalCount = 0; loadFavorites()">
@@ -841,7 +1341,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'comments'">
+          <template v-else-if="activeTab === 'comments'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="commentType" size="small" class="segmented-control" @change="commentSearchKeyword = ''; currentPage = 1; comments = []; totalCount = 0; loadComments()">
@@ -910,7 +1410,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'ai-records'">
+          <template v-else-if="activeTab === 'ai-records'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-input
@@ -997,13 +1497,13 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'trajectory'">
+          <template v-else-if="activeTab === 'trajectory'">
             <ReadingTrajectory />
           </template>
 
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+        </div>
+      </div>
+    </section>
 
     <el-dialog v-model="editDialogVisible" title="编辑资料" width="520px" class="edit-dialog" :close-on-click-modal="false">
       <el-tabs v-model="activeEditTab" class="edit-tabs">
@@ -1140,247 +1640,857 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px 24px;
-}
-
-.profile-header {
-  position: relative;
-  margin-bottom: 24px;
-  border-radius: 16px;
+/* ===== 全屏工作台 ===== */
+.profile-page {
+  height: calc(100vh - 64px);
   overflow: hidden;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  background: #f5f7fb;
 }
 
-.header-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 140px;
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 45%, #38bdf8 100%);
-  opacity: 1;
-}
-
-.header-bg::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.15) 100%);
-}
-
-.header-bg::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(30px, -30px) rotate(180deg); }
-}
-
-.header-content {
-  position: relative;
-  z-index: 1;
-  padding: 28px 28px 20px;
-}
-
-.header-top-row {
+/* ===== 左侧个人中心栏 ===== */
+.profile-sidebar {
+  height: 100%;
+  overflow-y: auto;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  flex-direction: column;
+  padding: 24px 18px;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  gap: 20px;
 }
 
-.header-actions {
+.sidebar-user-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 16px 20px;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 50%, #fff 100%);
+  border-radius: 18px;
+  border: 1px solid #e0e7ff;
+  gap: 12px;
+}
+
+.sidebar-avatar-col {
   flex-shrink: 0;
+}
+
+.sidebar-avatar {
+  border: 4px solid #fff;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.2), 0 0 0 2px #bfdbfe;
+}
+
+.sidebar-user-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.sidebar-user-role {
+  margin-bottom: 4px;
+}
+
+.sidebar-user-meta {
   display: flex;
-  align-items: flex-start;
-  padding-top: 4px;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: #64748b;
 }
 
-.header-edit-btn {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.35);
-  color: #fff;
+.sidebar-user-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.sidebar-reading-tag {
+  font-size: 12px;
+}
+
+.sidebar-user-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+.sidebar-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  background: #f8fafc;
+}
+
+.sidebar-stat-item:hover {
+  background: #eff6ff;
+}
+
+.sidebar-stat-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1.2;
+}
+
+.sidebar-stat-lbl {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.sidebar-edit-btn {
+  width: 100%;
+  border-radius: 10px;
+  height: 36px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar-nav-title {
+  font-size: 11px;
   font-weight: 600;
-  backdrop-filter: blur(8px);
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px 8px;
 }
 
-.header-edit-btn:hover {
-  background: rgba(255, 255, 255, 0.32) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  color: #fff !important;
-}
-
-.user-profile {
+.sidebar-nav-item {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex: 1;
-  min-width: 0;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
 }
 
+.sidebar-nav-item:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.sidebar-nav-item--active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+  border: 1px solid #bfdbfe;
+}
+
+.sidebar-nav-label {
+  font-size: 14px;
+}
+
+/* ===== 右侧主内容区 ===== */
+.profile-main-panel {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-module-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.module-header {
+  margin-bottom: 20px;
+}
+
+.module-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.module-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.module-content {
+  height: 100%;
+}
+
+/* ===== 模块内统计小卡片 ===== */
+.module-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.module-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.module-stat-card:hover {
+  background: #f0f5ff;
+  border-color: #bfdbfe;
+}
+
+.module-stat-card--active {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.module-stat-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.module-stat-card__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.module-stat-card__num {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.module-stat-card__lbl {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* ===== 阅读画像占位区 ===== */
+.reading-portrait-placeholder {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+}
+
+.portrait-header {
+  margin-bottom: 20px;
+}
+
+.portrait-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portrait-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.portrait-skeletons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.portrait-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  transition: background 0.3s ease;
+}
+
+.portrait-skeleton-card:hover {
+  background: #f0f5ff;
+}
+
+.skeleton-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #93c5fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeleton-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.skeleton-hint {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+/* ===== 头像包装 ===== */
 .avatar-wrapper {
   position: relative;
   flex-shrink: 0;
 }
 
 .user-avatar {
-  border: 4px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
 }
 
-.user-info {
-  flex: 1;
-  min-width: 0;
+/* ===== 阅读画像区（insights 模块内） ===== */
+.reading-portrait {
+  margin-top: 0;
 }
 
-.user-name-row {
+.portrait-header-right {
   display: flex;
-  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.portrait-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  margin-bottom: 8px;
 }
 
-.user-name {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-}
-
-.user-tags {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.user-id {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.user-desc {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 15px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.quick-stats {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.96);
+.portrait-card {
+  border: 1px solid #e5e7eb;
   border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
+  overflow: hidden;
+  background: #fff;
+  transition: box-shadow 0.3s ease;
 }
 
-.quick-stat-item {
+.portrait-card:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.portrait-card__header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.portrait-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.portrait-card__body {
+  padding: 16px 18px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portrait-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 4px 16px;
-  border-radius: 10px;
-  transition: background 0.25s ease, transform 0.25s ease;
+  gap: 8px;
+  color: #94a3b8;
+}
+
+.portrait-empty__icon {
+  font-size: 32px;
+}
+
+.portrait-empty__text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.portrait-empty__hint {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+/* -- GitHub 风格热力图 -- */
+.activity-calendar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.heatmap-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.heatmap-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.heatmap-grid-wrap {
+  --cell-size: 24px;
+  --cell-gap: 6px;
+  --cell-radius: 5px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.heatmap-grid-wrap.range-30 {
+  --cell-size: 28px;
+  --cell-gap: 7px;
+  --cell-radius: 6px;
+}
+
+.heatmap-grid-wrap.range-60 {
+  --cell-size: 23px;
+  --cell-gap: 5px;
+  --cell-radius: 5px;
+}
+
+.heatmap-y-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+  padding-top: 22px;
+  flex-shrink: 0;
+}
+
+.heatmap-y-labels span {
+  height: var(--cell-size);
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: var(--cell-size);
+  display: flex;
+  align-items: center;
+}
+
+.heatmap-scroll {
+  flex: 1;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.heatmap-months {
+  display: grid;
+  margin-bottom: 5px;
+  width: 100%;
+}
+
+.heatmap-month-label {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.heatmap-board {
+  display: flex;
+  justify-content: center;
+}
+
+.heatmap-weeks {
+  display: grid;
+  grid-auto-flow: column;
+  gap: var(--cell-gap);
+}
+
+.heatmap-cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  border-radius: var(--cell-radius);
   cursor: pointer;
-  user-select: none;
+  transition: outline 0.1s, transform 0.1s;
+  outline: 1px solid rgba(255,255,255,0.7);
 }
 
-.quick-stat-item:hover {
-  background: rgba(37, 99, 235, 0.08);
-  transform: translateY(-2px);
+.heatmap-cell:hover {
+  outline: 2px solid #6366f1;
+  transform: scale(1.1);
+  z-index: 1;
 }
 
-.quick-stat-num {
-  font-size: 28px;
+.heat-selected {
+  outline: 2.5px solid #4338ca !important;
+}
+
+.heat-empty { background: transparent; outline: none; cursor: default; }
+
+/* 蓝紫色热力 */
+.heat-0 { background: #f1f5f9; }
+.heat-1 { background: #e0e7ff; }
+.heat-2 { background: #a5b4fc; }
+.heat-3 { background: #6366f1; }
+.heat-4 { background: #4338ca; }
+
+.heatmap-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.heatmap-selected-info {
+  font-size: 12px;
+  color: #4338ca;
+  font-weight: 500;
+}
+
+.heatmap-hint {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.legend-label {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.legend-dot.heat-0 { background: #f1f5f9; }
+.legend-dot.heat-1 { background: #e0e7ff; }
+.legend-dot.heat-2 { background: #a5b4fc; }
+.legend-dot.heat-3 { background: #6366f1; }
+.legend-dot.heat-4 { background: #4338ca; }
+
+/* -- 兴趣雷达 -- */
+.radar-chart {
+  width: 100%;
+  height: 300px;
+  min-height: 260px;
+}
+
+/* -- 行为能量环 -- */
+.behavior-ring-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  justify-content: center;
+}
+
+.ring-chart {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ring-center {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.ring-total {
+  font-size: 26px;
   font-weight: 700;
-  color: #2563eb;
+  color: #1e293b;
+  line-height: 1.1;
 }
 
-.quick-stat-label {
+.ring-label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ring-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ring-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.ring-legend-item:hover {
+  background: #f1f5f9;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  font-size: 13px;
+  color: #475569;
+  width: 40px;
+}
+
+.legend-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.legend-pct {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* -- AI 使用洞察 -- */
+.ai-insight {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ai-insight__total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ai-insight__big-num {
+  font-size: 32px;
+  font-weight: 700;
+  color: #8b5cf6;
+}
+
+.ai-insight__big-label {
   font-size: 14px;
   color: #64748b;
 }
 
-.divider {
-  width: 1px;
-  height: 40px;
-  background: rgba(148, 163, 184, 0.30);
+.ai-insight__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.content-card {
-  border-radius: 18px;
+.ai-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-bar-label {
+  font-size: 12px;
+  color: #64748b;
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.ai-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 5px;
   overflow: hidden;
-  border-color: #e5e7eb;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
-.content-card :deep(.el-card__body) {
-  padding: 0 8px 8px;
+.ai-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.6s ease;
 }
 
-.profile-tabs :deep(.el-tabs__header) {
-  margin: 0;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
+.ai-bar-fill.news { background: #3b82f6; }
+.ai-bar-fill.manual { background: #8b5cf6; }
 
-.profile-tabs :deep(.el-tabs__nav-wrap::after) {
-  display: none;
-}
-
-.profile-tabs :deep(.el-tabs__item) {
-  height: 56px;
-  font-size: 15px;
-  color: var(--el-text-color-secondary);
-}
-
-.profile-tabs :deep(.el-tabs__item.is-active) {
-  color: #2563eb;
+.ai-bar-val {
+  font-size: 13px;
   font-weight: 600;
+  color: #1e293b;
+  width: 24px;
+  text-align: right;
 }
 
-.profile-tabs :deep(.el-tabs__item:hover) {
-  color: #2563eb;
+.ai-insight__risk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.profile-tabs :deep(.el-tabs__active-bar) {
-  background-color: #2563eb;
+.risk-label {
+  font-size: 12px;
+  color: #64748b;
 }
 
-.profile-tabs :deep(.el-tab-pane) {
-  padding-top: 4px;
+.risk-tags {
+  display: flex;
+  gap: 6px;
 }
 
-.profile-tabs :deep(.el-tab-pane) {
-  width: 100%;
+.ai-insight__last {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
 }
 
-.profile-tabs :deep(.el-tabs__content) {
-  width: 100%;
+.last-label {
+  color: #94a3b8;
+  flex-shrink: 0;
 }
 
-.tab-icon {
-  margin-right: 6px;
+.last-title {
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* ===== 浏览分类胶囊比例条 ===== */
+.browse-capsule-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.capsule-row {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.capsule-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-right: 10px;
+}
+
+.capsule-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.capsule-bar-wrap {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capsule-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.capsule-seg {
+  transition: filter 0.2s;
+  cursor: default;
+}
+
+.capsule-seg:hover {
+  filter: brightness(1.15);
+}
+
+.capsule-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.capsule-legend-item {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.capsule-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.capsule-empty {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+/* ===== 内容 Tab 区域 ===== */
 
 .loading-container {
   padding: 24px;
@@ -1970,46 +3080,79 @@ onMounted(async () => {
   color: var(--el-text-color-secondary);
 }
 
-@media (max-width: 768px) {
-  .page-container {
-    padding: 0 16px 16px;
+@media (max-width: 900px) {
+  .profile-page {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
   }
 
-  .header-content {
-    padding: 24px 20px 20px;
-  }
-
-  .user-profile {
+  .profile-sidebar {
+    height: auto;
     flex-direction: column;
-    text-align: center;
+    gap: 12px;
+    padding: 16px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
   }
 
-  .header-top-row {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .header-actions {
-    padding-top: 0;
-  }
-
-  .user-name-row {
-    justify-content: center;
+  .sidebar-user-card {
+    flex-direction: row;
     flex-wrap: wrap;
-  }
-
-  .user-tags {
     justify-content: center;
+    gap: 12px;
+    padding: 14px;
   }
 
-  .quick-stats {
+  .sidebar-user-stats {
+    width: auto;
+    gap: 12px;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .sidebar-nav-title {
+    display: none;
+  }
+
+  .sidebar-nav-item {
+    flex-shrink: 0;
+    padding: 6px 10px;
+  }
+
+  .profile-main-panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .profile-module-body {
+    overflow-y: visible;
     padding: 16px;
   }
 
-  .quick-stat-num {
-    font-size: 22px;
+  .module-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .heatmap-grid-wrap { --cell-size: 18px; --cell-gap: 4px; }
+  .heatmap-grid-wrap.range-30 { --cell-size: 22px; --cell-gap: 5px; }
+  .heatmap-grid-wrap.range-60 { --cell-size: 18px; --cell-gap: 4px; }
+
+  .portrait-grid {
+    grid-template-columns: 1fr;
   }
 
+  .behavior-ring-wrap {
+    flex-direction: column;
+    align-items: center;
+  }
 
   .tab-toolbar {
     flex-direction: column;
@@ -2022,8 +3165,13 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
+  .module-stats-row {
+    grid-template-columns: 1fr;
+  }
 
-
+  .portrait-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .edit-tabs {

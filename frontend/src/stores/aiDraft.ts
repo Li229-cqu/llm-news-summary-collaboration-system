@@ -56,6 +56,13 @@ export const useAIDraftStore = defineStore('aiDraft', {
       this.inputText = text
     },
 
+    /** 设置上传文件来源 */
+    setFromUpload(filename: string, content: string) {
+      this.sourceTitle = filename
+      this.sourceContent = content
+      this.inputText = content
+    },
+
     /** 合并更新参数 */
     setParams(params: Partial<AIGenerateParams>) {
       this.params = {

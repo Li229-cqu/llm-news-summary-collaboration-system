@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS `ai_generate_record` (
   `news_elements` JSON DEFAULT NULL,
   `risk_level` VARCHAR(32) DEFAULT 'low',
   `check_result` JSON DEFAULT NULL,
+  `ai_source` VARCHAR(16) DEFAULT 'mock' COMMENT 'AI来源：mock（模拟）、llm（真实AI）',
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
