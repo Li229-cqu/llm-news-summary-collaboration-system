@@ -17,6 +17,7 @@ const handleInputChange = (text: string) => {
 
 const handleClearInput = () => {
   aiDraft.setInputText('')
+  aiDraft.clearSourceNews()
   ElMessage.success('已清空正文')
 }
 
@@ -45,7 +46,7 @@ const handleFileChange = async (event: Event) => {
     const response = await uploadFile(formData)
     
     if (response.content) {
-      aiDraft.setInputText(response.content)
+      aiDraft.setFromUpload(file.name, response.content)
       ElMessage.success(`文件 "${response.filename}" 上传成功，已提取文本内容`)
     } else {
       ElMessage.warning(response.message || '文件内容为空')
@@ -145,7 +146,8 @@ const handleFileChange = async (event: Event) => {
 
 .text-input {
   width: 100%;
-  min-height: 200px;
+  min-height: 350px;
+  height: 350px;
   padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
