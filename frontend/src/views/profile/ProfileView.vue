@@ -367,6 +367,52 @@ const filteredBrowseHistory = computed(() => {
   )
 })
 
+// ===== 浏览分类胶囊比例条 =====
+interface CategorySegment { name: string; count: number; pct: number }
+const catSegmentColors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#0ea5e9', '#94a3b8']
+const browseCapsuleLoading = ref(false)
+const newsCapsuleItems = ref<BrowseHistoryItem[]>([])
+const postCapsuleItems = ref<BrowseHistoryItem[]>([])
+
+function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string): CategorySegment[] {
+  const catMap = new Map<string, number>()
+  let total = 0
+  items.forEach(item => {
+    const cat = (item as any).category_name || defaultLabel
+    catMap.set(cat, (catMap.get(cat) || 0) + 1)
+    total++
+  })
+  if (total === 0) return []
+  const sorted = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, 5)
+  const result = top.map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }))
+  if (sorted.length > 5) {
+    const otherCount = sorted.slice(5).reduce((s, [, c]) => s + c, 0)
+    result.push({ name: '其他', count: otherCount, pct: Math.round((otherCount / total) * 100) })
+  }
+  return result
+}
+
+const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻'))
+const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览'))
+
+async function loadBrowseCapsuleData() {
+  browseCapsuleLoading.value = true
+  try {
+    const [newsRes, postRes] = await Promise.all([
+      getBrowseHistory(1, 50, 'news'),
+      getBrowseHistory(1, 50, 'post'),
+    ])
+    newsCapsuleItems.value = (newsRes as any).list || []
+    postCapsuleItems.value = (postRes as any).list || []
+  } catch {
+    newsCapsuleItems.value = []
+    postCapsuleItems.value = []
+  } finally {
+    browseCapsuleLoading.value = false
+  }
+}
+
 const filteredFavorites = computed(() => {
   if (!favoriteSearchKeyword.value) return favorites.value
   const query = favoriteSearchKeyword.value.toLowerCase()
@@ -759,6 +805,7 @@ function handleTabChange(key: string) {
   currentPage.value = 1
   if (key === 'history') {
     loadBrowseHistory()
+    loadBrowseCapsuleData()
   } else if (key === 'favorites') {
     loadFavorites()
   } else if (key === 'comments') {
@@ -778,6 +825,7 @@ function handleNavClick(key: string) {
   currentPage.value = 1
   if (key === 'history') {
     loadBrowseHistory()
+    loadBrowseCapsuleData()
   } else if (key === 'favorites') {
     loadFavorites()
   } else if (key === 'comments') {
@@ -796,6 +844,7 @@ function handleClearHistory() {
     .then(() => {
       browseHistory.value = []
       totalCount.value = 0
+      loadBrowseCapsuleData()
       ElMessage.success('浏览历史已清空')
     })
     .catch(() => {})
@@ -1095,6 +1144,57 @@ onMounted(async () => {
           </div>
 
           <template v-else-if="activeTab === 'history'">
+            <!-- ===== 浏览分类胶囊比例条 ===== -->
+            <div class="browse-capsule-panel">
+              <div v-if="browseCapsuleLoading" class="capsule-loading">
+                <el-skeleton :rows="2" animated />
+              </div>
+              <div class="capsule-row">
+                <span class="capsule-title">新闻浏览分类分布</span>
+                <span class="capsule-subtitle">基于最近浏览记录样本统计</span>
+                <div v-if="newsCategorySegments.length > 0" class="capsule-bar-wrap">
+                  <div class="capsule-bar">
+                    <div
+                      v-for="(seg, idx) in newsCategorySegments"
+                      :key="seg.name"
+                      class="capsule-seg"
+                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
+                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                    ></div>
+                  </div>
+                  <div class="capsule-legend">
+                    <span v-for="(seg, idx) in newsCategorySegments" :key="seg.name" class="capsule-legend-item">
+                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
+                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="capsule-empty">暂无新闻浏览分类数据</div>
+              </div>
+              <div class="capsule-row">
+                <span class="capsule-title">帖子浏览标签分布</span>
+                <span class="capsule-subtitle">基于当前已加载浏览记录统计</span>
+                <div v-if="postCategorySegments.length > 0" class="capsule-bar-wrap">
+                  <div class="capsule-bar">
+                    <div
+                      v-for="(seg, idx) in postCategorySegments"
+                      :key="seg.name"
+                      class="capsule-seg"
+                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
+                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                    ></div>
+                  </div>
+                  <div class="capsule-legend">
+                    <span v-for="(seg, idx) in postCategorySegments" :key="seg.name" class="capsule-legend-item">
+                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
+                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="capsule-empty">暂无帖子浏览标签数据</div>
+              </div>
+            </div>
+
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0; loadBrowseHistory()">
@@ -2310,6 +2410,84 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===== 浏览分类胶囊比例条 ===== */
+.browse-capsule-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.capsule-row {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.capsule-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-right: 10px;
+}
+
+.capsule-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.capsule-bar-wrap {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capsule-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.capsule-seg {
+  transition: filter 0.2s;
+  cursor: default;
+}
+
+.capsule-seg:hover {
+  filter: brightness(1.15);
+}
+
+.capsule-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.capsule-legend-item {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.capsule-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.capsule-empty {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
 }
 
 /* ===== 内容 Tab 区域 ===== */
