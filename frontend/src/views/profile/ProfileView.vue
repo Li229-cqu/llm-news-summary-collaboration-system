@@ -48,7 +48,7 @@ import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('history')
+const activeTab = ref('insights')
 const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
@@ -80,7 +80,8 @@ const statCards = [
 ]
 
 // ===== 阅读画像状态 =====
-const readingRange = ref<7 | 30>(7)
+const readingRange = ref<30 | 60>(30)
+const selectedReadingDay = ref<string | null>(null)
 const readingTimelineLoading = ref(false)
 const readingTimelineData = ref<ReadingTimelineResponse | null>(null)
 const aiInsightLoading = ref(false)
@@ -117,25 +118,48 @@ const behaviorConicGradient = computed(() => {
   return `conic-gradient(${parts.join(', ')})`
 })
 
-const activityCalendarDays = computed(() => {
-  if (!readingTimelineData.value) return []
+const heatmapWeeks = computed(() => {
+  if (!readingTimelineData.value) return { weeks: [] as { days: { date: string; weekday: number; reads: number; level: number; isEmpty: boolean }[] }[], totalReads: 0, maxReads: 0 }
   const data = readingTimelineData.value
   const dateMap = new Map<string, number>()
-  for (const item of data.items) {
-    dateMap.set(item.date, item.total_reads)
-  }
-  const days: { date: string; reads: number; level: number }[] = []
+  let totalReads = 0
+  for (const item of data.items) { dateMap.set(item.date, item.total_reads); totalReads += item.total_reads }
+  const maxReads = Math.max(...Array.from(dateMap.values()), 1)
+  const days: { date: string; weekday: number; reads: number; level: number }[] = []
   const now = new Date()
   for (let i = readingRange.value - 1; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
+    const d = new Date(now); d.setDate(d.getDate() - i)
     const key = d.toISOString().slice(0, 10)
     const reads = dateMap.get(key) || 0
-    const maxReads = Math.max(...Array.from(dateMap.values()), 1)
-    const level = reads === 0 ? 0 : Math.ceil((reads / maxReads) * 4)
-    days.push({ date: key, reads, level })
+    let level = 0
+    if (reads > 0) { const r = reads / maxReads; level = r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4 }
+    days.push({ date: key, weekday: d.getDay(), reads, level })
   }
-  return days
+  const firstWeekday = days[0]?.weekday ?? 0
+  const padStart = Array.from({ length: firstWeekday }, (_, p) => ({ date: '', weekday: p, reads: 0, level: 0, isEmpty: true }))
+  const allDays = [...padStart, ...days.map(d => ({ ...d, isEmpty: false }))]
+  const weeks: { days: typeof allDays }[] = []
+  for (let i = 0; i < allDays.length; i += 7) weeks.push({ days: allDays.slice(i, i + 7) })
+  return { weeks, totalReads, maxReads }
+})
+
+const heatmapMonths = computed(() => {
+  const months: { name: string; colStart: number }[] = []
+  let lastMonth = ''
+  heatmapWeeks.value.weeks.forEach((week, wi) => {
+    const firstDay = week.days.find(d => !d.isEmpty)
+    if (!firstDay) return
+    const d = new Date(firstDay.date); const mk = `${d.getFullYear()}-${d.getMonth()}`
+    if (mk !== lastMonth) { lastMonth = mk; months.push({ name: `${d.getMonth() + 1}月`, colStart: wi }) }
+  })
+  return months
+})
+
+const selectedDayInfo = computed(() => {
+  if (!selectedReadingDay.value || !readingTimelineData.value) return null
+  const data = readingTimelineData.value
+  const item = data.items.find(i => i.date === selectedReadingDay.value)
+  return item ? { date: selectedReadingDay.value, reads: item.total_reads } : null
 })
 
 const categoryRadarData = computed(() => {
@@ -165,11 +189,6 @@ const aiInsightSummary = computed(() => {
   return { total: records.length, manualCount, newsCount, lowCount, mediumCount, highCount, lastRecord }
 })
 
-function getFormattedDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
 async function loadReadingInsights() {
   readingTimelineLoading.value = true
   try {
@@ -178,8 +197,7 @@ async function loadReadingInsights() {
     readingTimelineData.value = null
   } finally {
     readingTimelineLoading.value = false
-    await nextTick()
-    renderCategoryRadar()
+    scheduleRadarRender()
   }
 }
 
@@ -195,7 +213,7 @@ async function loadAIInsight() {
   }
 }
 
-function handleReadingRangeChange(days: 7 | 30) {
+function handleReadingRangeChange(days: 30 | 60) {
   readingRange.value = days
   loadReadingInsights()
 }
@@ -205,7 +223,13 @@ function handleBehaviorSegmentClick(tabKey: string) {
 }
 
 function renderCategoryRadar() {
-  if (!categoryRadarRef.value) return
+  const el = categoryRadarRef.value
+  if (!el) return
+  const { clientWidth, clientHeight } = el
+  if (clientWidth === 0 || clientHeight === 0) {
+    requestAnimationFrame(() => renderCategoryRadar())
+    return
+  }
   if (categoryRadarChart) {
     categoryRadarChart.dispose()
     categoryRadarChart = null
@@ -213,7 +237,7 @@ function renderCategoryRadar() {
   const data = categoryRadarData.value
   if (data.length < 3) return
   const indicators = data.map((d) => ({ name: d.name, max: Math.max(...data.map((x) => x.count)) * 1.2 || 10 }))
-  categoryRadarChart = echarts.init(categoryRadarRef.value)
+  categoryRadarChart = echarts.init(el)
   categoryRadarChart.setOption({
     tooltip: { trigger: 'item' },
     legend: { show: true, bottom: 0, textStyle: { fontSize: 11 } },
@@ -230,16 +254,26 @@ function renderCategoryRadar() {
   })
 }
 
+function scheduleRadarRender() {
+  nextTick(() => { requestAnimationFrame(() => renderCategoryRadar()) })
+}
+
 function handleResize() {
-  if (categoryRadarChart) {
+  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
     categoryRadarChart.resize()
+  } else {
+    scheduleRadarRender()
   }
 }
+
+watch(activeTab, (tab) => {
+  if (tab === 'insights') scheduleRadarRender()
+})
 
 watch(readingRange, () => {}, { flush: 'post' })
 
 onBeforeUnmount(() => {
-  if (categoryRadarChart) {
+  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
     categoryRadarChart.dispose()
     categoryRadarChart = null
   }
@@ -313,12 +347,13 @@ const categoryDescs: Record<string, string> = {
   social: '社会热点、民生关注、公益活动',
 }
 
-const tabs = [
-  { key: 'history', label: '浏览历史', icon: Clock },
-  { key: 'favorites', label: '收藏记录', icon: Star },
-  { key: 'comments', label: '评论记录', icon: ChatDotRound },
-  { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick },
-  { key: 'trajectory', label: '阅读脉络', icon: View },
+const profileNavItems = [
+  { key: 'insights', label: '阅读画像', icon: Grid, desc: '趋势与兴趣分析' },
+  { key: 'history', label: '浏览记录', icon: Clock, desc: '新闻与帖子足迹' },
+  { key: 'favorites', label: '收藏记录', icon: Star, desc: '保存的新闻与帖子' },
+  { key: 'comments', label: '评论记录', icon: ChatDotRound, desc: '你的互动发言' },
+  { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick, desc: '标题摘要历史' },
+  { key: 'trajectory', label: '阅读脉络', icon: View, desc: '主题与阅读路径' },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -733,6 +768,25 @@ function handleTabChange(key: string) {
   }
 }
 
+function handleNavClick(key: string) {
+  if (key === activeTab.value) return
+  activeTab.value = key
+  browseSearchKeyword.value = ''
+  favoriteSearchKeyword.value = ''
+  commentSearchKeyword.value = ''
+  aiSearchKeyword.value = ''
+  currentPage.value = 1
+  if (key === 'history') {
+    loadBrowseHistory()
+  } else if (key === 'favorites') {
+    loadFavorites()
+  } else if (key === 'comments') {
+    loadComments()
+  } else if (key === 'ai-records') {
+    loadAIRecords()
+  }
+}
+
 function handleClearHistory() {
   ElMessageBox.confirm('确定要清空所有浏览历史吗？', '提示', {
     confirmButtonText: '确定',
@@ -807,250 +861,240 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="page-container">
-    <!-- ===== 顶部个人名片横幅 ===== -->
-    <div class="dashboard-hero">
-      <div class="hero-bg"></div>
-      <div class="hero-content">
-        <div class="hero-left">
-          <div class="hero-avatar-col">
-            <div class="avatar-wrapper">
-              <el-avatar :size="88" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="user-avatar">
-                {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
-              </el-avatar>
-            </div>
+  <main class="profile-page">
+    <!-- ===== 左侧个人中心栏 ===== -->
+    <aside class="profile-sidebar">
+      <div class="sidebar-user-card">
+        <div class="sidebar-avatar-col">
+          <el-avatar :size="88" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User" class="sidebar-avatar">
+            {{ userStore.userInfo?.nickname?.charAt(0) || '用' }}
+          </el-avatar>
+        </div>
+        <div class="sidebar-user-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</div>
+        <div class="sidebar-user-role">
+          <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round size="small">
+            {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
+          </el-tag>
+        </div>
+        <div class="sidebar-user-meta">
+          <span>ID: {{ userStore.userInfo?.id || '-' }}</span>
+          <span v-if="(userStore.userInfo as any)?.email">{{ (userStore.userInfo as any)?.email }}</span>
+        </div>
+        <div class="sidebar-user-tags">
+          <el-tag v-for="tag in readingTags" :key="tag" size="small" effect="plain" class="sidebar-reading-tag" :type="tag === '新用户' ? 'info' : ''">
+            {{ tag }}
+          </el-tag>
+        </div>
+        <div class="sidebar-user-stats">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('history')">
+            <span class="sidebar-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">浏览</span>
           </div>
-          <div class="hero-info-col">
-            <div class="hero-name-row">
-              <h1 class="hero-name">{{ userStore.userInfo?.nickname || '未登录用户' }}</h1>
-              <el-tag :type="userStore.isAdmin ? 'danger' : userStore.isEditor ? 'warning' : 'info'" effect="dark" round size="default">
-                {{ userStore.isAdmin ? '管理员' : userStore.isEditor ? '审核/编辑' : '普通用户' }}
-              </el-tag>
-            </div>
-            <div class="hero-meta-row">
-              <span class="hero-meta-item">
-                <el-icon><User /></el-icon>
-                <span>ID: {{ userStore.userInfo?.id || '-' }}</span>
-              </span>
-              <span v-if="(userStore.userInfo as any)?.email" class="hero-meta-item">
-                <el-icon><Message /></el-icon>
-                <span>{{ (userStore.userInfo as any)?.email }}</span>
-              </span>
-            </div>
-            <div class="hero-tags-row">
-              <el-tag
-                v-for="tag in readingTags"
-                :key="tag"
-                size="small"
-                effect="plain"
-                class="hero-reading-tag"
-                :type="tag === '新用户' ? 'info' : ''"
-              >
-                {{ tag }}
-              </el-tag>
-            </div>
-            <p class="hero-desc">欢迎回来，继续探索你的新闻阅读足迹</p>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('favorites')">
+            <span class="sidebar-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">收藏</span>
+          </div>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('comments')">
+            <span class="sidebar-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">评论</span>
+          </div>
+          <div class="sidebar-stat-item" @click="handleStatCardClick('ai-records')">
+            <span class="sidebar-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
+            <span class="sidebar-stat-lbl">AI</span>
           </div>
         </div>
-        <div class="hero-right">
-          <el-button class="hero-edit-btn" :icon="Edit" @click="openEditDialog()">
-            编辑资料
-          </el-button>
-        </div>
+        <el-button class="sidebar-edit-btn" :icon="Edit" size="small" @click="openEditDialog()">编辑资料</el-button>
       </div>
 
-      <!-- ===== 数据概览卡片 ===== -->
-      <div class="dashboard-stats">
+      <nav class="sidebar-nav">
+        <div class="sidebar-nav-title">导航</div>
         <div
-          v-for="card in statCards"
-          :key="card.key"
-          class="dash-stat-card"
-          :class="{ 'dash-stat-card--active': activeTab === card.key }"
-          @click="handleStatCardClick(card.key)"
+          v-for="item in profileNavItems"
+          :key="item.key"
+          class="sidebar-nav-item"
+          :class="{ 'sidebar-nav-item--active': activeTab === item.key }"
+          @click="handleNavClick(item.key)"
         >
-          <div class="dash-stat-card__icon">
-            <el-icon :size="24"><component :is="card.icon" /></el-icon>
-          </div>
-          <div class="dash-stat-card__body">
-            <span class="dash-stat-card__count">{{ card.count() }}</span>
-            <span class="dash-stat-card__label">{{ card.label }}</span>
-            <span class="dash-stat-card__desc">{{ card.desc }}</span>
-          </div>
-          <div class="dash-stat-card__hint">点击查看 →</div>
+          <el-icon :size="18"><component :is="item.icon" /></el-icon>
+          <span class="sidebar-nav-label">{{ item.label }}</span>
         </div>
-      </div>
-    </div>
+      </nav>
+    </aside>
 
-    <!-- ===== 阅读画像区 ===== -->
-    <div class="reading-portrait">
-      <div class="portrait-header">
-        <h2 class="portrait-title">
-          <el-icon><Grid /></el-icon>
-          阅读画像
-        </h2>
-        <div class="portrait-header-right">
-          <el-radio-group v-model="readingRange" size="small" @change="handleReadingRangeChange">
-            <el-radio-button :value="7">近7天</el-radio-button>
-            <el-radio-button :value="30">近30天</el-radio-button>
-          </el-radio-group>
-        </div>
-      </div>
-      <p class="portrait-subtitle">根据你的浏览、收藏、评论和 AI 生成记录，生成个人内容行为画像</p>
+    <!-- ===== 右侧主内容区 ===== -->
+    <section class="profile-main-panel">
+      <div class="profile-module-body">
 
-      <div class="portrait-grid">
-        <!-- 1. 阅读活跃日历 -->
-        <div class="portrait-card">
-          <div class="portrait-card__header">
-            <span class="portrait-card__title">
-              <el-icon><Files /></el-icon> 阅读活跃日历
-            </span>
+        <!-- ===== 阅读画像模块 ===== -->
+        <div v-if="activeTab === 'insights'" class="module-content">
+          <div class="module-header">
+            <h2 class="module-title"><el-icon><Grid /></el-icon> 阅读画像</h2>
+            <p class="module-desc">通过浏览、收藏、评论和 AI 生成记录，了解你的内容行为偏好</p>
           </div>
-          <div class="portrait-card__body">
-            <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
-            <div v-else-if="!readingTimelineData || activityCalendarDays.length === 0" class="portrait-empty">
-              <span class="portrait-empty__text">暂无阅读记录</span>
+          <div class="reading-portrait">
+            <div class="portrait-header-right">
+              <el-radio-group v-model="readingRange" size="small" @change="handleReadingRangeChange">
+                <el-radio-button :value="30">近30天</el-radio-button>
+                <el-radio-button :value="60">近60天</el-radio-button>
+              </el-radio-group>
             </div>
-            <div v-else class="activity-calendar">
-              <div class="calendar-grid">
-                <div
-                  v-for="day in activityCalendarDays"
-                  :key="day.date"
-                  class="calendar-day"
-                  :class="`level-${day.level}`"
-                  :title="`${day.date}: ${day.reads} 次阅读`"
-                >
-                  <span class="calendar-day__tooltip">{{ getFormattedDate(day.date) }}<br/>{{ day.reads }} 次</span>
+            <div class="portrait-grid">
+              <!-- 1. 阅读活跃日历 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Files /></el-icon> 阅读活跃日历</span>
+                </div>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
+                  <div v-else-if="!readingTimelineData || heatmapWeeks.totalReads === 0" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无阅读记录</span>
+                  </div>
+                  <div v-else class="activity-calendar">
+                    <div class="heatmap-title-row">
+                      <span class="heatmap-title">近 {{ readingRange }} 天阅读活跃 · 共 {{ heatmapWeeks.totalReads }} 次阅读</span>
+                    </div>
+                    <div class="heatmap-grid-wrap" :class="`range-${readingRange}`">
+                      <div class="heatmap-y-labels">
+                        <span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span><span></span>
+                      </div>
+                      <div class="heatmap-scroll">
+                        <div class="heatmap-months">
+                          <span v-for="m in heatmapMonths" :key="m.name" :style="{ gridColumn: `${m.colStart + 1} / span 1` }" class="heatmap-month-label">{{ m.name }}</span>
+                        </div>
+                        <div class="heatmap-board">
+                          <div class="heatmap-weeks" :style="{ gridTemplateColumns: `repeat(${heatmapWeeks.weeks.length}, var(--cell-size))` }">
+                            <template v-for="(week, wi) in heatmapWeeks.weeks" :key="wi">
+                              <div
+                                v-for="(day, di) in week.days"
+                                :key="`${wi}-${di}`"
+                                class="heatmap-cell"
+                                :class="{ [`heat-${day.level}`]: !day.isEmpty, 'heat-empty': day.isEmpty, 'heat-selected': selectedReadingDay === day.date }"
+                                :style="{ gridColumn: wi + 1, gridRow: di + 1 }"
+                                :title="day.isEmpty ? '' : `${day.date}: ${day.reads} 次阅读`"
+                                @click="day.isEmpty ? null : selectedReadingDay = selectedReadingDay === day.date ? null : day.date"
+                              ></div>
+                            </template>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="heatmap-footer">
+                      <span v-if="selectedDayInfo" class="heatmap-selected-info">{{ selectedDayInfo.date }} · 阅读 {{ selectedDayInfo.reads }} 篇</span>
+                      <span v-else class="heatmap-hint">点击日期查看当天活跃情况</span>
+                      <div class="heatmap-legend">
+                        <span class="legend-label">少</span>
+                        <span class="legend-dot heat-0"></span><span class="legend-dot heat-1"></span><span class="legend-dot heat-2"></span><span class="legend-dot heat-3"></span><span class="legend-dot heat-4"></span>
+                        <span class="legend-label">多</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="calendar-legend">
-                <span class="legend-label">少</span>
-                <span class="legend-box level-0"></span>
-                <span class="legend-box level-1"></span>
-                <span class="legend-box level-2"></span>
-                <span class="legend-box level-3"></span>
-                <span class="legend-box level-4"></span>
-                <span class="legend-label">多</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 2. 兴趣星盘 / 兴趣雷达 -->
-        <div class="portrait-card">
-          <div class="portrait-card__header">
-            <span class="portrait-card__title">
-              <el-icon><Grid /></el-icon> 兴趣星盘
-            </span>
-          </div>
-          <div class="portrait-card__body">
-            <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
-            <div v-else-if="categoryRadarData.length < 3" class="portrait-empty">
-              <span class="portrait-empty__icon">📡</span>
-              <span class="portrait-empty__text">阅读分类不足，暂无法生成星盘</span>
-              <span class="portrait-empty__hint">多阅读几个分类的文章吧</span>
-            </div>
-            <div v-else ref="categoryRadarRef" class="radar-chart"></div>
-          </div>
-        </div>
-
-        <!-- 3. 行为能量环 -->
-        <div class="portrait-card">
-          <div class="portrait-card__header">
-            <span class="portrait-card__title">
-              <el-icon><Setting /></el-icon> 行为能量环
-            </span>
-          </div>
-          <div class="portrait-card__body">
-            <div v-if="behaviorTotal === 0" class="portrait-empty">
-              <span class="portrait-empty__text">暂无行为数据</span>
-              <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
-            </div>
-            <div v-else class="behavior-ring-wrap">
-              <div class="ring-chart" :style="{ background: behaviorConicGradient }">
-                <div class="ring-center">
-                  <span class="ring-total">{{ behaviorTotal }}</span>
-                  <span class="ring-label">总行为</span>
+              <!-- 2. 兴趣星盘 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Grid /></el-icon> 兴趣星盘</span>
+                </div>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
+                  <div v-else-if="categoryRadarData.length < 3" class="portrait-empty">
+                    <span class="portrait-empty__icon">📡</span>
+                    <span class="portrait-empty__text">阅读分类不足，暂无法生成星盘</span>
+                    <span class="portrait-empty__hint">多阅读几个分类的文章吧</span>
+                  </div>
+                  <div v-else ref="categoryRadarRef" class="radar-chart"></div>
                 </div>
               </div>
-              <div class="ring-legend">
-                <div
-                  v-for="seg in behaviorRingSegments"
-                  :key="seg.key"
-                  class="ring-legend-item"
-                  @click="handleBehaviorSegmentClick(seg.key)"
-                >
-                  <span class="legend-dot" :style="{ background: seg.color }"></span>
-                  <span class="legend-name">{{ seg.label }}</span>
-                  <span class="legend-count">{{ seg.count }}</span>
-                  <span class="legend-pct">{{ seg.pct }}%</span>
+              <!-- 3. 行为能量环 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><Setting /></el-icon> 行为能量环</span>
+                </div>
+                <div class="portrait-card__body">
+                  <div v-if="behaviorTotal === 0" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无行为数据</span>
+                    <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
+                  </div>
+                  <div v-else class="behavior-ring-wrap">
+                    <div class="ring-chart" :style="{ background: behaviorConicGradient }">
+                      <div class="ring-center">
+                        <span class="ring-total">{{ behaviorTotal }}</span>
+                        <span class="ring-label">总行为</span>
+                      </div>
+                    </div>
+                    <div class="ring-legend">
+                      <div v-for="seg in behaviorRingSegments" :key="seg.key" class="ring-legend-item" @click="handleBehaviorSegmentClick(seg.key)">
+                        <span class="legend-dot" :style="{ background: seg.color }"></span>
+                        <span class="legend-name">{{ seg.label }}</span>
+                        <span class="legend-count">{{ seg.count }}</span>
+                        <span class="legend-pct">{{ seg.pct }}%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 4. AI 使用洞察 -->
-        <div class="portrait-card">
-          <div class="portrait-card__header">
-            <span class="portrait-card__title">
-              <el-icon><MagicStick /></el-icon> AI 使用洞察
-            </span>
-          </div>
-          <div class="portrait-card__body">
-            <el-skeleton v-if="aiInsightLoading" :rows="3" animated />
-            <div v-else-if="!aiInsightSummary" class="portrait-empty">
-              <span class="portrait-empty__text">暂无 AI 生成记录</span>
-              <span class="portrait-empty__hint">去 AI 生成页面体验智能摘要吧</span>
-            </div>
-            <div v-else class="ai-insight">
-              <div class="ai-insight__total">
-                <span class="ai-insight__big-num">{{ aiInsightSummary.total }}</span>
-                <span class="ai-insight__big-label">AI 生成总次数</span>
-              </div>
-              <div class="ai-insight__bars">
-                <div class="ai-bar-row">
-                  <span class="ai-bar-label">新闻导入</span>
-                  <div class="ai-bar-track"><div class="ai-bar-fill news" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.newsCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
-                  <span class="ai-bar-val">{{ aiInsightSummary.newsCount }}</span>
+              <!-- 4. AI 使用洞察 -->
+              <div class="portrait-card">
+                <div class="portrait-card__header">
+                  <span class="portrait-card__title"><el-icon><MagicStick /></el-icon> AI 使用洞察</span>
                 </div>
-                <div class="ai-bar-row">
-                  <span class="ai-bar-label">手动输入</span>
-                  <div class="ai-bar-track"><div class="ai-bar-fill manual" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.manualCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
-                  <span class="ai-bar-val">{{ aiInsightSummary.manualCount }}</span>
+                <div class="portrait-card__body">
+                  <el-skeleton v-if="aiInsightLoading" :rows="3" animated />
+                  <div v-else-if="!aiInsightSummary" class="portrait-empty">
+                    <span class="portrait-empty__text">暂无 AI 生成记录</span>
+                    <span class="portrait-empty__hint">去 AI 生成页面体验智能摘要吧</span>
+                  </div>
+                  <div v-else class="ai-insight">
+                    <div class="ai-insight__total">
+                      <span class="ai-insight__big-num">{{ aiInsightSummary.total }}</span>
+                      <span class="ai-insight__big-label">AI 生成总次数</span>
+                    </div>
+                    <div class="ai-insight__bars">
+                      <div class="ai-bar-row">
+                        <span class="ai-bar-label">新闻导入</span>
+                        <div class="ai-bar-track"><div class="ai-bar-fill news" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.newsCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
+                        <span class="ai-bar-val">{{ aiInsightSummary.newsCount }}</span>
+                      </div>
+                      <div class="ai-bar-row">
+                        <span class="ai-bar-label">手动输入</span>
+                        <div class="ai-bar-track"><div class="ai-bar-fill manual" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.manualCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
+                        <span class="ai-bar-val">{{ aiInsightSummary.manualCount }}</span>
+                      </div>
+                    </div>
+                    <div class="ai-insight__risk">
+                      <span class="risk-label">风险分布</span>
+                      <div class="risk-tags">
+                        <el-tag size="small" type="success" round>低 {{ aiInsightSummary.lowCount }}</el-tag>
+                        <el-tag size="small" type="warning" round>中 {{ aiInsightSummary.mediumCount }}</el-tag>
+                        <el-tag size="small" type="danger" round>高 {{ aiInsightSummary.highCount }}</el-tag>
+                      </div>
+                    </div>
+                    <div v-if="aiInsightSummary.lastRecord" class="ai-insight__last">
+                      <span class="last-label">最近生成：</span>
+                      <span class="last-title">{{ aiInsightSummary.lastRecord.source_title || `记录 #${aiInsightSummary.lastRecord.id}` }}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="ai-insight__risk">
-                <span class="risk-label">风险分布</span>
-                <div class="risk-tags">
-                  <el-tag size="small" type="success" round>低 {{ aiInsightSummary.lowCount }}</el-tag>
-                  <el-tag size="small" type="warning" round>中 {{ aiInsightSummary.mediumCount }}</el-tag>
-                  <el-tag size="small" type="danger" round>高 {{ aiInsightSummary.highCount }}</el-tag>
-                </div>
-              </div>
-              <div v-if="aiInsightSummary.lastRecord" class="ai-insight__last">
-                <span class="last-label">最近生成：</span>
-                <span class="last-title">{{ aiInsightSummary.lastRecord.source_title || `记录 #${aiInsightSummary.lastRecord.id}` }}</span>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- ===== 内容记录 Tab 区域 ===== -->
-    <el-card class="content-card" shadow="never">
-      <el-tabs v-model="activeTab" class="profile-tabs" @tab-change="handleTabChange">
-        <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key">
-          <template #label>
-            <component :is="tab.icon" :size="18" class="tab-icon" />
-            <span>{{ tab.label }}</span>
-          </template>
+        <!-- ===== 记录模块（浏览/收藏/评论/AI/阅读脉络） ===== -->
+        <div v-else class="module-content">
+          <div class="module-header">
+            <h2 class="module-title">
+              <el-icon><component :is="profileNavItems.find(i => i.key === activeTab)?.icon || Clock" /></el-icon>
+              {{ profileNavItems.find(i => i.key === activeTab)?.label || '' }}
+            </h2>
+            <p class="module-desc">{{ profileNavItems.find(i => i.key === activeTab)?.desc || '' }}</p>
+          </div>
 
-          <div v-if="loadingTab === tab.key" class="loading-container">
+          <div v-if="loadingTab === activeTab" class="loading-container">
             <el-skeleton :rows="6" animated />
           </div>
 
-          <template v-else-if="tab.key === 'history'">
+          <template v-else-if="activeTab === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0; loadBrowseHistory()">
@@ -1127,7 +1171,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'favorites'">
+          <template v-else-if="activeTab === 'favorites'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="favoriteType" size="small" class="segmented-control" @change="favoriteSearchKeyword = ''; currentPage = 1; favorites = []; totalCount = 0; loadFavorites()">
@@ -1197,7 +1241,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'comments'">
+          <template v-else-if="activeTab === 'comments'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-radio-group v-model="commentType" size="small" class="segmented-control" @change="commentSearchKeyword = ''; currentPage = 1; comments = []; totalCount = 0; loadComments()">
@@ -1266,7 +1310,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'ai-records'">
+          <template v-else-if="activeTab === 'ai-records'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
                 <el-input
@@ -1353,13 +1397,13 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template v-else-if="tab.key === 'trajectory'">
+          <template v-else-if="activeTab === 'trajectory'">
             <ReadingTrajectory />
           </template>
 
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+        </div>
+      </div>
+    </section>
 
     <el-dialog v-model="editDialogVisible" title="编辑资料" width="520px" class="edit-dialog" :close-on-click-modal="false">
       <el-tabs v-model="activeEditTab" class="edit-tabs">
@@ -1496,247 +1540,257 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px 24px;
-}
-
-/* ===== 顶部个人名片横幅 ===== */
-.dashboard-hero {
-  position: relative;
-  margin-bottom: 24px;
-  border-radius: 20px;
+/* ===== 全屏工作台 ===== */
+.profile-page {
+  height: calc(100vh - 64px);
   overflow: hidden;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  background: #f5f7fb;
 }
 
-.hero-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 220px;
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #6366f1 100%);
-}
-
-.hero-bg::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.05) 0%, transparent 40%);
-}
-
-.hero-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 32px 32px 24px;
-}
-
-.hero-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-  flex: 1;
-  min-width: 0;
-}
-
-.hero-avatar-col {
-  flex-shrink: 0;
-}
-
-.avatar-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.user-avatar {
-  border: 4px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-}
-
-.hero-info-col {
-  flex: 1;
-  min-width: 0;
+/* ===== 左侧个人中心栏 ===== */
+.profile-sidebar {
+  height: 100%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  padding: 24px 18px;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  gap: 20px;
 }
 
-.hero-name-row {
+.sidebar-user-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  text-align: center;
+  padding: 28px 16px 20px;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 50%, #fff 100%);
+  border-radius: 18px;
+  border: 1px solid #e0e7ff;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
-.hero-name {
-  margin: 0;
-  font-size: 26px;
+.sidebar-avatar-col {
+  flex-shrink: 0;
+}
+
+.sidebar-avatar {
+  border: 4px solid #fff;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.2), 0 0 0 2px #bfdbfe;
+}
+
+.sidebar-user-name {
+  font-size: 20px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  line-height: 1.3;
+  color: #1e293b;
+  line-height: 1.2;
 }
 
-.hero-meta-row {
+.sidebar-user-role {
+  margin-bottom: 4px;
+}
+
+.sidebar-user-meta {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.hero-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: rgba(255, 255, 255, 0.85);
+  flex-direction: column;
+  gap: 3px;
   font-size: 13px;
+  color: #64748b;
 }
 
-.hero-tags-row {
+.sidebar-user-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  justify-content: center;
 }
 
-.hero-reading-tag {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  color: #fff !important;
-  font-weight: 500;
+.sidebar-reading-tag {
+  font-size: 12px;
 }
 
-.hero-desc {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-}
-
-.hero-right {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  padding-top: 4px;
-}
-
-.hero-edit-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
-  font-weight: 600;
-  backdrop-filter: blur(8px);
-  border-radius: 10px;
-  padding: 8px 20px;
-  transition: all 0.25s ease;
-}
-
-.hero-edit-btn:hover {
-  background: rgba(255, 255, 255, 0.3) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
-  color: #fff !important;
-  transform: translateY(-1px);
-}
-
-/* ===== 数据概览卡片 ===== */
-.dashboard-stats {
-  position: relative;
-  z-index: 2;
+.sidebar-user-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding: 0 24px 24px;
-  margin-top: -12px;
+  gap: 6px;
+  width: 100%;
 }
 
-.dash-stat-card {
+.sidebar-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  background: #f8fafc;
+}
+
+.sidebar-stat-item:hover {
+  background: #eff6ff;
+}
+
+.sidebar-stat-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1.2;
+}
+
+.sidebar-stat-lbl {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.sidebar-edit-btn {
+  width: 100%;
+  border-radius: 10px;
+  height: 36px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar-nav-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px 8px;
+}
+
+.sidebar-nav-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 20px 18px;
-  background: #fff;
-  border-radius: 16px;
-  border: 1px solid #e5e7eb;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  user-select: none;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s;
+  color: #64748b;
 }
 
-.dash-stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
+.sidebar-nav-item:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.sidebar-nav-item--active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+  border: 1px solid #bfdbfe;
+}
+
+.sidebar-nav-label {
+  font-size: 14px;
+}
+
+/* ===== 右侧主内容区 ===== */
+.profile-main-panel {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-module-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.module-header {
+  margin-bottom: 20px;
+}
+
+.module-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.module-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.module-content {
+  height: 100%;
+}
+
+/* ===== 模块内统计小卡片 ===== */
+.module-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.module-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.module-stat-card:hover {
+  background: #f0f5ff;
   border-color: #bfdbfe;
 }
 
-.dash-stat-card--active {
+.module-stat-card--active {
+  background: #eff6ff;
   border-color: #2563eb;
-  background: #f0f5ff;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
 }
 
-.dash-stat-card--active .dash-stat-card__icon {
-  background: #2563eb;
-  color: #fff;
-}
-
-.dash-stat-card__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+.module-stat-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   background: #eff6ff;
   color: #2563eb;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.3s ease;
 }
 
-.dash-stat-card__body {
-  flex: 1;
-  min-width: 0;
+.module-stat-card__body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.dash-stat-card__count {
-  font-size: 26px;
+.module-stat-card__num {
+  font-size: 20px;
   font-weight: 700;
   color: #1e293b;
   line-height: 1.2;
 }
 
-.dash-stat-card__label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.dash-stat-card__desc {
+.module-stat-card__lbl {
   font-size: 12px;
   color: #94a3b8;
-}
-
-.dash-stat-card__hint {
-  font-size: 12px;
-  color: #cbd5e1;
-  flex-shrink: 0;
-  transition: color 0.3s ease;
-}
-
-.dash-stat-card:hover .dash-stat-card__hint {
-  color: #2563eb;
 }
 
 /* ===== 阅读画像占位区 ===== */
@@ -1813,42 +1867,26 @@ onMounted(async () => {
   color: #cbd5e1;
 }
 
-/* ===== 阅读画像区 ===== */
-.reading-portrait {
-  margin-bottom: 24px;
-  padding: 24px;
-  background: #fff;
-  border-radius: 16px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-
-.portrait-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.portrait-header-right {
+/* ===== 头像包装 ===== */
+.avatar-wrapper {
+  position: relative;
   flex-shrink: 0;
 }
 
-.portrait-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.user-avatar {
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
 }
 
-.portrait-subtitle {
-  margin: 0 0 20px;
-  font-size: 13px;
-  color: #94a3b8;
+/* ===== 阅读画像区（insights 模块内） ===== */
+.reading-portrait {
+  margin-top: 0;
+}
+
+.portrait-header-right {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 .portrait-grid {
@@ -1885,7 +1923,7 @@ onMounted(async () => {
 
 .portrait-card__body {
   padding: 16px 18px;
-  min-height: 200px;
+  min-height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1914,89 +1952,173 @@ onMounted(async () => {
   color: #cbd5e1;
 }
 
-/* -- 阅读活跃日历 -- */
+/* -- GitHub 风格热力图 -- */
 .activity-calendar {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.calendar-grid {
+.heatmap-title-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.calendar-day {
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  position: relative;
+.heatmap-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.heatmap-grid-wrap {
+  --cell-size: 24px;
+  --cell-gap: 6px;
+  --cell-radius: 5px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.heatmap-grid-wrap.range-30 {
+  --cell-size: 28px;
+  --cell-gap: 7px;
+  --cell-radius: 6px;
+}
+
+.heatmap-grid-wrap.range-60 {
+  --cell-size: 23px;
+  --cell-gap: 5px;
+  --cell-radius: 5px;
+}
+
+.heatmap-y-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+  padding-top: 22px;
+  flex-shrink: 0;
+}
+
+.heatmap-y-labels span {
+  height: var(--cell-size);
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: var(--cell-size);
+  display: flex;
+  align-items: center;
+}
+
+.heatmap-scroll {
+  flex: 1;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.heatmap-months {
+  display: grid;
+  margin-bottom: 5px;
+  width: 100%;
+}
+
+.heatmap-month-label {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.heatmap-board {
+  display: flex;
+  justify-content: center;
+}
+
+.heatmap-weeks {
+  display: grid;
+  grid-auto-flow: column;
+  gap: var(--cell-gap);
+}
+
+.heatmap-cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  border-radius: var(--cell-radius);
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: outline 0.1s, transform 0.1s;
+  outline: 1px solid rgba(255,255,255,0.7);
 }
 
-.calendar-day:hover {
-  transform: scale(1.2);
+.heatmap-cell:hover {
+  outline: 2px solid #6366f1;
+  transform: scale(1.1);
   z-index: 1;
 }
 
-.calendar-day.level-0 { background: #f1f5f9; }
-.calendar-day.level-1 { background: #bfdbfe; }
-.calendar-day.level-2 { background: #60a5fa; }
-.calendar-day.level-3 { background: #3b82f6; }
-.calendar-day.level-4 { background: #1d4ed8; }
+.heat-selected {
+  outline: 2.5px solid #4338ca !important;
+}
 
-.calendar-day__tooltip {
-  display: none;
-  position: absolute;
-  bottom: 110%;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  background: #1e293b;
-  color: #fff;
+.heat-empty { background: transparent; outline: none; cursor: default; }
+
+/* 蓝紫色热力 */
+.heat-0 { background: #f1f5f9; }
+.heat-1 { background: #e0e7ff; }
+.heat-2 { background: #a5b4fc; }
+.heat-3 { background: #6366f1; }
+.heat-4 { background: #4338ca; }
+
+.heatmap-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.heatmap-selected-info {
+  font-size: 12px;
+  color: #4338ca;
+  font-weight: 500;
+}
+
+.heatmap-hint {
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  pointer-events: none;
-  text-align: center;
-  line-height: 1.4;
+  color: #cbd5e1;
 }
 
-.calendar-day:hover .calendar-day__tooltip {
-  display: block;
-}
-
-.calendar-legend {
+.heatmap-legend {
   display: flex;
   align-items: center;
   gap: 3px;
-  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .legend-label {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
 }
 
-.legend-box {
-  width: 14px;
-  height: 14px;
+.legend-dot {
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
 }
 
-.legend-box.level-0 { background: #f1f5f9; }
-.legend-box.level-1 { background: #bfdbfe; }
-.legend-box.level-2 { background: #60a5fa; }
-.legend-box.level-3 { background: #3b82f6; }
-.legend-box.level-4 { background: #1d4ed8; }
+.legend-dot.heat-0 { background: #f1f5f9; }
+.legend-dot.heat-1 { background: #e0e7ff; }
+.legend-dot.heat-2 { background: #a5b4fc; }
+.legend-dot.heat-3 { background: #6366f1; }
+.legend-dot.heat-4 { background: #4338ca; }
 
 /* -- 兴趣雷达 -- */
 .radar-chart {
   width: 100%;
-  height: 260px;
+  height: 300px;
+  min-height: 260px;
 }
 
 /* -- 行为能量环 -- */
@@ -2191,61 +2313,6 @@ onMounted(async () => {
 }
 
 /* ===== 内容 Tab 区域 ===== */
-.content-card {
-  border-radius: 16px;
-  overflow: hidden;
-  border-color: #e5e7eb;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-}
-
-.content-card :deep(.el-card__body) {
-  padding: 0 8px 8px;
-}
-
-.profile-tabs :deep(.el-tabs__header) {
-  margin: 0;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.profile-tabs :deep(.el-tabs__nav-wrap::after) {
-  display: none;
-}
-
-.profile-tabs :deep(.el-tabs__item) {
-  height: 56px;
-  font-size: 15px;
-  color: var(--el-text-color-secondary);
-}
-
-.profile-tabs :deep(.el-tabs__item.is-active) {
-  color: #2563eb;
-  font-weight: 600;
-}
-
-.profile-tabs :deep(.el-tabs__item:hover) {
-  color: #2563eb;
-}
-
-.profile-tabs :deep(.el-tabs__active-bar) {
-  background-color: #2563eb;
-}
-
-.profile-tabs :deep(.el-tab-pane) {
-  padding-top: 4px;
-}
-
-.profile-tabs :deep(.el-tab-pane) {
-  width: 100%;
-}
-
-.profile-tabs :deep(.el-tabs__content) {
-  width: 100%;
-}
-
-.tab-icon {
-  margin-right: 6px;
-}
 
 .loading-container {
   padding: 24px;
@@ -2835,44 +2902,70 @@ onMounted(async () => {
   color: var(--el-text-color-secondary);
 }
 
-@media (max-width: 768px) {
-  .page-container {
-    padding: 0 16px 16px;
+@media (max-width: 900px) {
+  .profile-page {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
   }
 
-  .hero-content {
+  .profile-sidebar {
+    height: auto;
     flex-direction: column;
-    padding: 24px 20px 20px;
+    gap: 12px;
+    padding: 16px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
   }
 
-  .hero-left {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
-  .hero-name-row {
+  .sidebar-user-card {
+    flex-direction: row;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 12px;
+    padding: 14px;
   }
 
-  .hero-meta-row {
-    justify-content: center;
+  .sidebar-user-stats {
+    width: auto;
+    gap: 12px;
   }
 
-  .hero-tags-row {
-    justify-content: center;
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow-x: auto;
   }
 
-  .hero-right {
-    padding-top: 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
+  .sidebar-nav-title {
+    display: none;
   }
 
-  .dashboard-stats {
+  .sidebar-nav-item {
+    flex-shrink: 0;
+    padding: 6px 10px;
+  }
+
+  .profile-main-panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .profile-module-body {
+    overflow-y: visible;
+    padding: 16px;
+  }
+
+  .module-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+@media (max-width: 768px) {
+  .heatmap-grid-wrap { --cell-size: 18px; --cell-gap: 4px; }
+  .heatmap-grid-wrap.range-30 { --cell-size: 22px; --cell-gap: 5px; }
+  .heatmap-grid-wrap.range-60 { --cell-size: 18px; --cell-gap: 4px; }
 
   .portrait-grid {
     grid-template-columns: 1fr;
@@ -2881,10 +2974,6 @@ onMounted(async () => {
   .behavior-ring-wrap {
     flex-direction: column;
     align-items: center;
-  }
-
-  .dash-stat-card {
-    padding: 14px;
   }
 
   .tab-toolbar {
@@ -2898,20 +2987,12 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
-  .dashboard-stats {
+  .module-stats-row {
     grid-template-columns: 1fr;
   }
 
   .portrait-grid {
     grid-template-columns: 1fr;
-  }
-
-  .dash-stat-card__count {
-    font-size: 22px;
-  }
-
-  .hero-name {
-    font-size: 22px;
   }
 }
 
