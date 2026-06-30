@@ -14,6 +14,9 @@ export interface BrowseHistoryItem {
   title: string
   category_name: string
   browse_time: string
+  type?: 'news' | 'post'
+  target_id?: number | null
+  target_title?: string
 }
 
 export interface FavoriteItem {
@@ -36,6 +39,9 @@ export interface CommentRecordItem {
   like_count: number
   status: number
   create_time: string
+  type?: 'news' | 'post'
+  target_id?: number | null
+  target_title?: string
 }
 
 export interface AIRecordItem {
@@ -77,10 +83,11 @@ export async function getProfileOverview(): Promise<ProfileOverview> {
 
 export async function getBrowseHistory(
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  type: 'news' | 'post' = 'news'
 ): Promise<PaginationResponse<BrowseHistoryItem>> {
   return request.get('/api/profile/browse-history', {
-    params: { page, page_size: pageSize },
+    params: { page, page_size: pageSize, type },
   })
 }
 
@@ -96,10 +103,11 @@ export async function getFavorites(
 
 export async function getComments(
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  type: 'news' | 'post' = 'news'
 ): Promise<PaginationResponse<CommentRecordItem>> {
   return request.get('/api/profile/comments', {
-    params: { page, page_size: pageSize },
+    params: { page, page_size: pageSize, type },
   })
 }
 

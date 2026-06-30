@@ -15,6 +15,9 @@ export interface CommunityPost {
   views: number
   tags: string[]
   liked?: boolean
+  favorited?: boolean
+  is_favorited?: boolean
+  favorite_count?: number
   hot?: boolean
   official?: boolean
 }
@@ -155,6 +158,32 @@ export function getComments(postId: number | string, params: CommentListParams =
 
 export function toggleLike(postId: number | string) {
   return request.post<LikeResponse, LikeResponse>(`/api/community/posts/${postId}/like`)
+}
+
+export function unlikePost(postId: number | string) {
+  return request.delete<LikeResponse, LikeResponse>(`/api/community/posts/${postId}/like`)
+}
+
+export interface FavoriteResponse {
+  success: boolean
+  favorited: boolean
+  count: number
+}
+
+export function toggleFavorite(postId: number | string) {
+  return request.post<FavoriteResponse, FavoriteResponse>(`/api/community/posts/${postId}/favorite`)
+}
+
+export function unfavoritePost(postId: number | string) {
+  return request.delete<FavoriteResponse, FavoriteResponse>(`/api/community/posts/${postId}/favorite`)
+}
+
+export function recordPostBrowse(postId: number | string) {
+  return request.post<{ recorded: boolean; message: string }, { recorded: boolean; message: string }>(`/api/community/posts/${postId}/browse`)
+}
+
+export function getPostFavoriteStatus(postId: number | string) {
+  return request.get<{ favorited: boolean }, { favorited: boolean }>(`/api/community/posts/${postId}/favorite/status`)
 }
 
 export function likeComment(commentId: number | string) {

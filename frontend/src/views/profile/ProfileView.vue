@@ -37,6 +37,7 @@ import {
   updateSubscriptions,
 } from '@/api/profile'
 import { unfavoriteNews } from '@/api/interaction'
+import { unfavoritePost } from '@/api/community'
 import { changePasswordApi, getUserProfileApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
@@ -49,6 +50,7 @@ const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
 const favoriteType = ref<'news' | 'post'>('news')
+const commentType = ref<'news' | 'post'>('news')
 
 const profileOverview = ref<ProfileOverview | null>(null)
 const browseHistory = ref<BrowseHistoryItem[]>([])
@@ -160,7 +162,8 @@ const filteredComments = computed(() => {
   return comments.value.filter(
     (item) =>
       item.content.toLowerCase().includes(query) ||
-      item.news_title.toLowerCase().includes(query)
+      item.news_title.toLowerCase().includes(query) ||
+      (item.target_title || '').toLowerCase().includes(query)
   )
 })
 
@@ -179,6 +182,22 @@ const filteredAIRecords = computed(() => {
 
 function goToNewsDetail(newsId: number) {
   router.push(`/news/${newsId}`)
+}
+
+function handleBrowseItemClick(item: BrowseHistoryItem) {
+  if (item.type === 'post') {
+    router.push('/community')
+    return
+  }
+  router.push(`/news/${item.news_id}`)
+}
+
+function handleCommentItemClick(item: CommentRecordItem) {
+  if (item.type === 'post') {
+    router.push('/community')
+    return
+  }
+  router.push(`/news/${item.news_id}`)
 }
 
 function handleFavoriteClick(item: FavoriteItem) {
@@ -381,7 +400,11 @@ async function handleRemoveFavorite(item: FavoriteItem, event: Event) {
       cancelButtonText: '取消',
       type: 'warning',
     })
-    await unfavoriteNews(item.news_id)
+    if (item.target_type === 'post') {
+      await unfavoritePost(item.news_id)
+    } else {
+      await unfavoriteNews(item.news_id)
+    }
     favorites.value = favorites.value.filter((f) => f.news_id !== item.news_id)
     totalCount.value--
     if (profileOverview.value) {
@@ -435,7 +458,7 @@ function normalizeAvatarUrl(url?: string): string {
 async function loadBrowseHistory(page = 1) {
   loadingTab.value = 'history'
   try {
-    const result = await getBrowseHistory(page, pageSize)
+    const result = await getBrowseHistory(page, pageSize, browseType.value)
     browseHistory.value = result.list
     totalCount.value = result.total
     currentPage.value = page
@@ -465,7 +488,7 @@ async function loadFavorites(page = 1) {
 async function loadComments(page = 1) {
   loadingTab.value = 'comments'
   try {
-    const result = await getComments(page, pageSize)
+    const result = await getComments(page, pageSize, commentType.value)
     comments.value = result.list
     totalCount.value = result.total
     currentPage.value = page
@@ -674,7 +697,7 @@ onMounted(async () => {
           <template v-else-if="tab.key === 'history'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
-                <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0">
+                <el-radio-group v-model="browseType" size="small" class="segmented-control" @change="browseSearchKeyword = ''; currentPage = 1; browseHistory = []; totalCount = 0; loadBrowseHistory()">
                   <el-radio-button value="news">新闻</el-radio-button>
                   <el-radio-button value="post">帖子</el-radio-button>
                 </el-radio-group>
@@ -693,7 +716,7 @@ onMounted(async () => {
               </el-button>
             </div>
 
-            <div v-if="browseType === 'post'" class="empty-state compact-empty">
+            <div v-if="browseType === 'post' && browseHistory.length === 0" class="empty-state compact-empty">
               <p class="empty-text">暂无帖子浏览记录</p>
               <p class="empty-desc">浏览社区帖子后将在这里显示</p>
             </div>
@@ -711,11 +734,11 @@ onMounted(async () => {
                 v-for="item in filteredBrowseHistory"
                 :key="`${item.news_id}-${item.browse_time}`"
                 class="record-item"
-                @click="goToNewsDetail(item.news_id)"
+                @click="handleBrowseItemClick(item)"
               >
                 <div class="record-main">
-                  <el-tag size="small" class="record-tag">{{ item.category_name }}</el-tag>
-                  <h3 class="record-title">{{ item.title }}</h3>
+                  <el-tag size="small" class="record-tag">{{ item.type === 'post' ? '帖子浏览' : item.category_name }}</el-tag>
+                  <h3 class="record-title">{{ item.target_title || item.title }}</h3>
                 </div>
                 <div class="record-meta">
                   <span>{{ item.browse_time }}</span>
@@ -821,6 +844,10 @@ onMounted(async () => {
           <template v-else-if="tab.key === 'comments'">
             <div class="tab-toolbar">
               <div class="search-bar-wrapper">
+                <el-radio-group v-model="commentType" size="small" class="segmented-control" @change="commentSearchKeyword = ''; currentPage = 1; comments = []; totalCount = 0; loadComments()">
+                  <el-radio-button value="news">新闻评论</el-radio-button>
+                  <el-radio-button value="post">帖子评论</el-radio-button>
+                </el-radio-group>
                 <el-input
                   v-model="commentSearchKeyword"
                   placeholder="搜索评论内容..."
@@ -834,8 +861,8 @@ onMounted(async () => {
             </div>
 
             <div v-if="comments.length === 0" class="empty-state compact-empty">
-              <p class="empty-text">暂无评论记录</p>
-              <p class="empty-desc">去新闻详情页发表你的看法吧</p>
+              <p class="empty-text">{{ commentType === 'news' ? '暂无新闻评论记录' : '暂无帖子评论记录' }}</p>
+              <p class="empty-desc">{{ commentType === 'news' ? '去新闻详情页发表你的看法吧' : '去社区帖子中发表你的看法吧' }}</p>
             </div>
             <div v-else-if="filteredComments.length === 0" class="empty-state compact-empty">
               <p class="empty-text">未找到匹配的评论记录</p>
@@ -848,9 +875,14 @@ onMounted(async () => {
                 class="record-item record-item-detailed"
               >
                 <div class="record-main">
-                  <el-tag size="small" class="record-tag">{{ item.category_name }}</el-tag>
-                  <h3 class="record-title link-title" @click="goToNewsDetail(item.news_id)">
-                    {{ item.news_title }}
+                  <div class="record-header-row">
+                    <el-tag size="small" class="record-tag">{{ item.type === 'post' ? '帖子评论' : item.category_name }}</el-tag>
+                  </div>
+                  <h3
+                    class="record-title link-title"
+                    @click="handleCommentItemClick(item)"
+                  >
+                    {{ item.type === 'post' ? item.target_title : item.news_title }}
                   </h3>
                   <div class="comment-box">
                     <p class="comment-content">{{ item.content }}</p>

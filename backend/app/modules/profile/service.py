@@ -766,9 +766,14 @@ def _mock_browse_history(
     current_user: Optional[Any] = None,
     page: int = 1,
     page_size: int = 10,
+    browse_type: str = "news",
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
+        return paginate([], page=page, page_size=page_size)
+
+    # 帖子浏览暂无 mock 数据，返回空列表
+    if browse_type == "post":
         return paginate([], page=page, page_size=page_size)
 
     user_history = [item for item in MOCK_BROWSE_HISTORY if item["user_id"] == user_id]
@@ -800,6 +805,7 @@ def _db_browse_history(
     if user_id is None:
         return paginate([], page=page, page_size=page_size)
 
+    # 子查询按 news_id 去重，取最新 browse_time
     rows = execute_query(
         """
         SELECT
@@ -807,11 +813,17 @@ def _db_browse_history(
             n.title,
             COALESCE(nc.name, '未分类') AS category_name,
             bh.browse_time
-        FROM browse_history bh
+        FROM (
+            SELECT news_id, MAX(browse_time) AS browse_time
+            FROM browse_history
+            WHERE user_id = %s
+              AND news_id > 0
+              AND (target_type = 'news' OR target_type IS NULL OR target_type = '')
+            GROUP BY news_id
+        ) bh
         LEFT JOIN news n ON n.id = bh.news_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE bh.user_id = %s
-        ORDER BY bh.browse_time DESC, bh.id DESC
+        ORDER BY bh.browse_time DESC
         """,
         [user_id],
     )
@@ -826,6 +838,59 @@ def _db_browse_history(
                 title=normalize_text(row["title"]),
                 category_name=normalize_text(row["category_name"]),
                 browse_time=format_datetime(row["browse_time"]),
+                type="news",
+            ).dict()
+        )
+
+    return paginate(history_items, page=page, page_size=page_size)
+
+
+def _db_post_browse_history(
+    current_user: Optional[Any] = None,
+    page: int = 1,
+    page_size: int = 10,
+) -> Dict[str, Any] | None:
+    """查询用户社区帖子浏览历史。"""
+    user_id = _get_current_user_id(current_user)
+    if user_id is None:
+        return paginate([], page=page, page_size=page_size)
+
+    # 子查询按 target_id 去重，取最新 browse_time
+    rows = execute_query(
+        """
+        SELECT
+            cp.id AS post_id,
+            cp.title,
+            LEFT(cp.content, 80) AS summary,
+            '帖子浏览' AS category_name,
+            bh.browse_time
+        FROM (
+            SELECT target_id, MAX(browse_time) AS browse_time
+            FROM browse_history
+            WHERE user_id = %s
+              AND target_type = 'post'
+              AND target_id IS NOT NULL
+            GROUP BY target_id
+        ) bh
+        LEFT JOIN community_post cp ON cp.id = bh.target_id
+        ORDER BY bh.browse_time DESC
+        """,
+        [user_id],
+    )
+    if not rows:
+        return None
+
+    history_items = []
+    for row in rows:
+        history_items.append(
+            BrowseHistoryItem(
+                news_id=int(row["post_id"]),
+                title=normalize_text(row["title"]),
+                category_name=normalize_text(row["category_name"]) or "帖子浏览",
+                browse_time=format_datetime(row["browse_time"]),
+                type="post",
+                target_id=int(row["post_id"]),
+                target_title=normalize_text(row["title"]),
             ).dict()
         )
 
@@ -833,17 +898,23 @@ def _db_browse_history(
 
 
 def get_browse_history(
-    current_user: Optional[Any] = None, page: int = 1, page_size: int = 10
+    current_user: Optional[Any] = None,
+    page: int = 1,
+    page_size: int = 10,
+    browse_type: str = "news",
 ) -> Dict[str, Any]:
-    """获取用户浏览历史。"""
+    """获取用户浏览历史，支持 type=news 或 type=post。"""
 
     try:
-        result = _db_browse_history(current_user, page=page, page_size=page_size)
+        if browse_type == "post":
+            result = _db_post_browse_history(current_user, page=page, page_size=page_size)
+        else:
+            result = _db_browse_history(current_user, page=page, page_size=page_size)
         if result is not None:
             return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取浏览历史失败，回退 mock：%s", exc)
-    return _mock_browse_history(current_user, page=page, page_size=page_size)
+    return _mock_browse_history(current_user, page=page, page_size=page_size, browse_type=browse_type)
 
 
 def _mock_favorites(
@@ -990,9 +1061,14 @@ def _mock_comments(
     current_user: Optional[Any] = None,
     page: int = 1,
     page_size: int = 10,
+    comment_type: str = "news",
 ) -> Dict[str, Any]:
     user_id = _get_current_user_id(current_user)
     if user_id is None:
+        return paginate([], page=page, page_size=page_size)
+
+    # 帖子评论暂无 mock 数据，返回空列表
+    if comment_type == "post":
         return paginate([], page=page, page_size=page_size)
 
     user_comments = [
@@ -1070,20 +1146,75 @@ def _db_comments(
     return paginate(comment_items, page=page, page_size=page_size)
 
 
+def _db_post_comments(
+    current_user: Optional[Any] = None,
+    page: int = 1,
+    page_size: int = 10,
+) -> Dict[str, Any] | None:
+    """查询用户在社区帖子中的评论记录。"""
+    user_id = _get_current_user_id(current_user)
+    if user_id is None:
+        return paginate([], page=page, page_size=page_size)
+
+    rows = execute_query(
+        """
+        SELECT
+            pc.id AS comment_id,
+            pc.post_id,
+            cp.title AS post_title,
+            pc.content,
+            pc.like_count,
+            pc.status,
+            pc.created_at AS create_time
+        FROM post_comment pc
+        LEFT JOIN community_post cp ON cp.id = pc.post_id
+        WHERE pc.user_id = %s AND pc.status <> 4
+        ORDER BY pc.created_at DESC, pc.id DESC
+        """,
+        [user_id],
+    )
+    if not rows:
+        return None
+
+    comment_items = []
+    for row in rows:
+        comment_items.append(
+            CommentRecordItem(
+                comment_id=int(row["comment_id"]),
+                news_id=0,
+                news_title="",
+                category_name="帖子评论",
+                content=normalize_text(row["content"]),
+                like_count=int(row["like_count"] or 0),
+                status=int(row["status"] or 0),
+                create_time=format_datetime(row["create_time"]),
+                type="post",
+                target_id=int(row["post_id"]),
+                target_title=normalize_text(row["post_title"]),
+            ).dict()
+        )
+
+    return paginate(comment_items, page=page, page_size=page_size)
+
+
 def get_comments(
     current_user: Optional[Any] = None,
     page: int = 1,
     page_size: int = 10,
+    comment_type: str = "news",
 ) -> Dict[str, Any]:
-    """获取用户评论记录。"""
+    """获取用户评论记录，支持 type=news 或 type=post。"""
 
     try:
-        result = _db_comments(current_user, page=page, page_size=page_size)
+        if comment_type == "post":
+            result = _db_post_comments(current_user, page=page, page_size=page_size)
+        else:
+            result = _db_comments(current_user, page=page, page_size=page_size)
         if result is not None:
             return result
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取评论记录失败，回退 mock：%s", exc)
-    return _mock_comments(current_user, page=page, page_size=page_size)
+    return _mock_comments(current_user, page=page, page_size=page_size, comment_type=comment_type)
 
 
 def _mock_ai_records(

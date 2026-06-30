@@ -158,6 +158,30 @@ async def unfavorite_post_route(
     return success_response(unfavorite_post_service(post_id, current_user=current_user))
 
 
+@router.post("/posts/{post_id}/browse", response_model=ApiResponse[dict])
+async def browse_post(
+    post_id: int = Path(..., ge=1, description="帖子ID"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> ApiResponse[dict]:
+    """记录社区帖子浏览历史。"""
+    from app.modules.community.service import record_post_browse
+    current_user = _optional_current_user(authorization)
+    result = record_post_browse(post_id, current_user=current_user)
+    return success_response(result)
+
+
+@router.get("/posts/{post_id}/favorite/status", response_model=ApiResponse[dict])
+async def get_post_favorite_status(
+    post_id: int = Path(..., ge=1, description="帖子ID"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> ApiResponse[dict]:
+    """查询当前用户是否收藏了该帖子。"""
+    from app.modules.community.service import get_post_favorite_status as get_fav_status
+    current_user = _optional_current_user(authorization)
+    result = get_fav_status(post_id, current_user=current_user)
+    return success_response(result)
+
+
 @router.post("/comments/{comment_id}/like", response_model=ApiResponse[LikeResponse])
 async def like_comment(
     comment_id: int = Path(..., ge=1, description="评论ID"),

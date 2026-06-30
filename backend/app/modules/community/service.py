@@ -387,7 +387,7 @@ def _db_post_liked_ids(user_id: int, post_ids: list[int]) -> set[int]:
         SELECT target_id
         FROM user_like
         WHERE user_id = %s
-          AND target_type = 'community_post'
+          AND target_type = 'post'
           AND target_id IN ({placeholders})
         """,
         [user_id, *post_ids],
@@ -404,7 +404,7 @@ def _db_post_favorited_ids(user_id: int, post_ids: list[int]) -> set[int]:
         SELECT target_id
         FROM favorite
         WHERE user_id = %s
-          AND target_type = 'community_post'
+          AND target_type = 'post'
           AND target_id IN ({placeholders})
         """,
         [user_id, *post_ids],
@@ -589,7 +589,7 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
         liked = execute_one(
             """
             SELECT id FROM user_like
-            WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+            WHERE user_id = %s AND target_type = 'post' AND target_id = %s
             LIMIT 1
             """,
             [current_user_id, post_id],
@@ -597,7 +597,7 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
         favorited = execute_one(
             """
             SELECT id FROM favorite
-            WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+            WHERE user_id = %s AND target_type = 'post' AND target_id = %s
             LIMIT 1
             """,
             [current_user_id, post_id],
@@ -698,7 +698,7 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
         SELECT
             p.id,
             p.title,
-            'community_post' AS target_type,
+            'post' AS target_type,
             p.id AS target_id,
             0 AS rank_no,
             p.tags AS tags_json,
@@ -740,7 +740,7 @@ def _db_hot_topics(limit: int = 10) -> list[dict[str, Any]] | None:
                 "search_count": heat,
                 "trend": "up" if index <= 3 else "stable" if index <= 6 else "down",
                 "title": normalize_text(row.get("title")),
-                "target_type": "community_post",
+                "target_type": "post",
                 "target_id": int(row.get("target_id") or 0),
                 "tag": tag_str,
                 "update_time": _format_datetime(row.get("update_time")),
@@ -755,7 +755,7 @@ def _db_post_like_relation_exists(user_id: int, post_id: int) -> bool:
         execute_one(
             """
             SELECT id FROM user_like
-            WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+            WHERE user_id = %s AND target_type = 'post' AND target_id = %s
             LIMIT 1
             """,
             [user_id, post_id],
@@ -769,7 +769,7 @@ def _db_post_favorite_relation_exists(user_id: int, post_id: int) -> bool:
         execute_one(
             """
             SELECT id FROM favorite
-            WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+            WHERE user_id = %s AND target_type = 'post' AND target_id = %s
             LIMIT 1
             """,
             [user_id, post_id],
@@ -1574,7 +1574,7 @@ def _db_toggle_post_like(post_id: int, current_user: Optional[Any]) -> LikeRespo
                 """
                 SELECT id
                 FROM user_like
-                WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                 LIMIT 1
                 """,
                 [user_id, post_id],
@@ -1583,7 +1583,7 @@ def _db_toggle_post_like(post_id: int, current_user: Optional[Any]) -> LikeRespo
                 cursor.execute(
                     """
                     DELETE FROM user_like
-                    WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                    WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                     """,
                     [user_id, post_id],
                 )
@@ -1598,7 +1598,7 @@ def _db_toggle_post_like(post_id: int, current_user: Optional[Any]) -> LikeRespo
             cursor.execute(
                 """
                 INSERT INTO user_like (user_id, target_id, target_type, created_at)
-                VALUES (%s, %s, 'community_post', NOW())
+                VALUES (%s, %s, 'post', NOW())
                 """,
                 [user_id, post_id],
             )
@@ -1638,7 +1638,7 @@ def _db_unlike_post(post_id: int, current_user: Optional[Any]) -> LikeResponse:
             cursor.execute(
                 """
                 DELETE FROM user_like
-                WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                 """,
                 [user_id, post_id],
             )
@@ -1675,7 +1675,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
                 """
                 SELECT id
                 FROM favorite
-                WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                 LIMIT 1
                 """,
                 [user_id, post_id],
@@ -1684,7 +1684,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
                 cursor.execute(
                     """
                     DELETE FROM favorite
-                    WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                    WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                     """,
                     [user_id, post_id],
                 )
@@ -1699,7 +1699,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
             cursor.execute(
                 """
                 INSERT INTO favorite (user_id, target_id, target_type, created_at)
-                VALUES (%s, %s, 'community_post', NOW())
+                VALUES (%s, %s, 'post', NOW())
                 """,
                 [user_id, post_id],
             )
@@ -1739,7 +1739,7 @@ def _db_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteRe
             cursor.execute(
                 """
                 DELETE FROM favorite
-                WHERE user_id = %s AND target_type = 'community_post' AND target_id = %s
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
                 """,
                 [user_id, post_id],
             )
@@ -2310,6 +2310,63 @@ def unfavorite_post(post_id: int, current_user: Optional[Any] = None) -> Favorit
     except Exception as exc:  # noqa: BLE001
         logger.warning("取消社区帖子收藏失败，回退 mock：%s", exc)
     return _mock_unfavorite_post(post_id, current_user)
+
+
+def record_post_browse(post_id: int, current_user: Optional[Any] = None) -> dict:
+    """记录社区帖子浏览历史，重复浏览只更新 browse_time。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        return {"recorded": False, "message": "未登录，不记录浏览"}
+
+    try:
+        if _db_has_posts():
+            existing = execute_one(
+                """
+                SELECT id FROM browse_history
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
+                LIMIT 1
+                """,
+                [user_id, post_id],
+            )
+            if existing:
+                execute_update(
+                    "UPDATE browse_history SET browse_time = NOW() WHERE id = %s",
+                    [int(existing["id"])],
+                )
+            else:
+                execute_update(
+                    """
+                    INSERT INTO browse_history (user_id, news_id, target_type, target_id, browse_time, created_at)
+                    VALUES (%s, 0, 'post', %s, NOW(), NOW())
+                    """,
+                    [user_id, post_id],
+                )
+            return {"recorded": True, "message": "浏览记录已保存"}
+    except Exception:
+        pass
+    return {"recorded": False, "message": "记录失败"}
+
+
+def get_post_favorite_status(post_id: int, current_user: Optional[Any] = None) -> dict:
+    """查询当前用户是否已收藏指定帖子。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        return {"favorited": False}
+
+    try:
+        if _db_has_posts():
+            row = execute_one(
+                """
+                SELECT id FROM favorite
+                WHERE user_id = %s AND target_type = 'post' AND target_id = %s
+                LIMIT 1
+                """,
+                [user_id, post_id],
+            )
+            return {"favorited": row is not None}
+    except Exception:
+        pass
+    return {"favorited": False}
 
 
 def toggle_comment_like(comment_id: int, current_user: Optional[Any] = None) -> LikeResponse:

@@ -484,13 +484,33 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
     current_user_id = _get_current_user_id(current_user)
     if current_user_id is not None:
         try:
-            execute_update(
+            existing = execute_one(
                 """
-                INSERT INTO browse_history (user_id, news_id, browse_time)
-                VALUES (%s, %s, NOW())
+                SELECT id FROM browse_history
+                WHERE user_id = %s
+                  AND news_id = %s
+                  AND (target_type = 'news' OR target_type IS NULL OR target_type = '')
+                LIMIT 1
                 """,
                 [current_user_id, news_id],
             )
+            if existing:
+                execute_update(
+                    """
+                    UPDATE browse_history
+                    SET browse_time = NOW(), target_type = 'news', target_id = %s
+                    WHERE id = %s
+                    """,
+                    [news_id, int(existing["id"])],
+                )
+            else:
+                execute_update(
+                    """
+                    INSERT INTO browse_history (user_id, news_id, target_type, target_id, browse_time, created_at)
+                    VALUES (%s, %s, 'news', %s, NOW(), NOW())
+                    """,
+                    [current_user_id, news_id, news_id],
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("写入浏览历史失败，已忽略：%s", exc)
 

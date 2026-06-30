@@ -22,6 +22,10 @@ class BrowseHistoryItem(BaseModel):
     title: str
     category_name: str
     browse_time: str
+    # 通用字段，支持新闻浏览和帖子浏览
+    type: str = "news"
+    target_id: Optional[int] = None
+    target_title: Optional[str] = ""
 
 
 class FavoriteItem(BaseModel):
@@ -44,6 +48,10 @@ class CommentRecordItem(BaseModel):
     like_count: int
     status: int
     create_time: str
+    # 通用字段，支持新闻评论和帖子评论
+    type: str = "news"
+    target_id: Optional[int] = None
+    target_title: Optional[str] = ""
 
 
 class AIRecordItem(BaseModel):

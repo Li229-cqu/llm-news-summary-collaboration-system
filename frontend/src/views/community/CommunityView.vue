@@ -137,19 +137,45 @@
                   {{ tag }}
                 </el-tag>
               </div>
-              <div class="post-stats">
-                <span class="stat-item">
-                  <el-icon class="stat-icon"><Search /></el-icon>
-                  {{ post.views }}
-                </span>
-                <span class="stat-item" @click.stop="handleLike(post)">
-                  <el-icon :class="['stat-icon', post.liked ? 'liked' : '']"><StarFilled /></el-icon>
-                  {{ post.likes }}
-                </span>
-                <span class="stat-item">
-                  <el-icon class="stat-icon"><Message /></el-icon>
-                  {{ post.comments }}
-                </span>
+              <div class="post-actions">
+                <el-button text size="small" class="post-action-btn" @click.stop="showPostDetail(post)">
+                  <el-icon><View /></el-icon>
+                  <span>查看</span>
+                  <span class="action-count">{{ post.views }}</span>
+                </el-button>
+
+                <el-button
+                  text
+                  size="small"
+                  class="post-action-btn"
+                  :class="{ 'action-active': post.liked }"
+                  @click.stop="handleLike(post)"
+                >
+                  <el-icon><Pointer /></el-icon>
+                  <span>{{ post.liked ? '已点赞' : '点赞' }}</span>
+                  <span class="action-count">{{ post.likes }}</span>
+                </el-button>
+
+                <el-button
+                  text
+                  size="small"
+                  class="post-action-btn"
+                  :class="{ 'action-favorited': post.favorited || post.is_favorited }"
+                  @click.stop="handleFavorite(post, $event)"
+                >
+                  <el-icon>
+                    <StarFilled v-if="post.favorited || post.is_favorited" />
+                    <Star v-else />
+                  </el-icon>
+                  <span>{{ post.favorited || post.is_favorited ? '已收藏' : '收藏' }}</span>
+                  <span class="action-count">{{ post.favorite_count ?? 0 }}</span>
+                </el-button>
+
+                <el-button text size="small" class="post-action-btn" @click.stop="showPostDetail(post)">
+                  <el-icon><ChatDotRound /></el-icon>
+                  <span>评论</span>
+                  <span class="action-count">{{ post.comments }}</span>
+                </el-button>
               </div>
             </el-card>
           </div>
@@ -272,9 +298,22 @@
           <span>{{ selectedPost.comments }} 评论</span>
         </div>
         <div class="post-detail-actions">
-          <el-button @click="handleLike(selectedPost)">
-            <el-icon><StarFilled /></el-icon>
-            {{ selectedPost.liked ? '取消点赞' : '点赞' }}
+          <el-button
+            :class="{ 'action-active': selectedPost.liked }"
+            @click="handleLike(selectedPost)"
+          >
+            <el-icon><Pointer /></el-icon>
+            {{ selectedPost.liked ? '已点赞' : '点赞' }}
+          </el-button>
+          <el-button
+            :class="{ 'action-favorited': selectedPost.favorited || selectedPost.is_favorited }"
+            @click="handleFavorite(selectedPost, $event)"
+          >
+            <el-icon>
+              <StarFilled v-if="selectedPost.favorited || selectedPost.is_favorited" />
+              <Star v-else />
+            </el-icon>
+            {{ selectedPost.favorited || selectedPost.is_favorited ? '已收藏' : '收藏' }}
           </el-button>
         </div>
       </div>
@@ -379,6 +418,8 @@ import {
   Share,
   ChatDotRound,
   Aim,
+  Pointer,
+  View,
 } from '@element-plus/icons-vue'
 import {
   getPostList,
@@ -390,6 +431,9 @@ import {
   deleteComment,
   likeComment,
   toggleLike,
+  toggleFavorite,
+  unfavoritePost,
+  recordPostBrowse,
   getHotSearch,
   aiNewsHelper,
   getCommentsSummary,
@@ -561,6 +605,31 @@ async function handleLike(post: CommunityPost) {
   }
 }
 
+async function handleFavorite(post: CommunityPost, event: Event) {
+  event.stopPropagation()
+  try {
+    if (post.is_favorited || post.favorited) {
+      const result = await unfavoritePost(post.id)
+      post.favorited = false
+      post.is_favorited = false
+      post.favorite_count = result.count
+    } else {
+      const result = await toggleFavorite(post.id)
+      post.favorited = result.favorited
+      post.is_favorited = result.favorited
+      post.favorite_count = result.count
+    }
+    // 同步详情页状态
+    if (selectedPost.value && selectedPost.value.id === post.id) {
+      selectedPost.value.favorited = post.favorited
+      selectedPost.value.is_favorited = post.is_favorited
+      selectedPost.value.favorite_count = post.favorite_count
+    }
+  } catch (e) {
+    console.error('收藏操作失败', e)
+  }
+}
+
 async function loadHotSearch() {
   loadingHotSearch.value = true
   try {
@@ -716,6 +785,8 @@ async function showPostDetail(post: CommunityPost) {
   showPostModal.value = true
   commentsSummary.value = null
   await loadComments(post.id)
+  // 异步记录浏览，不影响详情展示
+  recordPostBrowse(post.id).catch(() => {})
 }
 
 async function handleGenerateSummary() {
@@ -1138,29 +1209,46 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-.post-stats {
+.post-actions {
   display: flex;
-  gap: 24px;
+  gap: 8px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #eee;
+  flex-wrap: wrap;
 }
 
-.stat-item {
-  display: flex;
+.post-action-btn {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  cursor: pointer;
   color: #999;
   transition: color 0.3s;
 }
 
-.stat-item:hover {
+.post-action-btn:hover {
   color: #409eff;
 }
 
-.stat-icon.liked {
-  color: #f56c6c;
+.post-action-btn .action-count {
+  color: #999;
+  font-size: 13px;
+}
+
+.post-action-btn.action-active {
+  color: #409eff;
+}
+
+.post-action-btn.action-active .action-count {
+  color: #409eff;
+}
+
+.post-action-btn.action-favorited {
+  color: #f59e0b;
+}
+
+.post-action-btn.action-favorited .action-count {
+  color: #f59e0b;
 }
 
 .pagination {
@@ -1419,7 +1507,17 @@ onMounted(() => {
 }
 
 .post-detail-actions {
+  display: flex;
+  gap: 12px;
   margin-bottom: 16px;
+}
+
+.post-detail-actions .action-active {
+  color: #409eff;
+}
+
+.post-detail-actions .action-favorited {
+  color: #f59e0b;
 }
 
 .comments-section {

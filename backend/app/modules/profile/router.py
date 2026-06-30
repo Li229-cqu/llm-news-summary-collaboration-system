@@ -83,10 +83,11 @@ async def get_reading_heatmap_view(
 async def get_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    type: str = Query("news"),
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[dict]:
-    """获取用户浏览历史。"""
-    data = get_browse_history(current_user, page=page, page_size=page_size)
+    """获取用户浏览历史，支持 type=news 或 type=post。"""
+    data = get_browse_history(current_user, page=page, page_size=page_size, browse_type=type)
     return success_response(data)
 
 
@@ -106,10 +107,11 @@ async def get_user_favorites(
 async def get_user_comments(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    type: str = Query("news"),
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[dict]:
-    """获取用户评论记录。"""
-    data = get_comments(current_user, page=page, page_size=page_size)
+    """获取用户评论记录，支持 type=news 或 type=post。"""
+    data = get_comments(current_user, page=page, page_size=page_size, comment_type=type)
     return success_response(data)
 
 
