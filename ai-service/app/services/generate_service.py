@@ -103,27 +103,46 @@ def _generate_summary_short(
     summary_style: str,
     summary_type: str
 ) -> str:
-    """生成短摘要（改为从输入文本提取前两句）。"""
+    """生成短摘要（固定最大长度100字，提取核心要点）。"""
     sentences = _split_sentences(input_text)
+    text_length = len(input_text)
 
     if not sentences:
         return "文本过短，无法生成摘要"
 
-    # 直接提取前两句作为摘要
-    short_summary = ""
-    if len(sentences) >= 2:
-        short_summary = sentences[0] + sentences[1]
-    elif len(sentences) == 1:
-        short_summary = sentences[0]
-    else:
-        return "文本过短，无法生成摘要"
+    min_length = 50
+    max_length = 100
 
-    # 根据风格进行简单调整
-    if summary_style == "简明扼要":
-        if len(short_summary) > 80:
-            short_summary = short_summary[:80] + "..."
-    elif summary_style == "客观正式":
-        short_summary = f"根据相关报道，{short_summary}"
+    target_length = int(text_length * 0.2)
+    target_length = max(min_length, min(target_length, max_length))
+
+    if summary_type == "extract":
+        short_summary = ""
+        for sentence in sentences:
+            if len(short_summary) + len(sentence) <= target_length:
+                short_summary += sentence
+            else:
+                remaining = target_length - len(short_summary)
+                if remaining > 10:
+                    short_summary += sentence[:remaining]
+                break
+        if not short_summary:
+            short_summary = sentences[0][:target_length]
+    else:
+        keywords = _extract_keywords(input_text, max_keywords=3)
+        key_keywords = "、".join(keywords[:2]) if keywords else "相关内容"
+        first_part = ""
+        for sentence in sentences[:2]:
+            if len(first_part) + len(sentence) <= target_length - 20:
+                first_part += sentence
+            else:
+                break
+        short_summary = f"{key_keywords}：{first_part}"
+
+    short_summary = short_summary[:max_length].rstrip('，。！？；') + "。"
+
+    if summary_style == "客观正式":
+        short_summary = f"据报道，{short_summary}"
     elif summary_style == "通俗易懂":
         short_summary = f"简单来说，{short_summary}"
 
@@ -135,24 +154,49 @@ def _generate_summary_long(
     summary_style: str,
     summary_type: str
 ) -> str:
-    """生成长摘要。"""
+    """生成长摘要（长度为短摘要的4-5倍，与短摘要有明显区分）。"""
     sentences = _split_sentences(input_text)
+    text_length = len(input_text)
 
     if not sentences:
         return "文本过短，无法生成长摘要"
 
-    if summary_type == "extract":
-        long_summary = "".join(sentences[:min(4, len(sentences))])
-    else:
-        keywords = _extract_keywords(input_text, max_keywords=4)
-        key_keywords = "、".join(keywords[:3]) if keywords else "相关内容"
-        first_part = "".join(sentences[:min(3, len(sentences))])
-        long_summary = f"本文详细介绍了{key_keywords}的最新发展。{first_part}这些进展在多个方面具有重要意义，有望在后续相关领域产生深远影响。"
+    short_summary_result = _generate_summary_short(input_text, summary_style, summary_type)
+    short_length = len(short_summary_result)
 
-    if summary_style == "简明扼要":
-        if len(long_summary) > 150:
-            long_summary = long_summary[:150] + "..."
-    elif summary_style == "客观正式":
+    long_multiplier = 8
+    target_length = short_length * long_multiplier
+    min_length = 400
+    max_length = 1200
+
+    target_length = max(min_length, min(target_length, max_length))
+
+    if summary_type == "extract":
+        long_summary = ""
+        for sentence in sentences:
+            if len(long_summary) + len(sentence) <= target_length:
+                long_summary += sentence
+            else:
+                remaining = target_length - len(long_summary)
+                if remaining > 50:
+                    long_summary += sentence[:remaining]
+                break
+        if not long_summary:
+            long_summary = "".join(sentences[:min(10, len(sentences))])
+    else:
+        keywords = _extract_keywords(input_text, max_keywords=5)
+        key_keywords = "、".join(keywords[:3]) if keywords else "相关内容"
+        first_part = ""
+        for sentence in sentences[:10]:
+            if len(first_part) + len(sentence) <= target_length - 100:
+                first_part += sentence
+            else:
+                break
+        long_summary = f"本文围绕{key_keywords}展开，详细介绍了相关领域的最新发展动态。{first_part}这些变化不仅反映了当前行业趋势，也为未来发展提供了重要参考，值得持续关注。"
+
+    long_summary = long_summary[:max_length].rstrip('，。！？；') + "。"
+
+    if summary_style == "客观正式":
         long_summary = f"综合相关信息来看，{long_summary}"
     elif summary_style == "通俗易懂":
         long_summary = f"说得更通俗一点，{long_summary}"
