@@ -6,6 +6,7 @@ export interface CommunityPost {
   content: string
   author: string
   author_id: number
+  avatar?: string
   created_at: string
   updated_at: string
   likes: number

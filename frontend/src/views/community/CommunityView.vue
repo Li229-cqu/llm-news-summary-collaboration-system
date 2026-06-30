@@ -119,7 +119,7 @@
               @click="showPostDetail(post)"
             >
               <div class="post-header">
-                <el-avatar :text="post.author.slice(0, 1)" />
+                <el-avatar :src="normalizeAvatarUrl(post.avatar)" :text="post.author.slice(0, 1)" />
                 <div class="post-meta">
                   <span class="post-author">{{ post.author }}</span>
                   <span class="post-time">{{ formatTime(post.created_at) }}</span>
@@ -219,7 +219,7 @@
                 :key="index"
                 :class="['ai-message', msg.type]"
               >
-                <el-avatar v-if="msg.type === 'user'" :text="'我'" />
+                <el-avatar v-if="msg.type === 'user'" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :text="userStore.userInfo?.nickname?.slice(0, 1) || '我'" />
                 <el-avatar v-else icon="robot" />
                 <div class="message-content">{{ msg.content }}</div>
               </div>
@@ -248,7 +248,7 @@
     <el-dialog v-model="showPostModal" title="帖子详情" width="600px">
       <div v-if="selectedPost" class="post-detail">
         <div class="post-detail-header">
-          <el-avatar :text="selectedPost.author.slice(0, 1)" />
+          <el-avatar :src="normalizeAvatarUrl(selectedPost.avatar)" :text="selectedPost.author.slice(0, 1)" />
           <div class="post-detail-meta">
             <span class="post-detail-author">{{ selectedPost.author }}</span>
             <span class="post-detail-time">{{ formatTime(selectedPost.created_at) }}</span>
@@ -420,6 +420,13 @@ const submitting = ref(false)
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+
+function normalizeAvatarUrl(url?: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
 
 const posts = ref<CommunityPost[]>([])
 const loadingPosts = ref(false)

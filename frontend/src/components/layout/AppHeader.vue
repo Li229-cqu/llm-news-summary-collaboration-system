@@ -41,7 +41,7 @@
 
       <el-dropdown v-if="userStore.isLoggedIn && userStore.userInfo" trigger="click" @command="handleUserCommand">
         <div class="app-header__user-state app-header__user-trigger">
-          <el-avatar aria-label="用户头像">
+          <el-avatar aria-label="用户头像" :src="normalizeAvatarUrl(userStore.userInfo.avatar)">
             {{ userStore.userInfo.nickname.slice(0, 1) }}
           </el-avatar>
           <span>{{ userStore.userInfo.nickname }}</span>
@@ -119,6 +119,13 @@ function getRoleLabel(role: string) {
   }
 
   return roleLabels[role] ?? role
+}
+
+function normalizeAvatarUrl(url?: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
 }
 
 async function handleSearch() {
