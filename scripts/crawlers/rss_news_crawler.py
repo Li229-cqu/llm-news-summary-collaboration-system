@@ -1,4 +1,4 @@
-"""RSS 新闻爬虫（DB3.5 增量版）
+﻿"""RSS 新闻爬虫（DB3.5 增量版）
 
 特性：
 - 优先按 source_url 去重
@@ -679,12 +679,6 @@ def extract_article_content(html_text: str, url: str = "") -> str:
                 candidates.append((score_article_node(node, text), text))
 
     if not candidates:
-        body = soup.body or soup
-        text = strip_boilerplate_lines(extract_text_block(body))
-        if len(text) >= 200:
-            candidates.append((score_article_node(body, text), text))
-
-    if not candidates:
         return ""
 
     candidates.sort(key=lambda item: item[0], reverse=True)
@@ -792,14 +786,11 @@ def extract_editor(html_text: str) -> str:
 
 def extract_cover_image(entry: Any, html_text: str, source_url: str) -> str:
     """
-    优先级：
-    1. 正文区域中的有效图片
-    2. og:image（但需要通过有效性校验）
-    3. RSS media:thumbnail（但需要过滤通用图）
-    不要返回通用图或疑似默认图
+    只从正文区域提取封面图。
+    如果正文中没有有效图片，直接返回空字符串。
     """
 
-    # 第一步：从正文区域提取有效图片
+    # 仅在正文区域内查找图片
     if html_text:
         soup = BeautifulSoup(html_text, "html.parser")
 
@@ -823,33 +814,6 @@ def extract_cover_image(entry: Any, html_text: str, source_url: str) -> str:
                 if image and not is_generic_image(image):
                     logger.info(f"从正文提取真实配图：{image[:80]}")
                     return image
-
-    # 第二步：尝试 og:image，但需要校验（og:image 可能也是通用图）
-    if html_text:
-        soup = BeautifulSoup(html_text, "html.parser")
-
-        meta = soup.find("meta", attrs={"property": "og:image"})
-        if meta and meta.get("content"):
-            image = normalize_image_url(meta.get("content"), source_url)
-            if image and not is_generic_image(image):
-                logger.info(f"从 og:image 提取配图：{image[:80]}")
-                return image
-
-    # 第三步：从 RSS 元数据提取，但过滤通用图
-    media_content = getattr(entry, "media_content", None) or []
-    for media in media_content:
-        image = normalize_image_url(media.get("url") if isinstance(media, dict) else "", source_url)
-        if image and not is_generic_image(image):
-            logger.info(f"从 RSS media 提取配图：{image[:80]}")
-            return image
-
-    links = getattr(entry, "links", None) or []
-    for item in links:
-        if isinstance(item, dict) and str(item.get("type", "")).startswith("image/"):
-            image = normalize_image_url(item.get("href"), source_url)
-            if image and not is_generic_image(image):
-                logger.info(f"从 RSS link 提取配图：{image[:80]}")
-                return image
 
     # 都没找到有效图片，不放图片
     logger.debug("未找到有效配图，cover_image 设置为空")
@@ -973,7 +937,7 @@ def should_update_existing(existing_row: dict[str, Any], item: ParsedNewsItem, u
         or looks_mojibake(existing_title)
         or looks_mojibake(existing_content)
         or cut_boilerplate_tail(existing_content) != existing_content.strip()
-        or (not existing_image and bool(item.cover_image))
+        or existing_image != item.cover_image
         or (bool(item.source_url) and existing_url != item.source_url)
     )
 
@@ -1036,7 +1000,7 @@ def update_news(
         "`title` = %s",
         "`summary` = %s",
         "`content` = %s",
-        "`cover_image` = COALESCE(NULLIF(%s, ''), `cover_image`)",
+        "`cover_image` = %s",
         "`category_id` = %s",
         "`topic_id` = %s",
         "`source` = %s",
@@ -1515,4 +1479,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

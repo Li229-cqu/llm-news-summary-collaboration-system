@@ -1,4 +1,4 @@
-# 《基于大语言模型的智能新闻摘要与协同互动系统》后端服务
+﻿# 《基于大语言模型的智能新闻摘要与协同互动系统》后端服务
 
 ## 一、后端项目说明
 
@@ -34,7 +34,7 @@ app/
 7. Pydantic Schema 占位
 8. Mock 数据目录占位
 9. Mock 用户认证与权限校验
-10. 新闻 mock 数据
+10. 新闻数据库数据接口
 11. 新闻查询接口
 12. 新闻互动接口（数据库优先，mock 兜底）
 13. 个人中心接口（数据库优先，mock 兜底）
@@ -71,13 +71,13 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 2. 当前不实现真实登录。
 3. 当前不实现真实新闻、AI、社区业务。
 4. 当前不调用 AI 服务。
-5. 当前只完成后端基础框架与新闻模块 mock 联调。
+5. 当前新闻列表、详情、热榜和搜索已切换为数据库真实数据。
 
 ## 八、成员 A 已完成的后端能力
 
 成员 A 的新闻模块当前已具备：
 
-- 新闻 mock 数据
+- 新闻数据库数据接口
 - 新闻查询接口
 - 新闻详情接口
 - 浏览记录接口
@@ -134,7 +134,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 - `news.source_url` 用于保存 RSS 原文链接。
 - `news.cover_image` 用于保存新闻封面图 URL，当前只保存远程图片地址，不下载图片文件。
 - `news.content` 保存正文文本；爬虫会尽量过滤侧边栏、推荐阅读、广告、上一篇/下一篇等非正文内容。
-- 新闻接口仍然保持数据库优先、mock 兜底；数据库异常时不会影响基础演示。
+- 新闻接口只读取数据库真实新闻；数据库无数据时列表返回空，详情查不到时返回 404，不再回退 mock 新闻。
 - 如果本地数据库缺少 `source_url` 字段，请先执行：
 
 ```powershell
@@ -149,7 +149,7 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - `GET /api/news/hot` 直接基于数据库真实新闻统计生成首页热榜，排序规则为 `view_count + like_count * 5 + favorite_count * 4 + comment_count * 6`。
 - 新增 `user_category_subscription` 表，用于保存用户新闻分类订阅。
 - 新增 `GET /api/profile/subscriptions` 和 `POST /api/profile/subscriptions`，均需要登录。
-- 数据库不可用时，除首页热榜外的其他相关能力仍可按原有策略保留 mock fallback；首页热榜在数据库无数据时返回空列表。
+- 首页热榜、新闻列表、新闻详情、搜索和推荐均不再使用 mock 新闻 fallback；数据库无数据时返回空列表，详情不存在时返回 404。
 ## A3 验收补充说明
 
 - 后端数据库访问层已接入 `DBUtils.PooledDB` 连接池，`get_connection()` 从连接池获取连接，`close()` 时归还连接池。
@@ -167,3 +167,5 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - 这 3 个接口都需要登录，数据优先读取 `browse_history`、`news`、`news_category`、`news_topic`。
 - 如果用户没有浏览历史，接口返回空结构，不回退 mock 阅读脉络。
 - 当前实现只负责后端数据结构准备，不新增前端页面。
+
+

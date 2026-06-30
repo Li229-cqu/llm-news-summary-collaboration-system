@@ -1,4 +1,4 @@
-# scripts/crawlers
+﻿# scripts/crawlers
 
 这里放项目本地新闻爬虫脚本。当前第一版使用 RSS 源抓取新闻，不做网页深度正文解析。
 
@@ -79,9 +79,9 @@ while ($true) {
 - 爬虫会清洗 `source_url`，只保留合法的 `http` / `https` 原文链接。
 - 使用 `--fetch-content` 时，爬虫会尝试解析新闻详情页正文，并过滤侧边栏、推荐阅读、广告、上一篇/下一篇等噪声内容。
 - 正文解析失败时会使用 RSS 摘要兜底，不再把“原文链接：xxx”拼进 `content`。
-- 爬虫会尝试提取 `cover_image`，优先使用 RSS 媒体字段、`og:image`、`twitter:image` 和正文首图。
+- 爬虫只会从新闻正文容器内提取 `cover_image`；正文无有效图片时保存为空，不再使用 RSS 媒体字段或 `og:image` 补图。
 - 当前只保存图片 URL，不下载图片文件到本地。
-- 使用 `--update-existing-content` 时，会尝试补全已有新闻的正文、封面图和原文链接，不会重置点赞、收藏、评论、浏览量。
+- 使用 `--update-existing-content` 时，会重新解析已有新闻的正文和正文图；如果正文没有有效图片，会清空旧的错误 `cover_image`，不会重置点赞、收藏、评论、浏览量。
 
 常用命令：
 
@@ -90,3 +90,4 @@ backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run 
 backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
 backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 20 --fetch-content --update-existing-content
 ```
+

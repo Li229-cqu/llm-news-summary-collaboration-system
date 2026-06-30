@@ -1,22 +1,14 @@
-"""新闻模块服务层：DB 优先，mock 兜底。"""
+﻿"""新闻模块服务层：只读取数据库，避免新闻数据与 mock 混用。"""
 
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.common.exceptions import AppException
 from app.common.utils import format_datetime, normalize_text, paginate
 from app.db.database import execute_one, execute_query, execute_update
-from app.mock.news import (
-    MOCK_BROWSE_HISTORY,
-    MOCK_NEWS,
-    MOCK_NEWS_FAVORITES,
-    MOCK_NEWS_LIKES,
-    NEWS_CATEGORIES,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -142,162 +134,6 @@ def _format_hot_row(row: dict[str, Any], rank: int) -> dict[str, Any]:
     }
 
 
-
-
-def _mock_categories() -> list[dict[str, Any]]:
-    return sorted(
-        (_format_category_row(dict(item)) for item in NEWS_CATEGORIES if item.get("status") == 1),
-        key=lambda item: (item["sort"], item["id"]),
-    )
-
-
-def _mock_news_rows() -> list[dict[str, Any]]:
-    return [_format_news_row(dict(item)) for item in MOCK_NEWS if item.get("status") == 1]
-
-
-def _mock_get_categories() -> list[dict[str, Any]]:
-    return _mock_categories()
-
-
-def _mock_get_news_list(
-    category: Optional[str] = None,
-    category_id: Optional[int] = None,
-    keyword: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 10,
-) -> dict[str, Any]:
-    items = _mock_news_rows()
-
-    if category_id is not None:
-        items = [item for item in items if item["category_id"] == category_id]
-    else:
-        normalized_category = (category or "").strip().casefold()
-        if normalized_category:
-            items = [
-                item
-                for item in items
-                if item["category_name"].casefold() == normalized_category
-                or any(
-                    cat["id"] == item["category_id"]
-                    and (cat["code"].casefold() == normalized_category or cat["name"].casefold() == normalized_category)
-                    for cat in NEWS_CATEGORIES
-                )
-            ]
-
-    normalized_keyword = (keyword or "").strip().casefold()
-    if normalized_keyword:
-        items = [
-            item
-            for item in items
-            if normalized_keyword in item["title"].casefold()
-            or normalized_keyword in item["summary"].casefold()
-            or normalized_keyword in item["content"].casefold()
-            or normalized_keyword in item["category_name"].casefold()
-            or any(normalized_keyword in tag.casefold() for tag in item["tags"])
-        ]
-
-    items.sort(key=lambda item: (item["publish_time"], item["id"]), reverse=True)
-    return paginate(items, page=page, page_size=page_size)
-
-
-def _mock_get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    items = _mock_news_rows()
-    items.sort(
-        key=lambda item: (
-            item["view_count"] + item["like_count"] * 5 + item["favorite_count"] * 4 + item["comment_count"] * 6,
-            item["view_count"],
-            item["like_count"],
-            item["favorite_count"],
-            item["comment_count"],
-            item["publish_time"],
-            item["id"],
-        ),
-        reverse=True,
-    )
-    return [
-        {
-            "id": item["id"],
-            "title": item["title"],
-            "category_name": item["category_name"],
-            "source": item["source"],
-            "view_count": item["view_count"],
-            "comment_count": item["comment_count"],
-            "like_count": item["like_count"],
-            "favorite_count": item["favorite_count"],
-            "cover_image": item.get("cover_image", ""),
-            "publish_time": item["publish_time"],
-            "heat_score": item["view_count"] + item["like_count"] * 5 + item["favorite_count"] * 4 + item["comment_count"] * 6,
-            "rank": index,
-        }
-        for index, item in enumerate(items[: max(limit, 0)], start=1)
-    ]
-
-
-def _find_mock_news_by_id(news_id: int) -> dict[str, Any] | None:
-    for item in MOCK_NEWS:
-        if int(item.get("id") or 0) == news_id and int(item.get("status") or 0) == 1:
-            return _format_news_row(dict(item))
-    return None
-
-
-def _mock_get_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[str, Any]:
-    news = _find_mock_news_by_id(news_id)
-    if news is None:
-        raise AppException(code=404, message="新闻不存在")
-
-    current_user_id = _get_current_user_id(current_user)
-    related_news = [
-        _format_news_row(dict(item))
-        for item in MOCK_NEWS
-        if item.get("status") == 1
-        and int(item.get("category_id") or 0) == news["category_id"]
-        and int(item.get("id") or 0) != news["id"]
-    ][:3]
-    recommended_news = [
-        _format_news_row(dict(item))
-        for item in sorted(
-            (
-                item
-                for item in MOCK_NEWS
-                if item.get("status") == 1 and int(item.get("id") or 0) != news["id"]
-            ),
-            key=lambda item: int(item.get("view_count") or 0),
-            reverse=True,
-        )[:5]
-    ]
-    detail = dict(news)
-    detail["related_news"] = related_news
-    detail["recommended_news"] = recommended_news
-    detail["is_liked"] = current_user_id is not None and any(
-        like["user_id"] == current_user_id and like["news_id"] == news_id for like in MOCK_NEWS_LIKES
-    )
-    detail["is_favorited"] = current_user_id is not None and any(
-        fav["user_id"] == current_user_id and fav["news_id"] == news_id for fav in MOCK_NEWS_FAVORITES
-    )
-    return detail
-
-
-def _mock_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str, Any]:
-    news = _find_mock_news_by_id(news_id)
-    if news is None:
-        raise AppException(code=404, message="新闻不存在")
-
-    for item in MOCK_NEWS:
-        if int(item.get("id") or 0) == news_id:
-            item["view_count"] = int(item.get("view_count") or 0) + 1
-            break
-
-    current_user_id = _get_current_user_id(current_user)
-    if current_user_id is not None:
-        MOCK_BROWSE_HISTORY.append(
-            {
-                "user_id": current_user_id,
-                "news_id": news_id,
-                "browse_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        )
-
-    return {"news_id": news_id, "recorded": True}
 
 
 def _db_categories() -> list[dict[str, Any]]:
@@ -662,12 +498,8 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
 
 
 def get_categories() -> list[dict[str, Any]]:
-    """获取新闻分类，优先数据库，失败时回退 mock。"""
-    try:
-        return _db_categories()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻分类失败，回退 mock：%s", exc)
-    return _mock_get_categories()
+    """获取新闻分类，只读取数据库。"""
+    return _db_categories()
 
 
 def get_news_list(
@@ -677,70 +509,43 @@ def get_news_list(
     page_size: int = 10,
     category_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """获取新闻列表，优先数据库，必要时回退 mock。"""
-    try:
-        return _db_news_list(
-            category=category,
-            category_id=category_id,
-            keyword=keyword,
-            page=page,
-            page_size=page_size,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻列表失败，回退 mock：%s", exc)
-        return _mock_get_news_list(category=category, category_id=category_id, keyword=keyword, page=page, page_size=page_size)
+    """获取新闻列表，只读取数据库。"""
+    return _db_news_list(
+        category=category,
+        category_id=category_id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
 
 
 def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    """获取新闻热榜，优先数据库；无数据时返回空列表，异常时向上抛出。"""
-    try:
-        rows = _db_hot_news(limit=limit)
-        return rows or []
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻热榜失败：%s", exc)
-        raise
+    """获取新闻热榜，只读取数据库。"""
+    rows = _db_hot_news(limit=limit)
+    return rows or []
 
 
 def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
-    """搜索新闻。"""
+    """搜索新闻，只读取数据库。"""
     if not keyword or not keyword.strip():
         return paginate([], page=page, page_size=page_size)
-    try:
-        result = _db_news_list(keyword=keyword, page=page, page_size=page_size)
-        return result
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("搜索新闻失败，回退 mock：%s", exc)
-        return _mock_get_news_list(keyword=keyword, page=page, page_size=page_size)
+    return _db_news_list(keyword=keyword, page=page, page_size=page_size)
 
 
 def get_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[str, Any]:
-    """获取新闻详情，数据库优先，mock 兜底。"""
-    try:
-        detail = _db_news_detail(news_id=news_id, current_user=current_user)
-        if detail is not None:
-            return detail
-        raise AppException(code=404, message="新闻不存在")
-    except AppException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("读取新闻详情失败，回退 mock：%s", exc)
-
-    detail = _find_mock_news_by_id(news_id)
+    """获取新闻详情，只读取数据库。"""
+    detail = _db_news_detail(news_id=news_id, current_user=current_user)
     if detail is not None:
-        return _mock_get_news_detail(news_id=news_id, current_user=current_user)
+        return detail
     raise AppException(code=404, message="新闻不存在")
 
 
 def record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[str, Any]:
-    """记录浏览行为，数据库优先，mock 兜底。"""
-    try:
-        result = _db_record_browse(news_id=news_id, current_user=current_user)
-        if result is not None:
-            return result
-        raise AppException(code=404, message="新闻不存在")
-    except AppException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("记录浏览失败，回退 mock：%s", exc)
+    """记录浏览行为，只读取数据库。"""
+    result = _db_record_browse(news_id=news_id, current_user=current_user)
+    if result is not None:
+        return result
+    raise AppException(code=404, message="新闻不存在")
 
-    return _mock_record_browse(news_id=news_id, current_user=current_user)
+
+
