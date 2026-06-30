@@ -57,6 +57,14 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _get_current_user_id(current_user: Optional[Any]) -> Optional[int]:
+    if current_user is None:
+        return None
+    if isinstance(current_user, dict):
+        return current_user.get("id")
+    return getattr(current_user, "id", None)
+
+
 def _format_datetime(value: Any) -> str:
     return format_datetime(value) or _now_text()
 
@@ -1223,6 +1231,40 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
                 )
                 post["view_count"] = int(post.get("view_count") or 0) + 1
                 post["views"] = post["view_count"]
+
+                current_user_id = _get_current_user_id(current_user)
+                if current_user_id is not None:
+                    try:
+                        existing = execute_one(
+                            """
+                            SELECT id FROM browse_history
+                            WHERE user_id = %s
+                              AND target_type = 'post'
+                              AND target_id = %s
+                            LIMIT 1
+                            """,
+                            [current_user_id, post_id],
+                        )
+                        if existing:
+                            execute_update(
+                                """
+                                UPDATE browse_history
+                                SET browse_time = NOW()
+                                WHERE id = %s
+                                """,
+                                [int(existing["id"])],
+                            )
+                        else:
+                            execute_update(
+                                """
+                                INSERT INTO browse_history (user_id, news_id, target_type, target_id, browse_time, created_at)
+                                VALUES (%s, %s, 'post', %s, NOW(), NOW())
+                                """,
+                                [current_user_id, 0, post_id],
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("写入帖子浏览历史失败，已忽略：%s", exc)
+
                 return CommunityPost(**post)
             return None
     except Exception as exc:  # noqa: BLE001
@@ -2226,6 +2268,40 @@ def get_post_detail(post_id: int, current_user: Optional[Any] = None) -> Optiona
                 post["views"] = post["view_count"]
                 post["update_time"] = _now_text()
                 post["updated_at"] = post["update_time"]
+
+                current_user_id = _get_current_user_id(current_user)
+                if current_user_id is not None:
+                    try:
+                        existing = execute_one(
+                            """
+                            SELECT id FROM browse_history
+                            WHERE user_id = %s
+                              AND target_type = 'post'
+                              AND target_id = %s
+                            LIMIT 1
+                            """,
+                            [current_user_id, post_id],
+                        )
+                        if existing:
+                            execute_update(
+                                """
+                                UPDATE browse_history
+                                SET browse_time = NOW()
+                                WHERE id = %s
+                                """,
+                                [int(existing["id"])],
+                            )
+                        else:
+                            execute_update(
+                                """
+                                INSERT INTO browse_history (user_id, news_id, target_type, target_id, browse_time, created_at)
+                                VALUES (%s, %s, 'post', %s, NOW(), NOW())
+                                """,
+                                [current_user_id, 0, post_id],
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("写入帖子浏览历史失败，已忽略：%s", exc)
+
                 return CommunityPost(**post)
             return None
     except Exception as exc:  # noqa: BLE001
