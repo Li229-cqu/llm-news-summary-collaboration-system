@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS `community_post` (
   `like_count` INT NOT NULL DEFAULT 0,
   `comment_count` INT NOT NULL DEFAULT 0,
   `favorite_count` INT NOT NULL DEFAULT 0,
+  `view_count` INT NOT NULL DEFAULT 0,
   `heat_score` INT NOT NULL DEFAULT 0,
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -543,6 +543,10 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         detail["is_favorited"] = favorited is not None
 
     detail["timeline_news_count"] = timeline_news_count
+
+    execute_update("UPDATE news SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s", [news_id])
+    detail["view_count"] = int(detail.get("view_count") or 0) + 1
+
     return detail
 
 
@@ -553,8 +557,6 @@ def _db_record_browse(news_id: int, current_user: Optional[Any] = None) -> dict[
     )
     if news is None:
         return None
-
-    execute_update("UPDATE news SET view_count = view_count + 1, updated_at = NOW() WHERE id = %s", [news_id])
 
     current_user_id = _get_current_user_id(current_user)
     if current_user_id is not None:

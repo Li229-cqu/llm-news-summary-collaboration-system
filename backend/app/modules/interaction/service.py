@@ -1,4 +1,4 @@
-﻿"""新闻互动模块服务层：数据库优先，mock 兜底。
+"""新闻互动模块服务层：数据库优先，mock 兜底。
 
 当前阶段优先读写 MySQL 中的 news_comment、user_like、favorite 等表；
 当数据库不可用、查询异常或目标数据尚未同步时，自动回退到进程内 mock 数据，
@@ -164,9 +164,9 @@ def _assemble_comment_tree(
         else:
             comment_map[parent_id]["replies"].append(item)
 
-    root_comments.sort(key=lambda item: (item["create_time"], item["id"]))
+    root_comments.sort(key=lambda item: (-item["like_count"], item["create_time"], item["id"]))
     for item in comment_map.values():
-        item["replies"].sort(key=lambda reply: (reply["create_time"], reply["id"]))
+        item["replies"].sort(key=lambda reply: (-reply["like_count"], reply["create_time"], reply["id"]))
 
     return CommentListResponse(
         list=[CommentItem(**item) for item in root_comments],

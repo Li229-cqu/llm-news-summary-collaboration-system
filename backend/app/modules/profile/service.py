@@ -175,7 +175,7 @@ def clamp_reading_params(days: int = 30, limit: int = 200) -> tuple[int, int]:
 
 
 def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> list[dict]:
-    """查询并整理用户最近的阅读记录。"""
+    """查询并整理用户最近的阅读记录（支持新闻和社区帖子）。"""
 
     if not user_id:
         return []
@@ -188,19 +188,21 @@ def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> 
                 bh.id AS history_id,
                 bh.user_id,
                 bh.news_id,
+                bh.target_type,
+                bh.target_id,
                 bh.browse_time,
 
-                n.title,
-                n.summary,
+                COALESCE(n.title, cp.title) AS title,
+                COALESCE(n.summary, cp.content) AS summary,
                 n.category_id,
-                n.topic_id,
+                COALESCE(n.topic_id, cp.topic_id) AS topic_id,
                 n.source,
-                n.publish_time,
-                n.tags,
-                n.view_count,
-                n.like_count,
-                n.comment_count,
-                n.favorite_count,
+                COALESCE(n.publish_time, cp.created_at) AS publish_time,
+                COALESCE(n.tags, cp.tags) AS tags,
+                COALESCE(n.view_count, cp.view_count) AS view_count,
+                COALESCE(n.like_count, cp.like_count) AS like_count,
+                COALESCE(n.comment_count, cp.comment_count) AS comment_count,
+                COALESCE(n.favorite_count, cp.favorite_count) AS favorite_count,
 
                 COALESCE(nc.name, '未分类') AS category_name,
                 COALESCE(nc.code, '') AS category_code,
@@ -208,9 +210,10 @@ def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> 
                 COALESCE(nt.topic_name, '') AS topic_name,
                 COALESCE(nt.summary, '') AS topic_summary
             FROM browse_history bh
-            JOIN news n ON n.id = bh.news_id
+            LEFT JOIN news n ON (bh.target_type = 'news' OR bh.target_type IS NULL OR bh.target_type = '') AND n.id = bh.news_id
+            LEFT JOIN community_post cp ON bh.target_type = 'post' AND cp.id = bh.target_id
             LEFT JOIN news_category nc ON nc.id = n.category_id
-            LEFT JOIN news_topic nt ON nt.id = n.topic_id
+            LEFT JOIN news_topic nt ON nt.id = COALESCE(n.topic_id, cp.topic_id)
             WHERE bh.user_id = %s
               AND bh.browse_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
             ORDER BY bh.browse_time DESC, bh.id DESC
@@ -227,16 +230,22 @@ def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> 
 
     reading_records: list[dict] = []
     for row in rows:
+        target_type = row.get("target_type") or "news"
+        topic_id = row.get("topic_id")
+        if target_type == "post" and topic_id is None:
+            topic_id = row.get("cp_topic_id")
         item = {
             "history_id": int(row.get("history_id") or 0),
             "user_id": int(row.get("user_id") or 0),
             "news_id": int(row.get("news_id") or 0),
+            "target_type": target_type,
+            "target_id": int(row.get("target_id") or 0),
             "title": normalize_text(row.get("title")),
             "summary": normalize_text(row.get("summary")),
             "category_id": row.get("category_id"),
             "category_name": normalize_text(row.get("category_name")) or "未分类",
             "category_code": normalize_text(row.get("category_code")),
-            "topic_id": row.get("topic_id"),
+            "topic_id": topic_id,
             "topic_name": normalize_topic_name(
                 {
                     "topic_name": row.get("topic_name"),
@@ -245,7 +254,7 @@ def get_user_reading_records(user_id: int, days: int = 30, limit: int = 200) -> 
                 }
             ),
             "topic_summary": normalize_text(row.get("topic_summary")),
-            "source": normalize_text(row.get("source")),
+            "source": normalize_text(row.get("source")) if target_type == "news" else "社区",
             "publish_time": format_datetime(row.get("publish_time")),
             "browse_time": format_datetime(row.get("browse_time")),
             "tags": parse_tags(row.get("tags")),

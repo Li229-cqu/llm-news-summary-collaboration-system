@@ -85,7 +85,14 @@ request.interceptors.request.use(
     const token = localStorage.getItem(TOKEN_STORAGE_KEY)
 
     if (token) {
+      if (!config.headers) {
+        config.headers = new axios.AxiosHeaders()
+      }
       config.headers.Authorization = `Bearer ${token}`
+    }
+
+    if (config.data instanceof FormData) {
+      config.headers?.delete('Content-Type')
     }
 
     return config

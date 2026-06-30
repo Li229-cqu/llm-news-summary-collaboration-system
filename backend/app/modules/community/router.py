@@ -15,6 +15,7 @@ from app.modules.community.schema import (
     AIHelperResponse,
     BlockResponse,
     CommentItem,
+    CommentLikeResult,
     CommentListResponse,
     CommentsSummaryRequest,
     CommentsSummaryResponse,
@@ -182,11 +183,11 @@ async def get_post_favorite_status(
     return success_response(result)
 
 
-@router.post("/comments/{comment_id}/like", response_model=ApiResponse[LikeResponse])
+@router.post("/comments/{comment_id}/like", response_model=ApiResponse[CommentLikeResult])
 async def like_comment(
     comment_id: int = Path(..., ge=1, description="评论ID"),
     current_user: UserInfo = Depends(require_login),
-) -> ApiResponse[LikeResponse]:
+) -> ApiResponse[CommentLikeResult]:
     return success_response(toggle_comment_like(comment_id, current_user=current_user))
 
 

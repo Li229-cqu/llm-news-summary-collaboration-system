@@ -81,6 +81,7 @@ export interface HotSearchItem {
   title: string
   target_type: string
   target_id: number
+  view_count?: number
 }
 
 export interface AIHelperResponse {
@@ -102,6 +103,12 @@ export interface LikeResponse {
   success: boolean
   liked: boolean
   count: number
+}
+
+export interface CommentLikeResult {
+  comment_id: number
+  liked: boolean
+  like_count: number
 }
 
 export interface CommentDeleteResponse {
@@ -187,7 +194,7 @@ export function getPostFavoriteStatus(postId: number | string) {
 }
 
 export function likeComment(commentId: number | string) {
-  return request.post<LikeResponse, LikeResponse>(`/api/community/comments/${commentId}/like`)
+  return request.post<CommentLikeResult, CommentLikeResult>(`/api/community/comments/${commentId}/like`)
 }
 
 export function deleteComment(commentId: number | string) {

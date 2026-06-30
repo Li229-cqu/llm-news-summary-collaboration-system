@@ -62,7 +62,7 @@
             :loading="loadingComments"
             :total="commentTotal"
             :replying-id="replyingId"
-            :loading-like="actionLoading === 'comment-like'"
+            :loading-like-id="commentLikeLoadingId"
             :loading-reply="submittingComment"
             :deleting-id="deletingCommentId"
             :current-user-id="userStore.userInfo?.id ?? null"
@@ -70,6 +70,7 @@
             @like="handleLikeComment"
             @reply="handleReplyComment"
             @delete="handleDeleteComment"
+            @reload-comments="loadComments"
           />
         </el-card>
       </section>
@@ -138,6 +139,7 @@ const loadingComments = ref(false)
 const submittingComment = ref(false)
 const actionLoading = ref<ActionType>('')
 const deletingCommentId = ref<number | null>(null)
+const commentLikeLoadingId = ref<number | null>(null)
 const error = ref('')
 const commentTotal = ref(0)
 const replyingId = ref<number | null>(null)
@@ -362,7 +364,7 @@ async function handleReplyComment(comment: RichCommentItemData, content: string,
     return
   }
 
-  if (!content) {
+  if (!content && !mediaJson) {
     replyingId.value = null
     return
   }
@@ -389,15 +391,14 @@ async function handleLikeComment(comment: RichCommentItemData) {
     return
   }
 
-  actionLoading.value = 'comment-like'
+  commentLikeLoadingId.value = comment.id
 
   try {
     await likeComment(comment.id)
-    await loadComments()
   } catch (requestError) {
     ElMessage.error(requestError instanceof Error ? requestError.message : '评论点赞失败')
   } finally {
-    actionLoading.value = ''
+    commentLikeLoadingId.value = null
   }
 }
 
