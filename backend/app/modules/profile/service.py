@@ -65,6 +65,14 @@ from app.modules.profile.schema import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_ai_record_source(value: Any) -> str:
+    return str(value or "manual") if str(value or "manual") in {"manual", "news"} else "manual"
+
+
+def _normalize_ai_risk_level(value: Any) -> str:
+    return str(value or "low") if str(value or "low") in {"low", "medium", "high"} else "low"
+
+
 def get_test_data() -> ProfileTestData:
     return ProfileTestData(module="profile", description="个人中心模块基础接口占位")
 
@@ -1326,14 +1334,14 @@ def _mock_ai_records(
         record_items.append(
             AIRecordItem(
                 id=record["id"],
-                source=record.get("source", "manual"),
+                source=_normalize_ai_record_source(record.get("source")),
                 source_news_id=record.get("source_news_id"),
                 source_title=record.get("source_title", ""),
                 input_text=record["input_text"],
                 candidate_titles=result.get("candidate_titles", []),
                 summary_short=result.get("summary_short", ""),
                 summary_long=result.get("summary_long"),
-                risk_level=record.get("risk_level", result.get("consistency", {}).get("risk_level", "low")),
+                risk_level=_normalize_ai_risk_level(record.get("risk_level", result.get("consistency", {}).get("risk_level", "low"))),
                 create_time=record.get("create_time") or record.get("created_at"),
             ).dict()
         )
@@ -1382,7 +1390,7 @@ def _db_ai_records(
         record_items.append(
             AIRecordItem(
                 id=int(row["id"]),
-                source=normalize_text(row.get("source")) or "manual",
+                source=_normalize_ai_record_source(normalize_text(row.get("source"))),
                 source_news_id=row.get("source_news_id"),
                 source_title=normalize_text(row.get("source_title")),
                 input_text=normalize_text(row["input_text"]),
@@ -1390,7 +1398,7 @@ def _db_ai_records(
                 candidate_titles=_parse_json_field(row.get("candidate_titles"), default=[]),
                 summary_short=normalize_text(row.get("summary_short")),
                 summary_long=normalize_text(row.get("summary_long")) or None,
-                risk_level=normalize_text(row.get("risk_level")) or "low",
+                risk_level=_normalize_ai_risk_level(normalize_text(row.get("risk_level"))),
                 create_time=format_datetime(row.get("created_at")),
             ).dict()
         )

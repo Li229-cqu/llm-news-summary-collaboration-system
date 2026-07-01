@@ -1,16 +1,55 @@
--- 为浏览历史表增加 target_type / target_id 字段，支持帖子浏览记录
--- 已存在的记录保持 target_type = 'news'，news_id 仍正常使用
+SET @col_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'browse_history'
+    AND COLUMN_NAME = 'target_type'
+);
+SET @sql := IF(
+  @col_exists = 0,
+  'ALTER TABLE `browse_history` ADD COLUMN `target_type` VARCHAR(64) DEFAULT ''news'' COMMENT ''browse target type'' AFTER `news_id`',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE `browse_history`
-  ADD COLUMN IF NOT EXISTS `target_type` VARCHAR(64) DEFAULT 'news' COMMENT '浏览目标类型' AFTER `news_id`;
+SET @col_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'browse_history'
+    AND COLUMN_NAME = 'target_id'
+);
+SET @sql := IF(
+  @col_exists = 0,
+  'ALTER TABLE `browse_history` ADD COLUMN `target_id` BIGINT UNSIGNED DEFAULT NULL COMMENT ''browse target id'' AFTER `target_type`',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE `browse_history`
-  ADD COLUMN IF NOT EXISTS `target_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '浏览目标ID（帖子时使用）' AFTER `target_type`;
-
--- 允许 news_id 为 0（帖子浏览无对应 news_id）
 ALTER TABLE `browse_history`
   MODIFY COLUMN `news_id` BIGINT UNSIGNED NOT NULL DEFAULT 0;
 
--- 为帖子浏览查询建索引
-ALTER TABLE `browse_history`
-  ADD INDEX IF NOT EXISTS `idx_browse_history_target` (`user_id`, `target_type`, `target_id`);
+UPDATE `browse_history`
+SET `target_type` = COALESCE(`target_type`, 'news'),
+    `target_id` = COALESCE(`target_id`, NULLIF(`news_id`, 0))
+WHERE `target_type` IS NULL OR `target_id` IS NULL;
+
+SET @idx_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'browse_history'
+    AND INDEX_NAME = 'idx_browse_history_target'
+);
+SET @sql := IF(
+  @idx_exists = 0,
+  'ALTER TABLE `browse_history` ADD INDEX `idx_browse_history_target` (`user_id`, `target_type`, `target_id`)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

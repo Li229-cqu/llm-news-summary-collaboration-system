@@ -19,12 +19,15 @@ export interface CommunityPost {
   favorite_count?: number
   hot?: boolean
   official?: boolean
+  related_news_id?: number | null
+  related_news_title?: string
 }
 
 export interface CreatePostRequest {
   title: string
   content: string
   tags?: string[]
+  related_news_id?: number | null
 }
 
 export interface PostListResponse {
@@ -231,4 +234,155 @@ export function generateCommentsSummary(comments: string[]) {
     { comments },
     { timeout: 30000 }
   )
+}
+
+// ─── AI 会话 ───────────────────────────────────────────────────
+
+export interface CommunityAiSession {
+  id: number
+  title: string
+  summary?: string
+  source_type?: string
+  source_post_id?: number | null
+  source_news_id?: number | null
+  status: string
+  created_at: string
+  updated_at: string
+  last_message_at?: string | null
+  message_count: number
+  last_message_preview: string
+}
+
+export interface CommunityAiMessage {
+  id: number
+  session_id: number
+  user_id: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  status: string
+  error_message?: string | null
+  created_at: string
+}
+
+export interface CreateCommunityAiSessionRequest {
+  question?: string
+  source_type?: string
+  source_post_id?: number
+  source_news_id?: number
+}
+
+export interface SendCommunityAiMessageRequest {
+  question: string
+}
+
+export interface CommunityAiSessionListResponse {
+  list: CommunityAiSession[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface CommunityAiSessionDetailResponse {
+  session: CommunityAiSession
+  messages: CommunityAiMessage[]
+}
+
+export interface CommunityAiMessageSendResponse {
+  session: CommunityAiSession
+  user_message: CommunityAiMessage
+  assistant_message: CommunityAiMessage
+}
+
+export function createCommunityAiSession(data: CreateCommunityAiSessionRequest) {
+  return request.post<CommunityAiSessionDetailResponse, CommunityAiSessionDetailResponse>('/api/community/ai-sessions', data, { timeout: 60000 })
+}
+
+export function getCommunityAiSessions(params: { page?: number; page_size?: number } = {}) {
+  return request.get<CommunityAiSessionListResponse, CommunityAiSessionListResponse>('/api/community/ai-sessions', { params })
+}
+
+export function getCommunityAiSessionDetail(sessionId: number) {
+  return request.get<CommunityAiSessionDetailResponse, CommunityAiSessionDetailResponse>(`/api/community/ai-sessions/${sessionId}`)
+}
+
+export function sendCommunityAiMessage(sessionId: number, data: SendCommunityAiMessageRequest) {
+  return request.post<CommunityAiMessageSendResponse, CommunityAiMessageSendResponse>(`/api/community/ai-sessions/${sessionId}/messages`, data, { timeout: 60000 })
+}
+
+export function deleteCommunityAiSession(sessionId: number) {
+  return request.delete<{ success: boolean; message: string }, { success: boolean; message: string }>(`/api/community/ai-sessions/${sessionId}`)
+}
+
+// ─── 我的帖子与互动 ─────────────────────────────────────────────
+
+export interface MyCommunityPost {
+  id: number
+  title: string
+  content: string
+  summary?: string
+  author_id: number
+  author: string
+  avatar: string
+  created_at: string
+  updated_at?: string
+  tags: string[]
+  status?: number
+  view_count?: number
+  like_count?: number
+  comment_count?: number
+  favorite_count?: number
+  likes?: number
+  comments?: number
+  views?: number
+  related_news_id?: number | null
+  related_news_title?: string
+  liked?: boolean
+  favorited?: boolean
+}
+
+export interface ReceivedInteractionItem {
+  id: number
+  actor_user_id: number
+  actor_nickname: string
+  actor_avatar: string
+  action_type: 'like' | 'comment' | 'favorite'
+  action_time: string
+  target_post_id: number
+  target_post_title: string
+  target_post_summary: string
+  target_post_created_at: string
+  comment_id?: number | null
+  comment_content?: string
+  related_news_id?: number | null
+  related_news_title?: string
+}
+
+export interface MyCommunityPostListResponse {
+  list: MyCommunityPost[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface ReceivedInteractionListResponse {
+  list: ReceivedInteractionItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export function getMyCommunityPosts(params: { page?: number; page_size?: number; keyword?: string } = {}) {
+  return request.get<MyCommunityPostListResponse, MyCommunityPostListResponse>('/api/community/me/posts', { params })
+}
+
+export function getMyReceivedLikes(params: { page?: number; page_size?: number } = {}) {
+  return request.get<ReceivedInteractionListResponse, ReceivedInteractionListResponse>('/api/community/me/interactions/likes', { params })
+}
+
+export function getMyReceivedComments(params: { page?: number; page_size?: number } = {}) {
+  return request.get<ReceivedInteractionListResponse, ReceivedInteractionListResponse>('/api/community/me/interactions/comments', { params })
+}
+
+export function getMyReceivedFavorites(params: { page?: number; page_size?: number } = {}) {
+  return request.get<ReceivedInteractionListResponse, ReceivedInteractionListResponse>('/api/community/me/interactions/favorites', { params })
 }

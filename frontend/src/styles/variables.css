@@ -29,6 +29,7 @@
   --el-fill-color-blank: var(--color-bg-card);
   --el-menu-bg-color: var(--color-bg-card);
   --el-menu-hover-bg-color: var(--color-primary-soft);
+  --el-menu-active-color: var(--color-primary);
   --el-text-color-primary: var(--color-text-primary);
   --el-text-color-regular: var(--color-text-secondary);
   --el-border-color: var(--color-border);

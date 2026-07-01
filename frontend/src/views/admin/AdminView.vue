@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  ArrowRight,
   Clock,
   DataBoard,
   Files,
@@ -12,7 +11,6 @@ import {
   Message,
   Monitor,
   PieChart,
-  Refresh,
   Setting,
   TrendCharts,
   User,
@@ -271,8 +269,8 @@ const metricCards = computed<MetricCard[]>(() => [
     value: dashboard.value?.today_new_users ?? '--',
     hint: dashboard.value ? '今日注册' : '等待加载',
     icon: User,
-    bg: '#e8f4fd',
-    color: '#409eff',
+    bg: '#fef2f2',
+    color: '#dc2626',
   },
   {
     key: 'active_users_7d',
@@ -584,737 +582,165 @@ onMounted(() => {
 <template>
   <main class="admin-container">
     <template v-if="userStore.isEditorOrAdmin">
-      <header class="workbench-hero">
-        <div class="hero-copy">
-          <div class="hero-badge">管理后台</div>
-          <h1>后台管理工作台</h1>
-          <p>集中查看系统运行状态，并处理待审核内容。</p>
-          <div class="hero-meta">
-            <el-tag :type="userStore.isAdmin ? 'danger' : 'warning'" effect="plain">
-              当前角色：{{ userStore.isAdmin ? '管理员' : '审核/编辑' }}
-            </el-tag>
-            <el-tag effect="plain">最近刷新：{{ lastLoadedAt || '暂无' }}</el-tag>
-          </div>
-        </div>
-
-        <div class="hero-actions">
-          <el-button type="primary" :icon="Refresh" @click="loadSection(activeTab)">查看</el-button>
-          <el-button plain :icon="Clock" @click="handleTrendRangeChange('7d')">近 7 天</el-button>
-          <el-button plain :icon="Clock" @click="handleTrendRangeChange('30d')">近 30 天</el-button>
-          <el-button plain :icon="Clock" @click="handleTrendRangeChange('90d')">近 90 天</el-button>
-        </div>
-      </header>
-
       <div class="admin-layout">
         <aside class="admin-sidebar">
-          <el-card class="sidebar-card profile-card" shadow="never">
-            <div class="profile-row">
-              <el-avatar :size="44">
+          <div class="sidebar-user-card">
+            <div class="sidebar-avatar-col">
+              <el-avatar :size="72" :icon="User">
                 {{ userStore.userInfo?.nickname?.slice(0, 1) || 'A' }}
               </el-avatar>
-              <div class="profile-meta">
-                <strong>{{ userStore.userInfo?.nickname }}</strong>
-                <span>{{ getRoleLabel(userStore.role) }}</span>
-              </div>
             </div>
-            <p class="profile-hint">根据当前角色展示可访问的后台能力。</p>
-          </el-card>
-
-          <el-card class="sidebar-card menu-card" shadow="never">
-            <div class="sidebar-title">功能导航</div>
-            <el-menu class="admin-menu" :default-active="activeTab" @select="handleTabChange">
-              <el-menu-item v-for="item in sidebarSections" :key="item.key" :index="item.key">
-                <component :is="item.icon" :size="18" class="menu-icon" />
-                <span>{{ item.label }}</span>
-              </el-menu-item>
-            </el-menu>
-          </el-card>
-
-          <el-card class="sidebar-card role-card" shadow="never">
-            <div class="sidebar-title">权限说明</div>
-            <div class="role-group">
-              <div class="role-group__title">审核/编辑权限</div>
-              <div class="role-group__items">
-                <el-tag v-for="item in ['内容审核', '评论管理', '社区管理', '热搜维护', 'Timeline 管理']" :key="item" size="small" effect="plain">
-                  {{ item }}
-                </el-tag>
-              </div>
+            <div class="sidebar-user-name">{{ userStore.userInfo?.nickname || '管理员' }}</div>
+            <div class="sidebar-user-role">
+              <el-tag :type="userStore.isAdmin ? 'danger' : 'warning'" effect="dark" round size="small">
+                {{ userStore.isAdmin ? '管理员' : '审核/编辑' }}
+              </el-tag>
             </div>
-            <div v-if="userStore.isAdmin" class="role-group">
-              <div class="role-group__title">管理员权限</div>
-              <div class="role-group__items">
-                <el-tag v-for="item in ['账号管理', '角色权限', '系统配置', 'AI 配置', '日志查看', '数据备份', '内容总览']" :key="item" size="small" effect="plain">
-                  {{ item }}
-                </el-tag>
-              </div>
+            <div class="sidebar-nav">
+              <el-menu class="admin-menu" :default-active="activeTab" @select="handleTabChange">
+                <el-menu-item v-for="item in sidebarSections" :key="item.key" :index="item.key">
+                  <component :is="item.icon" :size="18" class="menu-icon" />
+                  <span>{{ item.label }}</span>
+                </el-menu-item>
+              </el-menu>
             </div>
-          </el-card>
+          </div>
         </aside>
 
         <section class="admin-main">
           <AdminWorkbench :key="workbenchKey" v-if="activeTab === 'dashboard'" />
-
           <AdminAnalyticsDashboard v-if="activeTab === 'analytics'" @navigate="(tab: string) => loadSection(tab as AdminSection)" />
-
-          <AdminPendingCenter
-            v-if="activeTab === 'pending'"
-            :key="pendingCenterKey"
-            @changed="loadDashboard"
-          />
-
-          <AdminNewsManagement
-            v-if="activeTab === 'news'"
-            @changed="loadDashboard"
-          />
-
-          <AdminPostManagement
-            v-if="activeTab === 'posts'"
-            @changed="loadDashboard"
-          />
-
-          <AdminCommentReview
-            v-if="activeTab === 'comments'"
-            @changed="loadDashboard"
-          />
-
-          <AdminHotTopicManagement
-            v-if="activeTab === 'hotTopics'"
-            @changed="loadDashboard"
-          />
-
-          <AdminTimelineManagement
-            v-if="activeTab === 'timelines'"
-            @changed="loadDashboard"
-          />
-
+          <AdminPendingCenter v-if="activeTab === 'pending'" :key="pendingCenterKey" @changed="loadDashboard" />
+          <AdminNewsManagement v-if="activeTab === 'news'" @changed="loadDashboard" />
+          <AdminPostManagement v-if="activeTab === 'posts'" @changed="loadDashboard" />
+          <AdminCommentReview v-if="activeTab === 'comments'" @changed="loadDashboard" />
+          <AdminHotTopicManagement v-if="activeTab === 'hotTopics'" @changed="loadDashboard" />
+          <AdminTimelineManagement v-if="activeTab === 'timelines'" @changed="loadDashboard" />
           <AdminUserManagement v-if="activeTab === 'users'" @changed="loadDashboard" />
-
           <AdminAIConfigManagement v-if="activeTab === 'aiConfig'" @changed="loadDashboard" />
-
           <AdminSystemConfigManagement v-if="activeTab === 'config'" @changed="loadDashboard" />
-
           <AdminOpsManagement v-if="activeTab === 'ops'" />
         </section>
       </div>
     </template>
 
     <el-card v-else class="unauthorized-card" shadow="never">
-      <el-result
-        icon="warning"
-        title="当前账号无权限访问"
-        sub-title="该页面仅允许审核/编辑或管理员访问。"
-      />
+      <el-result icon="warning" title="当前账号无权限访问" sub-title="该页面仅允许审核/编辑或管理员访问。" />
     </el-card>
   </main>
 </template>
 
 <style scoped>
 .admin-container {
-  width: 100%;
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: 20px 24px;
-  min-height: 100vh;
-}
-
-.workbench-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 18px 24px;
-  margin-bottom: 20px;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.12), rgba(103, 194, 58, 0.08));
-  border: 1px solid var(--color-border-light);
-  border-radius: 20px;
-}
-
-.hero-copy {
-  min-width: 0;
-}
-
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--color-primary);
-  background: rgba(64, 158, 255, 0.1);
-  border-radius: 999px;
-}
-
-.hero-copy h1 {
-  margin: 0 0 8px;
-  font-size: 22px;
-  color: var(--color-text-primary);
-}
-
-.hero-copy p {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-.hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  background: #fef7f7;
 }
 
 .admin-layout {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+  display: contents;
 }
 
+/* ── 左侧栏 ── */
 .admin-sidebar {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  position: sticky;
-  top: 88px;
-  align-self: start;
-  height: auto;
-  max-height: none;
-  overflow: visible;
+  padding: 24px 18px;
+  background: #fff;
+  border-right: 1px solid #f5dfdf;
+  gap: 20px;
 }
 
-.admin-sidebar .sidebar-card {
-  overflow: visible;
-  height: auto;
-  max-height: none;
+.admin-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
-.admin-sidebar .menu-card {
+.sidebar-user-card {
   display: flex;
   flex-direction: column;
-  overflow: visible;
-}
-
-.admin-sidebar .menu-card :deep(.el-card__body) {
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-}
-
-.admin-sidebar .admin-menu {
-  overflow: visible;
-  max-height: none;
-}
-
-.admin-sidebar .profile-card,
-.admin-sidebar .role-card {
-  flex: 0 0 auto;
-  overflow: visible;
-}
-
-.sidebar-card {
-  border-radius: 18px;
-}
-
-.sidebar-title {
-  margin-bottom: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.profile-row {
-  display: flex;
   align-items: center;
+  text-align: center;
+  padding: 28px 16px 20px;
+  background: linear-gradient(180deg, #fef2f2 0%, #f8fafc 50%, #fff 100%);
+  border-radius: 18px;
+  border: 1px solid #f5dfdf;
   gap: 12px;
 }
 
-.profile-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+.sidebar-avatar-col {
+  margin-bottom: 4px;
 }
 
-.profile-meta strong {
-  color: var(--color-text-primary);
+.sidebar-user-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
 }
 
-.profile-meta span,
-.profile-hint {
-  color: var(--color-text-secondary);
-  font-size: 13px;
+.sidebar-user-role {
+  margin-bottom: 8px;
 }
 
-.profile-hint {
-  margin: 14px 0 0;
-  line-height: 1.6;
+.sidebar-nav {
+  width: 100%;
 }
 
 .admin-menu {
   border-right: 0;
+  background: transparent;
 }
 
 .admin-menu :deep(.el-menu-item) {
   gap: 10px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   border-radius: 10px;
-  height: 44px;
-  line-height: 44px;
+  height: 42px;
+  line-height: 42px;
+  font-size: 14px;
 }
 .admin-menu :deep(.el-menu-item .menu-icon),
 .admin-menu :deep(.el-menu-item svg),
 .admin-menu :deep(.el-menu-item .el-icon) {
-  width: 20px !important;
-  height: 20px !important;
-  flex: 0 0 20px !important;
-  font-size: 20px !important;
-}
-.admin-menu :deep(.el-menu-item img) {
-  width: 20px !important;
-  height: 20px !important;
-  object-fit: contain;
+  width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 18px !important;
+  font-size: 18px !important;
 }
 
-.role-group + .role-group {
-  margin-top: 16px;
-}
-
-.role-group__title {
-  margin-bottom: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.role-group__items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
+/* ── 右侧主区 ── */
 .admin-main {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
-  overflow: visible;
+}
+
+.admin-main::-webkit-scrollbar {
+  display: none;
 }
 
 .stats-card,
 .panel-card,
 .unauthorized-card {
-  border-radius: 18px;
-}
-
-.section-heading,
-.panel-header,
-.todo-item__title-row,
-.status-item__title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.section-heading h2,
-.panel-header h3 {
-  margin: 0 0 6px;
-  color: var(--color-text-primary);
-}
-
-.section-heading p,
-.panel-header p {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-.quick-card :deep(.el-card__body) {
-  overflow: hidden;
-}
-
-.section-alert {
-  margin: 16px 0;
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.metric-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  background: var(--color-bg-page);
-  border: 1px solid var(--color-border-light);
   border-radius: 16px;
 }
 
-.metric-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  flex: 0 0 auto;
-}
-.metric-icon :deep(svg),
-.metric-icon svg {
-  width: 22px !important;
-  height: 22px !important;
-}
-
-.metric-content {
-  min-width: 0;
-}
-
-.metric-value {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--color-text-primary);
-}
-
-.metric-title {
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.metric-hint {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.middle-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr 1.1fr;
-  gap: 16px;
-}
-
-.bottom-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 16px;
-}
-
-.chart-box {
-  width: 100%;
-  height: 280px;
-  min-height: 280px;
-}
-
-.todo-list,
-.status-list,
-.quick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.todo-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px;
-  text-align: left;
-  border: 1px solid var(--color-border-light);
-  border-radius: 16px;
-  background: var(--color-bg-page);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.todo-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 8px 24px rgba(64, 158, 255, 0.12);
-  transform: translateY(-1px);
-}
-
-.todo-item--disabled {
-  cursor: not-allowed;
-  opacity: 0.68;
-}
-
-.quick-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 12px 14px;
-  text-align: left;
-  border: 1px solid var(--color-border-light);
-  border-radius: 16px;
-  background: var(--color-bg-page);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  min-width: 0;
-}
-
-.quick-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 8px 24px rgba(64, 158, 255, 0.12);
-  transform: translateY(-1px);
-}
-
-.quick-item--coming-soon {
-  opacity: 0.72;
-}
-
-.quick-item--admin {
-  border-style: dashed;
-}
-
-.quick-item__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.12);
-  flex: 0 0 auto;
-}
-.quick-item__icon :deep(svg),
-.quick-item__icon svg {
-  width: 20px !important;
-  height: 20px !important;
-}
-
-.quick-item__arrow {
-  margin-left: auto;
-  color: var(--color-text-placeholder);
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-}
-.quick-item__arrow :deep(svg),
-.quick-item__arrow svg {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-.quick-item__body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.quick-item__body span {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.quick-item__title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.quick-item__title-row strong {
-  white-space: nowrap;
-}
-
-.todo-item__arrow {
-  margin-left: auto;
-  color: var(--color-text-placeholder);
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-}
-.todo-item__arrow :deep(svg),
-.todo-item__arrow svg {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-.todo-item__body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.todo-item__body span {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-}
-
-.status-item__body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.status-item__body span {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-}
-
-.status-item {
-  display: flex;
-  gap: 14px;
-  padding: 14px;
-  background: var(--color-bg-page);
-  border: 1px solid var(--color-border-light);
-  border-radius: 16px;
-}
-
-.status-item__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  flex: 0 0 auto;
-}
-.status-item__icon :deep(svg),
-.status-item__icon svg {
-  width: 20px !important;
-  height: 20px !important;
-}
-
-.status-item__icon--success {
-  color: #67c23a;
-  background: rgba(103, 194, 58, 0.12);
-}
-
-.status-item__icon--warning {
-  color: #e6a23c;
-  background: rgba(230, 162, 60, 0.12);
-}
-
-.status-item__icon--info {
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.12);
-}
-
-.status-item__icon--danger {
-  color: #f56c6c;
-  background: rgba(245, 108, 108, 0.12);
-}
-
-.panel-card {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.range-tabs {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.range-tag {
-  cursor: pointer;
-}
-
-.pending-table {
-  width: 100%;
-}
-
-.module-card {
-  margin-top: 4px;
-}
-
-.config-form {
-  padding-top: 8px;
-}
-
-.section-loading,
-.empty-wrap {
-  padding: 20px 0;
-  max-height: 300px;
-}
-.empty-wrap :deep(.el-empty__image) {
-  max-width: 80px;
-}
-.empty-wrap :deep(.el-empty__image svg) {
-  width: 80px !important;
-  height: 80px !important;
-}
-
-.unauthorized-card {
-  max-width: 560px;
-  margin: 48px auto;
-}
-
-@media (max-width: 1360px) {
-  .metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .middle-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .bottom-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.workbench-hero { display: none; }
+.hero-copy, .hero-badge, .hero-actions { display: none; }
 
 @media (max-width: 1100px) {
-  .admin-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-sidebar {
-    order: 2;
-  }
-
-  .admin-main {
-    order: 1;
-  }
-}
-
-@media (max-width: 960px) {
-  .metric-grid,
-  .middle-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .workbench-hero {
-    flex-direction: column;
-  }
-
-  .hero-actions {
-    justify-content: flex-start;
-  }
-}
-.panel-card--empty {
-  min-height: 280px;
-  max-height: 320px;
-}
-.panel-card--empty :deep(.el-empty) {
-  padding: 20px 0;
-}
-.panel-card--empty :deep(.el-empty__image) {
-  max-width: 80px;
-}
-.panel-card--empty :deep(.el-empty__image svg) {
-  width: 80px !important;
-  height: 80px !important;
-}
-</style>
+  .admin-container { height: auto; grid-template-columns: 1fr; display: block; }
+  .admin-sidebar { height: auto; border-right: none; }
+  .admin-main { height: auto; overflow-y: visible; }
+}</style>

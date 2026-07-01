@@ -1,0 +1,27 @@
+{
+  "name": "llm-news-summary-collaboration-system",
+  "version": "1.0.0",
+  "description": "本项目是一个前后端分离的新闻摘要与协同互动系统，包含新闻浏览、新闻互动、AI 标题摘要生成、社区互动、个人中心、管理后台、RSS 新闻爬虫、Timeline 事件脉络等模块。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Li229-cqu/llm-news-summary-collaboration-system.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Li229-cqu/llm-news-summary-collaboration-system/issues"
+  },
+  "homepage": "https://github.com/Li229-cqu/llm-news-summary-collaboration-system#readme",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

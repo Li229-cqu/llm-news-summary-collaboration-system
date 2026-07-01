@@ -254,7 +254,7 @@ function jumpTo(tab: string) {
 const summaryCards = computed(() => {
   const o = overview.value
   return [
-    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃: ' + (o?.active_users ?? '-'), icon: UserFilled, bg: '#eff6ff', color: '#3b82f6' },
+    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃: ' + (o?.active_users ?? '-'), icon: UserFilled, bg: '#fef2f2', color: '#dc2626' },
     { key: 'news', title: '新闻总数', value: o?.total_news ?? '-', hint: '文章总量', icon: Files, bg: '#f0fdf4', color: '#16a34a' },
     { key: 'posts', title: '帖子总数', value: o?.total_posts ?? '-', hint: '社区帖子', icon: Message, bg: '#fefce8', color: '#ca8a04' },
     { key: 'comments', title: '评论总数', value: o?.total_comments ?? '-', hint: '新闻+帖子评论', icon: Document, bg: '#fdf2f8', color: '#db2777' },

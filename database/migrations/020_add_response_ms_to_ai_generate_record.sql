@@ -1,2 +1,15 @@
--- M10: Add response_ms field to ai_generate_record for average latency calculation
-ALTER TABLE `ai_generate_record` ADD COLUMN `response_ms` INT NOT NULL DEFAULT 0 COMMENT '响应时间(毫秒)' AFTER `ai_source`;
+SET @col_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'ai_generate_record'
+    AND COLUMN_NAME = 'response_ms'
+);
+SET @sql := IF(
+  @col_exists = 0,
+  'ALTER TABLE `ai_generate_record` ADD COLUMN `response_ms` INT NOT NULL DEFAULT 0 COMMENT ''response time in milliseconds'' AFTER `ai_source`',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

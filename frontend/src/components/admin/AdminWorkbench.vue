@@ -100,8 +100,8 @@ const kpiCards = computed<KpiCard[]>(() => [
     value: dashboard.value?.today_new_users ?? '--',
     hint: dashboard.value ? '今日注册' : '等待加载',
     icon: UserFilled,
-    bg: '#e8f4fd',
-    color: '#409eff',
+    bg: '#fef2f2',
+    color: '#dc2626',
   },
   {
     key: 'active_users_7d',
@@ -109,8 +109,8 @@ const kpiCards = computed<KpiCard[]>(() => [
     value: dashboard.value?.active_users_7d ?? '--',
     hint: dashboard.value ? '按浏览记录估算' : '等待加载',
     icon: TrendCharts,
-    bg: '#e0f2fe',
-    color: '#0284c7',
+    bg: '#fee2e2',
+    color: '#b91c1c',
   },
   {
     key: 'today_review_done',
@@ -136,8 +136,8 @@ const kpiCards = computed<KpiCard[]>(() => [
     value: dashboard.value?.today_ai_calls ?? '--',
     hint: dashboard.value ? '生成调用次数' : '等待加载',
     icon: Monitor,
-    bg: '#f5f7ff',
-    color: '#6a78ff',
+    bg: '#fef2f2',
+    color: '#dc2626',
   },
   {
     key: 'avg_response_ms',

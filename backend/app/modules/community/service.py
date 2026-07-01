@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from app.common.exceptions import AppException
 from app.common.utils import format_datetime, normalize_text, paginate
-from app.db.database import execute_one, execute_query, execute_update, get_connection
+from app.db.database import execute_insert, execute_one, execute_query, execute_update, get_connection
 from app.mock.community import (
     MOCK_COMMUNITY_BLOCKS,
     MOCK_COMMUNITY_COMMENT_LIKES,
@@ -29,13 +29,23 @@ from app.modules.community.schema import (
     CommentLikeResult,
     CommentListResponse,
     CommentsSummaryResponse,
+    CommunityAiMessageCreate,
+    CommunityAiMessageItem,
+    CommunityAiSessionCreate,
+    CommunityAiSessionDetailResponse,
+    CommunityAiSessionItem,
+    CommunityAiSessionListResponse,
+    CommunityAiMessageSendResponse,
     CommunityPost,
     CreateCommentRequest,
     CreatePostRequest,
     FavoriteResponse,
     HotSearchItem,
     LikeResponse,
+    MyCommunityPostListResponse,
     PostListResponse,
+    ReceivedInteractionItem,
+    ReceivedInteractionListResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -2794,6 +2804,733 @@ async def get_comments_summary(post_id: int) -> CommentsSummaryResponse:
         page += 1
 
     return await generate_comments_summary(all_comments)
+
+
+# ─── AI Session & Message ──────────────────────────────────────
+
+
+def _build_community_context() -> str:
+    """构建社区上下文（复用 ai_news_helper 中的逻辑片段）。"""
+    from app.modules.news.service import get_news_list, get_hot_news
+
+    try:
+        news_list = get_news_list(page=1, page_size=10)
+        hot_news = get_hot_news(limit=5)
+        posts = get_post_list(page=1, page_size=10)
+        hot_topics = get_hot_search(limit=5)
+
+        news_context = "\n".join(
+            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
+            for n in (news_list.get("list") or [])[:5]
+        )
+        hot_news_context = "\n".join(
+            f"热点新闻 {n['id']}: {n['title']}" for n in (hot_news or [])[:3]
+        )
+        post_context = "\n".join(
+            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}" for p in (posts.list or [])[:5]
+        )
+        topic_context = "\n".join(
+            f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
+            for t in (hot_topics or [])[:3]
+        )
+
+        return f"""【系统新闻内容】
+{news_context}
+
+【热点新闻】
+{hot_news_context}
+
+【社区讨论帖子】
+{post_context}
+
+【热点话题】
+{topic_context}"""
+    except Exception as exc:
+        logger.warning("构建社区上下文失败：%s", exc)
+        return ""
+
+
+async def _call_ai_service(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+) -> str:
+    """调用 AI 服务生成回答（复用 ai_news_helper 的调用方式）。"""
+    import httpx
+    from app.core.config import settings
+
+    system_context = _build_community_context()
+
+    # 拼接 history 文本
+    history_text = ""
+    if history:
+        parts = []
+        for h in history[-8:]:  # 最多取最近 8 条
+            role_label = "用户" if h["role"] == "user" else "AI助手"
+            content = h["content"][:200]
+            parts.append(f"{role_label}：{content}")
+        if parts:
+            history_text = "\n".join(parts) + "\n"
+
+    system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
+
+{system_context}
+
+【对话历史】
+{history_text}
+
+请根据以上内容回答用户的问题。如果问题与系统内容相关，请引用具体信息进行回答。如果问题与系统内容无关，请礼貌地告知用户当前系统的数据范围。回答要简洁、准确、有价值。"""
+
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/chat"
+        logger.info("🚀 [AI SESSION] 调用 AI 服务: %s", ai_service_url)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                ai_service_url,
+                json={"question": question, "context": system_prompt},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and "data" in data:
+                    answer = data["data"].get("answer", "")
+                    if answer:
+                        logger.info("✅ [AI SESSION] AI 回答生成成功")
+                        return answer
+    except Exception as exc:
+        logger.warning("❌ [AI SESSION] AI 服务调用失败：%s", exc)
+
+    # fallback 关键词匹配
+    from app.modules.news.service import get_news_list, get_hot_news
+
+    keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
+    matched = [k for k in keywords if k in question]
+    if matched:
+        if "新闻" in question or "摘要" in question:
+            news_list = get_news_list(page=1, page_size=5)
+            count = len(news_list.get("list") or [])
+            return f"系统目前有 {count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
+        if "热点" in question or "话题" in question:
+            hot_topics = get_hot_search(limit=3)
+            topics = ", ".join(t.title for t in hot_topics[:3])
+            return f"当前热点话题有：{topics}。点击查看详细内容。"
+        if "社区" in question or "帖子" in question:
+            return "社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
+
+    return "谢谢你的提问！我是 AI 新闻助手，可以帮你了解系统中的新闻内容、热点话题和社区讨论。请问有什么可以帮你的？"
+
+
+def _session_row_to_item(
+    row: dict[str, Any],
+    message_count: int = 0,
+    last_message_preview: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "title": normalize_text(row.get("title", "")),
+        "summary": normalize_text(row.get("summary") or "") or None,
+        "source_type": row.get("source_type") or None,
+        "source_post_id": row.get("source_post_id"),
+        "source_news_id": row.get("source_news_id"),
+        "status": row.get("status", "active"),
+        "created_at": _format_datetime(row.get("created_at")),
+        "updated_at": _format_datetime(row.get("updated_at")),
+        "last_message_at": _format_datetime(row.get("last_message_at")) if row.get("last_message_at") else None,
+        "message_count": message_count,
+        "last_message_preview": last_message_preview,
+    }
+
+
+def _message_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "session_id": int(row["session_id"]),
+        "user_id": int(row["user_id"]),
+        "role": row["role"],
+        "content": normalize_text(row.get("content", "")),
+        "status": row.get("status", "success"),
+        "error_message": row.get("error_message"),
+        "created_at": _format_datetime(row.get("created_at")),
+    }
+
+
+def _db_get_session_message_count(session_id: int) -> int:
+    row = execute_one(
+        "SELECT COUNT(*) AS cnt FROM community_ai_message WHERE session_id = %s",
+        [session_id],
+    )
+    return int(row["cnt"]) if row else 0
+
+
+def _db_get_session_last_message(session_id: int) -> dict | None:
+    return execute_one(
+        """SELECT content FROM community_ai_message
+         WHERE session_id = %s AND role = 'assistant' AND status = 'success'
+         ORDER BY id DESC LIMIT 1""",
+        [session_id],
+    )
+
+
+def _db_get_recent_messages(session_id: int, limit: int = 10) -> list[dict[str, Any]]:
+    rows = execute_query(
+        """SELECT id, session_id, user_id, role, content, status, error_message, created_at
+         FROM community_ai_message
+         WHERE session_id = %s AND status = 'success'
+         ORDER BY id ASC""",
+        [session_id],
+    )
+    return rows[-limit:] if rows else []
+
+
+async def create_ai_session(
+    request: CommunityAiSessionCreate,
+    current_user: UserInfo,
+) -> CommunityAiSessionDetailResponse:
+    """创建 AI 会话，可选携带首条问题。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    title = request.question[:30] if request.question else "新的社区 AI 会话"
+    if request.question and len(request.question) > 30:
+        title = request.question[:27] + "..."
+
+    # 插入 session
+    session_id = execute_insert(
+        """INSERT INTO community_ai_session
+         (user_id, title, summary, source_type, source_post_id, source_news_id, status, last_message_at, created_at, updated_at)
+         VALUES (%s, %s, %s, %s, %s, %s, 'active', NOW(), NOW(), NOW())""",
+        [user_id, title, "", request.source_type, request.source_post_id, request.source_news_id],
+    )
+
+    messages: list[dict] = []
+
+    if request.question:
+        # 插入 user message
+        execute_insert(
+            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+             VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+            [session_id, user_id, request.question],
+        )
+        messages.append({
+            "id": 0,
+            "session_id": session_id,
+            "user_id": user_id,
+            "role": "user",
+            "content": request.question,
+            "status": "success",
+            "error_message": None,
+            "created_at": _now_text(),
+        })
+
+        # 调用 AI
+        answer = await _call_ai_service(request.question)
+
+        execute_insert(
+            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+             VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+            [session_id, user_id, answer],
+        )
+        messages.append({
+            "id": 0,
+            "session_id": session_id,
+            "user_id": user_id,
+            "role": "assistant",
+            "content": answer,
+            "status": "success",
+            "error_message": None,
+            "created_at": _now_text(),
+        })
+
+        # 更新 last_message_at
+        execute_update(
+            "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+            [session_id],
+        )
+
+    # 查回 session 完整数据
+    row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+    if row is None:
+        raise AppException(code=500, message="创建会话失败")
+
+    message_count = _db_get_session_message_count(session_id)
+    last_msg = _db_get_session_last_message(session_id)
+    preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+
+    return CommunityAiSessionDetailResponse(
+        session=CommunityAiSessionItem(**_session_row_to_item(row, message_count=message_count, last_message_preview=preview)),
+        messages=[CommunityAiMessageItem(**m) for m in messages],
+    )
+
+
+def get_ai_session_list(
+    page: int = 1,
+    page_size: int = 20,
+    current_user: UserInfo | None = None,
+) -> CommunityAiSessionListResponse:
+    """获取当前用户的 AI 会话列表。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    total_row = execute_one(
+        "SELECT COUNT(*) AS cnt FROM community_ai_session WHERE user_id = %s AND status = 'active'",
+        [user_id],
+    )
+    total = int(total_row["cnt"]) if total_row else 0
+
+    if total == 0:
+        return CommunityAiSessionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    rows = execute_query(
+        """SELECT * FROM community_ai_session
+         WHERE user_id = %s AND status = 'active'
+         ORDER BY COALESCE(last_message_at, updated_at) DESC, id DESC
+         LIMIT %s OFFSET %s""",
+        [user_id, page_size, (page - 1) * page_size],
+    )
+
+    items = []
+    for row in rows:
+        sid = int(row["id"])
+        message_count = _db_get_session_message_count(sid)
+        last_msg = _db_get_session_last_message(sid)
+        preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+        items.append(CommunityAiSessionItem(**_session_row_to_item(row, message_count=message_count, last_message_preview=preview)))
+
+    return CommunityAiSessionListResponse(list=items, total=total, page=page, page_size=page_size)
+
+
+def get_ai_session_detail(
+    session_id: int,
+    current_user: UserInfo | None = None,
+) -> CommunityAiSessionDetailResponse:
+    """获取单个会话的详情和消息。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    row = execute_one(
+        "SELECT * FROM community_ai_session WHERE id = %s AND status = 'active'",
+        [session_id],
+    )
+    if row is None:
+        raise AppException(code=404, message="会话不存在")
+    if int(row["user_id"]) != user_id:
+        raise AppException(code=403, message="无权访问该会话")
+
+    message_count = _db_get_session_message_count(session_id)
+    last_msg = _db_get_session_last_message(session_id)
+    preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+
+    msg_rows = _db_get_recent_messages(session_id, limit=100)
+    messages = [CommunityAiMessageItem(**_message_row_to_item(m)) for m in msg_rows]
+
+    return CommunityAiSessionDetailResponse(
+        session=CommunityAiSessionItem(**_session_row_to_item(row, message_count=message_count, last_message_preview=preview)),
+        messages=messages,
+    )
+
+
+async def send_ai_message(
+    session_id: int,
+    request: CommunityAiMessageCreate,
+    current_user: UserInfo,
+) -> CommunityAiMessageSendResponse:
+    """在已有会话中连续追问。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    # 校验 session
+    session_row = execute_one(
+        "SELECT * FROM community_ai_session WHERE id = %s AND status = 'active'",
+        [session_id],
+    )
+    if session_row is None:
+        raise AppException(code=404, message="会话不存在")
+    if int(session_row["user_id"]) != user_id:
+        raise AppException(code=403, message="无权访问该会话")
+
+    # 插入 user 消息
+    user_msg_id = execute_insert(
+        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+         VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+        [session_id, user_id, request.question],
+    )
+
+    user_msg = CommunityAiMessageItem(
+        id=user_msg_id,
+        session_id=session_id,
+        user_id=user_id,
+        role="user",
+        content=request.question,
+        status="success",
+        created_at=_now_text(),
+    )
+
+    # 获取历史消息
+    history_rows = _db_get_recent_messages(session_id, limit=10)
+    history = [{"role": r["role"], "content": r["content"]} for r in history_rows]
+
+    # 调用 AI
+    answer_text = "抱歉，AI 服务暂时不可用，请稍后重试。"
+    try:
+        answer_text = await _call_ai_service(request.question, history)
+    except Exception as exc:
+        logger.error("AI 消息发送异常：%s", exc)
+        answer_text = "抱歉，AI 服务暂时不可用，请稍后重试。"
+
+    assistant_msg_id = execute_insert(
+        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+         VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+        [session_id, user_id, answer_text],
+    )
+
+    assistant_msg = CommunityAiMessageItem(
+        id=assistant_msg_id,
+        session_id=session_id,
+        user_id=user_id,
+        role="assistant",
+        content=answer_text,
+        status="success",
+        created_at=_now_text(),
+    )
+
+    # 更新会话
+    execute_update(
+        "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+        [session_id],
+    )
+
+    # 重新读取 session
+    updated_row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+    message_count = _db_get_session_message_count(session_id)
+    last_msg = _db_get_session_last_message(session_id)
+    preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+
+    return CommunityAiMessageSendResponse(
+        session=CommunityAiSessionItem(**_session_row_to_item(updated_row, message_count=message_count, last_message_preview=preview)),
+        user_message=user_msg,
+        assistant_message=assistant_msg,
+    )
+
+
+def delete_ai_session(
+    session_id: int,
+    current_user: UserInfo | None = None,
+) -> dict[str, Any]:
+    """软删除 AI 会话。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    row = execute_one(
+        "SELECT id, user_id FROM community_ai_session WHERE id = %s AND status = 'active'",
+        [session_id],
+    )
+    if row is None:
+        raise AppException(code=404, message="会话不存在")
+    if int(row["user_id"]) != user_id:
+        raise AppException(code=403, message="无权删除该会话")
+
+    execute_update(
+        "UPDATE community_ai_session SET status = 'deleted', updated_at = NOW() WHERE id = %s",
+        [session_id],
+    )
+    return {"success": True, "message": "会话已删除"}
+
+
+# ─── My Posts ───────────────────────────────────────────────────
+
+
+def _my_post_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
+    """将 community_post 行转为 MyCommunityPostItem 格式。"""
+    content = normalize_text(row.get("content") or "")
+    related_news_title = normalize_text(row.get("related_news_title") or "")
+    return {
+        "id": int(row.get("id") or 0),
+        "title": normalize_text(row.get("title") or ""),
+        "content": content,
+        "summary": content[:200] if content else "",
+        "author_id": int(row.get("user_id") or 0),
+        "author": normalize_text(row.get("author")) or normalize_text(row.get("nickname")) or normalize_text(row.get("username")) or f"用户{row.get('user_id', 0)}",
+        "avatar": normalize_text(row.get("avatar") or ""),
+        "created_at": _format_datetime(row.get("create_time") or row.get("created_at")),
+        "updated_at": _format_datetime(row.get("update_time") or row.get("updated_at")),
+        "tags": _parse_json_list(row.get("tags")),
+        "status": int(row.get("status") or 0),
+        "view_count": int(row.get("view_count") or 0),
+        "like_count": int(row.get("like_count") or 0),
+        "comment_count": int(row.get("comment_count") or 0),
+        "favorite_count": int(row.get("favorite_count") or 0),
+        "likes": int(row.get("like_count") or 0),
+        "comments": int(row.get("comment_count") or 0),
+        "views": int(row.get("view_count") or 0),
+        "related_news_id": row.get("related_news_id"),
+        "related_news_title": related_news_title,
+        "liked": False,
+        "favorited": False,
+    }
+
+
+def get_my_posts(
+    page: int = 1,
+    page_size: int = 10,
+    keyword: str | None = None,
+    current_user: UserInfo | None = None,
+) -> MyCommunityPostListResponse:
+    """获取当前用户自己的社区帖子。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    try:
+        where = ["cp.user_id = %s", "cp.status = 1"]
+        params: list[Any] = [user_id]
+        if keyword and keyword.strip():
+            like_val = f"%{keyword.strip()}%"
+            where.append("(cp.title LIKE %s OR cp.content LIKE %s)")
+            params.extend([like_val, like_val])
+
+        total_row = execute_one(
+            f"SELECT COUNT(*) AS cnt FROM community_post cp WHERE {' AND '.join(where)}",
+            params,
+        )
+        total = int(total_row["cnt"]) if total_row else 0
+
+        if total == 0:
+            return MyCommunityPostListResponse(list=[], total=0, page=page, page_size=page_size)
+
+        rows = execute_query(
+            f"""SELECT cp.*, u.nickname, u.username, u.avatar,
+                       COALESCE(n.title, '') AS related_news_title
+                FROM community_post cp
+                LEFT JOIN `user` u ON u.id = cp.user_id
+                LEFT JOIN news n ON n.id = cp.related_news_id
+                WHERE {' AND '.join(where)}
+                ORDER BY cp.created_at DESC, cp.id DESC
+                LIMIT %s OFFSET %s""",
+            params + [page_size, (page - 1) * page_size],
+        )
+        items = [_my_post_row_to_item(r) for r in rows]
+        return MyCommunityPostListResponse(list=items, total=total, page=page, page_size=page_size)
+    except AppException:
+        raise
+    except Exception as exc:
+        logger.warning("获取我的帖子失败：%s", exc)
+        raise AppException(code=500, message="获取我的帖子失败") from exc
+
+
+# ─── Received Interactions ──────────────────────────────────────
+
+
+def _get_my_post_ids(user_id: int) -> list[int]:
+    """获取当前用户所有正常帖子的 id 列表。"""
+    rows = execute_query(
+        "SELECT id FROM community_post WHERE user_id = %s AND status = 1",
+        [user_id],
+    )
+    return [int(r["id"]) for r in rows]
+
+
+def get_received_likes(
+    page: int = 1,
+    page_size: int = 10,
+    current_user: UserInfo | None = None,
+) -> ReceivedInteractionListResponse:
+    """获取别人对我帖子的点赞。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    post_ids = _get_my_post_ids(user_id)
+    if not post_ids:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    placeholders = ",".join(["%s"] * len(post_ids))
+    # 过滤自己给自己点赞
+    total_row = execute_one(
+        f"""SELECT COUNT(*) AS cnt FROM user_like ul
+            WHERE ul.target_type = 'post'
+            AND ul.target_id IN ({placeholders})
+            AND ul.user_id != %s""",
+        [*post_ids, user_id],
+    )
+    total = int(total_row["cnt"]) if total_row else 0
+    if total == 0:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    rows = execute_query(
+        f"""SELECT ul.id, ul.user_id AS actor_user_id,
+                   u.nickname AS actor_nickname, u.avatar AS actor_avatar,
+                   ul.created_at AS action_time,
+                   cp.id AS target_post_id, cp.title AS target_post_title,
+                   SUBSTRING(cp.content, 1, 200) AS target_post_summary,
+                   cp.created_at AS target_post_created_at,
+                   cp.related_news_id, COALESCE(n.title, '') AS related_news_title
+            FROM user_like ul
+            LEFT JOIN `user` u ON u.id = ul.user_id
+            LEFT JOIN community_post cp ON cp.id = ul.target_id
+            LEFT JOIN news n ON n.id = cp.related_news_id
+            WHERE ul.target_type = 'post'
+            AND ul.target_id IN ({placeholders})
+            AND ul.user_id != %s
+            ORDER BY ul.created_at DESC, ul.id DESC
+            LIMIT %s OFFSET %s""",
+        [*post_ids, user_id, page_size, (page - 1) * page_size],
+    )
+    items = [
+        ReceivedInteractionItem(
+            id=r["id"],
+            actor_user_id=r["actor_user_id"],
+            actor_nickname=normalize_text(r.get("actor_nickname") or ""),
+            actor_avatar=normalize_text(r.get("actor_avatar") or ""),
+            action_type="like",
+            action_time=_format_datetime(r.get("action_time")),
+            target_post_id=r["target_post_id"],
+            target_post_title=normalize_text(r.get("target_post_title") or ""),
+            target_post_summary=normalize_text(r.get("target_post_summary") or ""),
+            target_post_created_at=_format_datetime(r.get("target_post_created_at")),
+            related_news_id=r.get("related_news_id"),
+            related_news_title=normalize_text(r.get("related_news_title") or ""),
+        )
+        for r in rows
+    ]
+    return ReceivedInteractionListResponse(list=items, total=total, page=page, page_size=page_size)
+
+
+def get_received_comments(
+    page: int = 1,
+    page_size: int = 10,
+    current_user: UserInfo | None = None,
+) -> ReceivedInteractionListResponse:
+    """获取别人评论我帖子的记录。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    post_ids = _get_my_post_ids(user_id)
+    if not post_ids:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    placeholders = ",".join(["%s"] * len(post_ids))
+    # 过滤自己评论自己帖子、过滤已删除（status=4）评论
+    total_row = execute_one(
+        f"""SELECT COUNT(*) AS cnt FROM post_comment pc
+            WHERE pc.post_id IN ({placeholders})
+            AND pc.status IN (1, 2)
+            AND pc.user_id != %s""",
+        [*post_ids, user_id],
+    )
+    total = int(total_row["cnt"]) if total_row else 0
+    if total == 0:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    rows = execute_query(
+        f"""SELECT pc.id, pc.user_id AS actor_user_id,
+                   u.nickname AS actor_nickname, u.avatar AS actor_avatar,
+                   pc.created_at AS action_time,
+                   pc.content AS comment_content,
+                   cp.id AS target_post_id, cp.title AS target_post_title,
+                   SUBSTRING(cp.content, 1, 200) AS target_post_summary,
+                   cp.created_at AS target_post_created_at,
+                   cp.related_news_id, COALESCE(n.title, '') AS related_news_title
+            FROM post_comment pc
+            LEFT JOIN `user` u ON u.id = pc.user_id
+            LEFT JOIN community_post cp ON cp.id = pc.post_id
+            LEFT JOIN news n ON n.id = cp.related_news_id
+            WHERE pc.post_id IN ({placeholders})
+            AND pc.status IN (1, 2)
+            AND pc.user_id != %s
+            ORDER BY pc.created_at DESC, pc.id DESC
+            LIMIT %s OFFSET %s""",
+        [*post_ids, user_id, page_size, (page - 1) * page_size],
+    )
+    items = [
+        ReceivedInteractionItem(
+            id=r["id"],
+            actor_user_id=r["actor_user_id"],
+            actor_nickname=normalize_text(r.get("actor_nickname") or ""),
+            actor_avatar=normalize_text(r.get("actor_avatar") or ""),
+            action_type="comment",
+            action_time=_format_datetime(r.get("action_time")),
+            comment_id=r["id"],
+            comment_content=normalize_text(r.get("comment_content") or ""),
+            target_post_id=r["target_post_id"],
+            target_post_title=normalize_text(r.get("target_post_title") or ""),
+            target_post_summary=normalize_text(r.get("target_post_summary") or ""),
+            target_post_created_at=_format_datetime(r.get("target_post_created_at")),
+            related_news_id=r.get("related_news_id"),
+            related_news_title=normalize_text(r.get("related_news_title") or ""),
+        )
+        for r in rows
+    ]
+    return ReceivedInteractionListResponse(list=items, total=total, page=page, page_size=page_size)
+
+
+def get_received_favorites(
+    page: int = 1,
+    page_size: int = 10,
+    current_user: UserInfo | None = None,
+) -> ReceivedInteractionListResponse:
+    """获取别人收藏我帖子的记录。favorite 表已支持 target_type='post'。"""
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    post_ids = _get_my_post_ids(user_id)
+    if not post_ids:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    placeholders = ",".join(["%s"] * len(post_ids))
+    # 过滤自己收藏自己帖子
+    total_row = execute_one(
+        f"""SELECT COUNT(*) AS cnt FROM favorite f
+            WHERE f.target_type = 'post'
+            AND f.target_id IN ({placeholders})
+            AND f.user_id != %s""",
+        [*post_ids, user_id],
+    )
+    total = int(total_row["cnt"]) if total_row else 0
+    if total == 0:
+        return ReceivedInteractionListResponse(list=[], total=0, page=page, page_size=page_size)
+
+    rows = execute_query(
+        f"""SELECT f.id, f.user_id AS actor_user_id,
+                   u.nickname AS actor_nickname, u.avatar AS actor_avatar,
+                   f.created_at AS action_time,
+                   cp.id AS target_post_id, cp.title AS target_post_title,
+                   SUBSTRING(cp.content, 1, 200) AS target_post_summary,
+                   cp.created_at AS target_post_created_at,
+                   cp.related_news_id, COALESCE(n.title, '') AS related_news_title
+            FROM favorite f
+            LEFT JOIN `user` u ON u.id = f.user_id
+            LEFT JOIN community_post cp ON cp.id = f.target_id
+            LEFT JOIN news n ON n.id = cp.related_news_id
+            WHERE f.target_type = 'post'
+            AND f.target_id IN ({placeholders})
+            AND f.user_id != %s
+            ORDER BY f.created_at DESC, f.id DESC
+            LIMIT %s OFFSET %s""",
+        [*post_ids, user_id, page_size, (page - 1) * page_size],
+    )
+    items = [
+        ReceivedInteractionItem(
+            id=r["id"],
+            actor_user_id=r["actor_user_id"],
+            actor_nickname=normalize_text(r.get("actor_nickname") or ""),
+            actor_avatar=normalize_text(r.get("actor_avatar") or ""),
+            action_type="favorite",
+            action_time=_format_datetime(r.get("action_time")),
+            target_post_id=r["target_post_id"],
+            target_post_title=normalize_text(r.get("target_post_title") or ""),
+            target_post_summary=normalize_text(r.get("target_post_summary") or ""),
+            target_post_created_at=_format_datetime(r.get("target_post_created_at")),
+            related_news_id=r.get("related_news_id"),
+            related_news_title=normalize_text(r.get("related_news_title") or ""),
+        )
+        for r in rows
+    ]
+    return ReceivedInteractionListResponse(list=items, total=total, page=page, page_size=page_size)
 
 
 FALLBACK_POSTS = [deepcopy(item) for item in MOCK_COMMUNITY_POSTS]

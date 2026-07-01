@@ -1,7 +1,31 @@
--- 目的：为 community_post 表添加 view_count 字段，支持真实的帖子浏览计数
+SET @col_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'community_post'
+    AND COLUMN_NAME = 'view_count'
+);
+SET @sql := IF(
+  @col_exists = 0,
+  'ALTER TABLE `community_post` ADD COLUMN `view_count` INT NOT NULL DEFAULT 0 COMMENT ''view count'' AFTER `favorite_count`',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE `community_post`
-  ADD COLUMN `view_count` INT NOT NULL DEFAULT 0 COMMENT '浏览次数' AFTER `favorite_count`;
-
-ALTER TABLE `community_post`
-  ADD KEY `idx_community_post_view_count` (`view_count`);
+SET @idx_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'community_post'
+    AND INDEX_NAME = 'idx_community_post_view_count'
+);
+SET @sql := IF(
+  @idx_exists = 0,
+  'ALTER TABLE `community_post` ADD INDEX `idx_community_post_view_count` (`view_count`)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

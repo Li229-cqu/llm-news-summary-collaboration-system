@@ -19,31 +19,48 @@ from app.modules.community.schema import (
     CommentListResponse,
     CommentsSummaryRequest,
     CommentsSummaryResponse,
+    CommunityAiMessageCreate,
+    CommunityAiMessageSendResponse,
+    CommunityAiSessionCreate,
+    CommunityAiSessionDetailResponse,
+    CommunityAiSessionItem,
+    CommunityAiSessionListResponse,
     CommunityPost,
     CreateCommentRequest,
     CreatePostRequest,
     FavoriteResponse,
     HotSearchItem,
     LikeResponse,
+    MyCommunityPostListResponse,
     PostListResponse,
+    ReceivedInteractionListResponse,
     TagCount,
 )
 from app.modules.community.service import (
     ai_news_helper,
     block_user,
+    create_ai_session,
     create_comment,
+    delete_ai_session,
     delete_comment,
     create_post,
     generate_comments_summary,
+    get_ai_session_detail,
+    get_ai_session_list,
     get_available_tags,
     get_comments,
     get_comments_summary,
     get_hot_search,
     get_hot_tags,
     get_hot_topics,
+    get_my_posts,
     get_post_detail,
     get_post_list,
+    get_received_likes,
+    get_received_comments,
+    get_received_favorites,
     reply_comment,
+    send_ai_message,
     unfavorite_post as unfavorite_post_service,
     unlike_post as unlike_post_service,
     toggle_comment_like,
@@ -256,3 +273,106 @@ async def create_comments_summary(
     """生成评论总结（接收评论列表，调用 AI 服务）。"""
     summary = await generate_comments_summary(request.comments)
     return success_response(summary)
+
+
+# ─── AI 会话接口 ──────────────────────────────────────────────
+
+
+@router.post("/ai-sessions", response_model=ApiResponse[CommunityAiSessionDetailResponse])
+async def create_ai_session_route(
+    request: CommunityAiSessionCreate = Body(...),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[CommunityAiSessionDetailResponse]:
+    """创建 AI 会话，可选携带首条问题。"""
+    result = await create_ai_session(request, current_user)
+    return success_response(result)
+
+
+@router.get("/ai-sessions", response_model=ApiResponse[CommunityAiSessionListResponse])
+async def list_ai_sessions(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[CommunityAiSessionListResponse]:
+    """获取当前用户的 AI 会话列表。"""
+    result = get_ai_session_list(page=page, page_size=page_size, current_user=current_user)
+    return success_response(result)
+
+
+@router.get("/ai-sessions/{session_id}", response_model=ApiResponse[CommunityAiSessionDetailResponse])
+async def get_ai_session_detail_route(
+    session_id: int = Path(..., ge=1, description="会话ID"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[CommunityAiSessionDetailResponse]:
+    """获取单个 AI 会话详情和消息列表。"""
+    result = get_ai_session_detail(session_id, current_user=current_user)
+    return success_response(result)
+
+
+@router.post("/ai-sessions/{session_id}/messages", response_model=ApiResponse[CommunityAiMessageSendResponse])
+async def send_ai_message_route(
+    session_id: int = Path(..., ge=1, description="会话ID"),
+    request: CommunityAiMessageCreate = Body(...),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[CommunityAiMessageSendResponse]:
+    """在已有会话中连续追问。"""
+    result = await send_ai_message(session_id, request, current_user)
+    return success_response(result)
+
+
+@router.delete("/ai-sessions/{session_id}", response_model=ApiResponse[dict])
+async def delete_ai_session_route(
+    session_id: int = Path(..., ge=1, description="会话ID"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[dict]:
+    """软删除 AI 会话。"""
+    result = delete_ai_session(session_id, current_user=current_user)
+    return success_response(result)
+
+
+# ─── 我的帖子与互动接口 ──────────────────────────────────────────
+
+
+@router.get("/me/posts", response_model=ApiResponse[MyCommunityPostListResponse])
+async def my_posts(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=50, description="每页数量"),
+    keyword: Optional[str] = Query(None, description="关键词"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[MyCommunityPostListResponse]:
+    """获取当前登录用户自己的帖子列表。"""
+    result = get_my_posts(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+    return success_response(result)
+
+
+@router.get("/me/interactions/likes", response_model=ApiResponse[ReceivedInteractionListResponse])
+async def received_likes(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=50, description="每页数量"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReceivedInteractionListResponse]:
+    """获取别人对我帖子的点赞。"""
+    result = get_received_likes(page=page, page_size=page_size, current_user=current_user)
+    return success_response(result)
+
+
+@router.get("/me/interactions/comments", response_model=ApiResponse[ReceivedInteractionListResponse])
+async def received_comments(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=50, description="每页数量"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReceivedInteractionListResponse]:
+    """获取别人评论我帖子的记录。"""
+    result = get_received_comments(page=page, page_size=page_size, current_user=current_user)
+    return success_response(result)
+
+
+@router.get("/me/interactions/favorites", response_model=ApiResponse[ReceivedInteractionListResponse])
+async def received_favorites(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=50, description="每页数量"),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[ReceivedInteractionListResponse]:
+    """获取别人收藏我帖子的记录。"""
+    result = get_received_favorites(page=page, page_size=page_size, current_user=current_user)
+    return success_response(result)

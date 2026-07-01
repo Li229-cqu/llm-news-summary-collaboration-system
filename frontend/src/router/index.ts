@@ -46,6 +46,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '社区互动', requiresAuth: true },
       },
       {
+        path: 'community/posts/:id',
+        name: 'community-post-detail',
+        component: () => import('@/views/community/CommunityPostDetailView.vue'),
+        meta: { title: '帖子详情', requiresAuth: true },
+      },
+      {
+        path: 'community/create',
+        name: 'community-create-post',
+        component: () => import('@/views/community/CreatePostView.vue'),
+        meta: { title: '发布帖子', requiresAuth: true },
+      },
+      {
         path: 'profile',
         name: 'profile',
         component: () => import('@/views/profile/ProfileView.vue'),

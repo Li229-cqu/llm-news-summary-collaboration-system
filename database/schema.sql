@@ -1,21 +1,21 @@
 -- =========================================================
--- 《基于大语言模型的智能新闻摘要与协同互动系统》
--- MySQL 8.0 数据库表结构（修正版）
+-- LLM news summary collaboration system
+-- MySQL schema
 -- =========================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 CREATE TABLE IF NOT EXISTS `user` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户ID',
-  `username` VARCHAR(64) NOT NULL COMMENT '用户名',
-  `password` VARCHAR(128) NOT NULL COMMENT '密码',
-  `nickname` VARCHAR(64) DEFAULT '' COMMENT '昵称',
-  `role` VARCHAR(32) NOT NULL DEFAULT 'user' COMMENT '角色',
-  `avatar` VARCHAR(500) DEFAULT '' COMMENT '头像URL',
-  `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
-  `phone` VARCHAR(32) DEFAULT NULL COMMENT '手机号',
-  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态',
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(64) NOT NULL,
+  `password` VARCHAR(128) NOT NULL,
+  `nickname` VARCHAR(64) DEFAULT '',
+  `role` VARCHAR(32) NOT NULL DEFAULT 'user',
+  `avatar` VARCHAR(500) DEFAULT '',
+  `email` VARCHAR(128) DEFAULT NULL,
+  `phone` VARCHAR(32) DEFAULT NULL,
+  `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS `news` (
   `category_id` BIGINT UNSIGNED DEFAULT NULL,
   `topic_id` BIGINT UNSIGNED DEFAULT NULL,
   `source` VARCHAR(128) DEFAULT '',
-  `editor` VARCHAR(128) DEFAULT NULL COMMENT '新闻编辑',
+  `editor` VARCHAR(128) DEFAULT NULL,
   `publish_time` DATETIME DEFAULT NULL,
   `source_url` VARCHAR(500) DEFAULT NULL,
   `view_count` INT NOT NULL DEFAULT 0,
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `news_comment` (
   `user_id` BIGINT UNSIGNED NOT NULL,
   `parent_id` BIGINT UNSIGNED DEFAULT NULL,
   `content` TEXT NOT NULL,
-  `media_json` JSON DEFAULT NULL COMMENT '评论媒体信息',
+  `media_json` JSON DEFAULT NULL,
   `like_count` INT NOT NULL DEFAULT 0,
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -126,12 +126,15 @@ CREATE TABLE IF NOT EXISTS `favorite` (
 CREATE TABLE IF NOT EXISTS `browse_history` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT UNSIGNED NOT NULL,
-  `news_id` BIGINT UNSIGNED NOT NULL,
+  `news_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `target_type` VARCHAR(64) DEFAULT 'news',
+  `target_id` BIGINT UNSIGNED DEFAULT NULL,
   `browse_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_browse_history_user_time` (`user_id`, `browse_time`),
-  KEY `idx_browse_history_news` (`news_id`)
+  KEY `idx_browse_history_news` (`news_id`),
+  KEY `idx_browse_history_target` (`user_id`, `target_type`, `target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `ai_generate_record` (
@@ -153,8 +156,13 @@ CREATE TABLE IF NOT EXISTS `ai_generate_record` (
   `keywords` JSON DEFAULT NULL,
   `news_elements` JSON DEFAULT NULL,
   `risk_level` VARCHAR(32) DEFAULT 'low',
+  `risk_details` TEXT NULL,
   `check_result` JSON DEFAULT NULL,
-  `ai_source` VARCHAR(16) DEFAULT 'mock' COMMENT 'AI来源：mock（模拟）、llm（真实AI）',
+  `ai_source` VARCHAR(16) DEFAULT 'mock',
+  `response_ms` INT NOT NULL DEFAULT 0,
+  `evidence_json` LONGTEXT NULL,
+  `evidence_status` TINYINT DEFAULT 0,
+  `evidence_coverage` DECIMAL(5,2) DEFAULT 0,
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -201,7 +209,8 @@ CREATE TABLE IF NOT EXISTS `community_post` (
   KEY `idx_community_post_news` (`related_news_id`),
   KEY `idx_community_post_topic` (`topic_id`),
   KEY `idx_community_post_status_heat` (`status`, `heat_score`),
-  KEY `idx_community_post_time` (`created_at`)
+  KEY `idx_community_post_time` (`created_at`),
+  KEY `idx_community_post_view_count` (`view_count`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `post_comment` (
@@ -255,6 +264,9 @@ CREATE TABLE IF NOT EXISTS `event_timeline` (
   `topic_id` BIGINT UNSIGNED NOT NULL,
   `timeline_json` JSON NOT NULL,
   `source_news_ids` JSON DEFAULT NULL,
+  `metadata_json` TEXT DEFAULT NULL,
+  `relationships_json` TEXT DEFAULT NULL,
+  `schema_version` VARCHAR(20) DEFAULT '1.0',
   `generate_status` VARCHAR(32) NOT NULL DEFAULT 'success',
   `error_message` TEXT,
   `generated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -296,6 +308,83 @@ CREATE TABLE IF NOT EXISTS `user_category_subscription` (
   UNIQUE KEY `uk_user_category_subscription` (`user_id`, `category_id`),
   KEY `idx_user_category_subscription_user` (`user_id`),
   KEY `idx_user_category_subscription_category` (`category_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================================================
+-- 绀惧尯 AI 浼氳瘽琛?
+-- =========================================================
+CREATE TABLE IF NOT EXISTS `community_ai_session` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `summary` VARCHAR(500) DEFAULT NULL,
+  `source_type` VARCHAR(50) DEFAULT NULL,
+  `source_post_id` BIGINT UNSIGNED DEFAULT NULL,
+  `source_news_id` BIGINT UNSIGNED DEFAULT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+  `last_message_at` DATETIME DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_community_ai_session_user_id` (`user_id`),
+  KEY `idx_community_ai_session_last_message_at` (`last_message_at`),
+  KEY `idx_community_ai_session_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================================================
+-- 绀惧尯 AI 娑堟伅琛?
+-- =========================================================
+CREATE TABLE IF NOT EXISTS `community_ai_message` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `session_id` BIGINT UNSIGNED NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `role` VARCHAR(20) NOT NULL,
+  `content` TEXT NOT NULL,
+  `request_payload` JSON DEFAULT NULL,
+  `response_payload` JSON DEFAULT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'success',
+  `error_message` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_community_ai_message_session_id` (`session_id`),
+  KEY `idx_community_ai_message_user_id` (`user_id`),
+  KEY `idx_community_ai_message_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `profile_weekly_report_cache` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `range_days` INT NOT NULL DEFAULT 7,
+  `report_date` DATE NOT NULL,
+  `input_hash` VARCHAR(64) NOT NULL,
+  `ai_summary` TEXT,
+  `ai_insights` JSON DEFAULT NULL,
+  `ai_suggestions` JSON DEFAULT NULL,
+  `ai_source` VARCHAR(32) NOT NULL DEFAULT 'llm',
+  `quality_score` DECIMAL(3,2) NOT NULL DEFAULT 0.00,
+  `page_analyses_overview` TEXT NULL,
+  `page_analyses_trajectory` TEXT NULL,
+  `page_analyses_conclusion` TEXT NULL,
+  `reading_style` TEXT NULL,
+  `closing` TEXT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_report` (`user_id`, `range_days`, `report_date`, `input_hash`),
+  KEY `idx_user_date` (`user_id`, `report_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `system_config` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `config_key` VARCHAR(100) NOT NULL,
+  `config_value` TEXT,
+  `config_type` VARCHAR(32) NOT NULL DEFAULT 'string',
+  `description` VARCHAR(255) DEFAULT '',
+  `editable` TINYINT NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

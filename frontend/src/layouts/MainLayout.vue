@@ -1,5 +1,5 @@
 <template>
-  <div class="main-layout">
+  <div class="main-layout" :class="{ 'main-layout--community': isCommunityRoute, 'main-layout--admin': isAdminRoute }">
     <AppHeader />
 
     <div class="layout-body">
@@ -7,7 +7,7 @@
         <AppSidebar />
       </aside>
 
-      <main class="layout-main">
+      <main class="layout-main" :class="{ 'layout-main--community': isCommunityRoute, 'layout-main--admin': isAdminRoute }">
         <RouterView />
       </main>
     </div>
@@ -22,6 +22,8 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 
 const route = useRoute()
 const isHomeRoute = computed(() => route.name === 'home' || route.path === '/home')
+const isCommunityRoute = computed(() => route.name === 'community' || route.name === 'community-create-post')
+const isAdminRoute = computed(() => route.name === 'admin')
 </script>
 
 <style scoped>
@@ -60,7 +62,19 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
   background: var(--color-bg);
 }
 
-/* 窄屏下取消侧边栏 sticky，恢复普通布局 */
+.main-layout--community,
+.main-layout--admin {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.layout-main--community,
+.layout-main--admin {
+  padding: 0;
+  overflow: hidden;
+}
+
 @media (max-width: 1200px) {
   .layout-sidebar {
     position: static;

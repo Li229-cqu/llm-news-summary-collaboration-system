@@ -60,6 +60,18 @@ def _load_json(value: Any, default: Any) -> Any:
     return default
 
 
+def _normalize_record_source(value: Any) -> str:
+    return str(value or "manual") if str(value or "manual") in {"manual", "news"} else "manual"
+
+
+def _normalize_risk_level(value: Any) -> str:
+    return str(value or "low") if str(value or "low") in {"low", "medium", "high"} else "low"
+
+
+def _normalize_ai_source(value: Any) -> str:
+    return str(value or "mock") if str(value or "mock") in {"mock", "llm", "demo"} else "mock"
+
+
 def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
     elements_raw = _load_json(
         row.get("news_elements"),
@@ -98,6 +110,12 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
             "issues": [],
             "suggestions": [],
         }
+    if isinstance(consistency_raw.get("consistency"), dict):
+        consistency_raw = consistency_raw["consistency"]
+    consistency_raw.setdefault("score", 0)
+    consistency_raw.setdefault("issues", [])
+    consistency_raw.setdefault("suggestions", [])
+    consistency_raw["risk_level"] = _normalize_risk_level(consistency_raw.get("risk_level"))
 
     evidence_chain_raw = _load_json(row.get("evidence_json"), None)
 
@@ -109,9 +127,9 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
         keywords=list(_load_json(row.get("keywords"), [])),
         elements=NewsElement(**elements_raw),
         consistency=ConsistencyCheck(**consistency_raw),
-        source=row.get("ai_source") or "mock",
+        source=_normalize_ai_source(row.get("ai_source")),
         evidence_chain=EvidenceChain(**evidence_chain_raw) if evidence_chain_raw else None,
-        risk_level=row.get("risk_level") or consistency_raw.get("risk_level", "low"),
+        risk_level=_normalize_risk_level(row.get("risk_level") or consistency_raw.get("risk_level", "low")),
         risk_details=row.get("risk_details") or "",
         evidence_coverage=row.get("evidence_coverage") or 0.0,
     )
@@ -316,12 +334,12 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
         records.append(
             {
                 "id": row["id"],
-                "source": row["source"],
+                "source": _normalize_record_source(row.get("source")),
                 "source_news_id": row["source_news_id"],
                 "source_title": row["source_title"],
                 "title_count": row["title_count"],
-                "risk_level": row["risk_level"] or "low",
-                "ai_source": row.get("ai_source") or "mock",
+                "risk_level": _normalize_risk_level(row.get("risk_level")),
+                "ai_source": _normalize_ai_source(row.get("ai_source")),
                 "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
                 "candidate_titles": _load_json(row.get("candidate_titles"), []),
                 "summary_short": str(row.get("summary_short") or ""),
@@ -376,10 +394,10 @@ def _query_ai_record_detail_from_db(
         return None
 
     result = _build_result_from_row(row)
-    result.source = row.get("ai_source") or "mock"
+    result.source = _normalize_ai_source(row.get("ai_source"))
     return {
         "id": row["id"],
-        "source": row["source"],
+        "source": _normalize_record_source(row.get("source")),
         "source_news_id": row["source_news_id"],
         "source_title": row["source_title"],
         "input_text": row["input_text"],
@@ -447,12 +465,12 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
         return [
             AIGenerateRecordItem(
                 id=row["id"],
-                source=row["source"],
+                source=_normalize_record_source(row.get("source")),
                 source_news_id=row["source_news_id"],
                 source_title=row["source_title"],
                 title_count=row["title_count"],
-                risk_level=row["risk_level"],
-                ai_source=row.get("ai_source") or "mock",
+                risk_level=_normalize_risk_level(row.get("risk_level")),
+                ai_source=_normalize_ai_source(row.get("ai_source")),
                 created_at=row["created_at"],
                 candidate_titles=row.get("candidate_titles", []),
                 summary_short=row.get("summary_short", ""),
@@ -470,11 +488,11 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
     return [
         AIGenerateRecordItem(
             id=record["id"],
-            source=record["source"],
+            source=_normalize_record_source(record.get("source")),
             source_news_id=record.get("source_news_id"),
             source_title=record["source_title"],
             title_count=record["title_count"],
-            risk_level=record["risk_level"],
+            risk_level=_normalize_risk_level(record.get("risk_level")),
             created_at=record["created_at"],
             candidate_titles=record.get("result", {}).get("candidate_titles", []),
             summary_short=record.get("result", {}).get("summary_short", ""),
@@ -504,7 +522,7 @@ def get_ai_record_detail(
 
     return AIGenerateRecordDetail(
         id=record["id"],
-        source=record["source"],
+        source=_normalize_record_source(record.get("source")),
         source_news_id=record.get("source_news_id"),
         source_title=record["source_title"],
         input_text=record["input_text"],
