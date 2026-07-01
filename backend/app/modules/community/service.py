@@ -89,6 +89,8 @@ def _db_post_comment_has_media_json() -> bool:
 def _normalize_media_json(value: Any) -> Any:
     if value in (None, ""):
         return None
+    if hasattr(value, "model_dump"):
+        value = value.model_dump()
     if isinstance(value, (dict, list)):
         return value
     if isinstance(value, bytes):
@@ -1585,15 +1587,31 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             pc.like_count,
             pc.status,
             pc.created_at AS create_time,
-            {media_json_column}
+            {media_json_column},
+            COALESCE(ru.id, NULL) AS reply_to_user_id,
+            COALESCE(ru.username, '') AS reply_to_username,
+            COALESCE(ru.nickname, '') AS reply_to_nickname,
+            COALESCE(parent_pc.content, '') AS reply_to_content
         FROM post_comment pc
         LEFT JOIN `user` u ON u.id = pc.user_id
+        LEFT JOIN post_comment parent_pc ON parent_pc.id = pc.parent_id
+        LEFT JOIN `user` ru ON ru.id = parent_pc.user_id
         WHERE pc.id = %s
         LIMIT 1
         """,
         [new_comment_id],
     )
     if row is None:
+        parent_comment = execute_one(
+            """
+            SELECT pc.content, u.id AS user_id, u.username, u.nickname
+            FROM post_comment pc
+            LEFT JOIN `user` u ON u.id = pc.user_id
+            WHERE pc.id = %s
+            LIMIT 1
+            """,
+            [comment_id],
+        )
         return CommentItem(
             id=new_comment_id,
             post_id=post_id,
@@ -1607,6 +1625,10 @@ def _db_reply_comment(comment_id: int, request: CreateCommentRequest, current_us
             status=1,
             create_time=_now_text(),
             media_json=_normalize_media_json(getattr(request, "media_json", None)),
+            reply_to_user_id=parent_comment.get("user_id") if parent_comment else None,
+            reply_to_username=normalize_text(parent_comment.get("username")) if parent_comment else "",
+            reply_to_nickname=normalize_text(parent_comment.get("nickname")) if parent_comment else "",
+            reply_to_content=normalize_text(parent_comment.get("content")) if parent_comment else "",
             author=_current_user_name(current_user),
             author_id=user_id,
             created_at=_now_text(),

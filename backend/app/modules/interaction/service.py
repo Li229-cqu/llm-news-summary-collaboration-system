@@ -832,6 +832,10 @@ def _db_reply_comment(
             status=1,
             create_time=create_time,
             media_json=_normalize_comment_media_json(getattr(request, "media_json", None)),
+            reply_to_user_id=int(parent_comment.get("user_id") or 0),
+            reply_to_username=str(parent_comment.get("username") or ""),
+            reply_to_nickname=str(parent_comment.get("nickname") or ""),
+            reply_to_content=str(parent_comment.get("content") or ""),
             is_liked=False,
             replies=[],
         )
@@ -1200,7 +1204,15 @@ def _mock_reply_comment(
         if int(item.get("id") or 0) == int(parent_comment["news_id"]):
             item["comment_count"] = int(item.get("comment_count") or 0) + 1
             break
-    return CommentItem(**reply, is_liked=False, replies=[])
+    return CommentItem(
+        **reply,
+        reply_to_user_id=int(parent_comment.get("user_id") or 0),
+        reply_to_username=str(parent_comment.get("username") or ""),
+        reply_to_nickname=str(parent_comment.get("nickname") or ""),
+        reply_to_content=str(parent_comment.get("content") or ""),
+        is_liked=False,
+        replies=[],
+    )
 
 
 def _mock_like_comment(comment_id: int, current_user: Optional[Any]) -> CommentLikeResult:

@@ -1,5 +1,5 @@
 <template>
-  <div class="comment-item" :class="{ 'comment-item--folded': isFolded, 'comment-item--child': level > 0 }">
+  <div :id="`comment-${comment.id}`" class="comment-item" :class="{ 'comment-item--folded': isFolded, 'comment-item--child': level > 0 }">
     <div class="comment-item__avatar-col">
       <el-avatar :size="40" class="comment-item__avatar" :src="normalizedAvatar">{{ avatarText }}</el-avatar>
       <div v-if="level > 0" class="comment-item__branch-line"></div>
@@ -133,6 +133,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CommentBox from './CommentBox.vue'
+import { isReplyForceVisible } from '@/utils/commentVisibility'
 
 export interface LikeResult {
   comment_id: number
@@ -313,21 +314,33 @@ const displayLimit = computed(() => {
 })
 
 const visibleReplies = computed(() => {
-  if (allReplies.value.length === 0) return []
-  if (allReplies.value.length < 3) {
-    return allReplies.value
-  }
-  const expanded = getExpandedCount()
-  if (expanded === 0) {
-    return maxLikedReply.value ? [maxLikedReply.value] : []
-  }
-  const sortedReplies = [...allReplies.value].sort((a, b) => {
-    if (b.like_count !== a.like_count) {
-      return b.like_count - a.like_count
+  // 先按原有逻辑计算基础可见列表
+  let baseVisible: CommentItemData[] = []
+  if (allReplies.value.length === 0) {
+    baseVisible = []
+  } else if (allReplies.value.length < 3) {
+    baseVisible = allReplies.value
+  } else {
+    const expanded = getExpandedCount()
+    if (expanded === 0) {
+      baseVisible = maxLikedReply.value ? [maxLikedReply.value] : []
+    } else {
+      const sortedReplies = [...allReplies.value].sort((a, b) => {
+        if (b.like_count !== a.like_count) {
+          return b.like_count - a.like_count
+        }
+        return a.create_time.localeCompare(b.create_time)
+      })
+      baseVisible = sortedReplies.slice(0, displayLimit.value)
     }
-    return a.create_time.localeCompare(b.create_time)
-  })
-  return sortedReplies.slice(0, displayLimit.value)
+  }
+
+  // 追加强制可见回复（当前会话刚发布的），不参与排序，追加到最后
+  const extraReplies = allReplies.value.filter(reply =>
+    isReplyForceVisible(reply.id) && !baseVisible.some(item => item.id === reply.id)
+  )
+
+  return [...baseVisible, ...extraReplies]
 })
 
 const showExpandButton = computed(() => {

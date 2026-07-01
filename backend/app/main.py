@@ -16,7 +16,7 @@ from app.db.database import check_db_connection
 logger = logging.getLogger(__name__)
 _db_connected: bool = False
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[1]
 UPLOADS_DIR = BASE_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 os.makedirs(os.path.join(str(UPLOADS_DIR), "avatar"), exist_ok=True)

@@ -400,7 +400,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, nextTick, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -452,6 +452,7 @@ import CommentItem, {
   type CommentItemData as RichCommentItemData,
   type CommentMediaJson,
 } from '@/components/interaction/CommentItem.vue'
+import { markReplyForceVisible, scrollToComment } from '@/utils/commentVisibility'
 
 const postForm = ref({
   title: '',
@@ -873,13 +874,17 @@ async function handleCreateComment(content: string, mediaJson: CommentMediaJson 
 
   submittingComment.value = true
   try {
-    await createComment(selectedPost.value.id, {
+    const newComment = await createComment(selectedPost.value.id, {
       content: normalizedContent || ' ',
       media_json: mediaJson,
     })
-    await loadComments(selectedPost.value.id)
+    const item: RichCommentItemData = { ...newComment, replies: newComment.replies || [] }
+    comments.value.unshift(item)
     selectedPost.value.comment_count = (selectedPost.value.comment_count || 0) + 1
     selectedPost.value.comments = (selectedPost.value.comments || 0) + 1
+    markReplyForceVisible(item.id)
+    await nextTick()
+    scrollToComment(item.id)
   } catch (e) {
     console.error('评论失败', e)
     ElMessage.error(e instanceof Error ? e.message : '评论失败，请稍后重试')
@@ -917,20 +922,41 @@ async function handleCommentReply(comment: RichCommentItemData, content: string,
 
   commentReplyLoadingId.value = comment.id
   try {
-    await replyComment(comment.id, {
+    const newReply = await replyComment(comment.id, {
       content,
       media_json: mediaJson,
     })
     replyingCommentId.value = null
-    await loadComments(selectedPost.value.id)
+    const item: RichCommentItemData = { ...newReply, replies: newReply.replies || [] }
+    const parent = findPostCommentById(comments.value, comment.id)
+    if (parent) {
+      if (!parent.replies) parent.replies = []
+      parent.replies.push(item)
+    } else {
+      comments.value.unshift(item)
+    }
     selectedPost.value.comment_count = (selectedPost.value.comment_count || 0) + 1
     selectedPost.value.comments = (selectedPost.value.comments || 0) + 1
+    markReplyForceVisible(item.id)
+    await nextTick()
+    scrollToComment(item.id)
   } catch (e) {
     console.error('回复评论失败', e)
     ElMessage.error(e instanceof Error ? e.message : '回复评论失败，请稍后重试')
   } finally {
     commentReplyLoadingId.value = null
   }
+}
+
+function findPostCommentById(list: RichCommentItemData[], id: number): RichCommentItemData | null {
+  for (const item of list) {
+    if (item.id === id) return item
+    if (item.replies) {
+      const found = findPostCommentById(item.replies, id)
+      if (found) return found
+    }
+  }
+  return null
 }
 
 async function handleCommentDelete(comment: RichCommentItemData) {

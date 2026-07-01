@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getNewsDetail, recordBrowse, type NewsDetail, type NewsItem } from '@/api/news'
@@ -121,7 +121,11 @@ import FavoriteButton from '@/components/interaction/FavoriteButton.vue'
 import ShareButton from '@/components/interaction/ShareButton.vue'
 import CommentBox from '@/components/interaction/CommentBox.vue'
 import CommentList from '@/components/interaction/CommentList.vue'
-import type { CommentItemData as RichCommentItemData, CommentMediaJson } from '@/components/interaction/CommentItem.vue'
+import {
+  type CommentItemData as RichCommentItemData,
+  type CommentMediaJson,
+} from '@/components/interaction/CommentItem.vue'
+import { markReplyForceVisible, scrollToComment } from '@/utils/commentVisibility'
 
 type ActionType = 'like' | 'unlike' | 'favorite' | 'unfavorite' | 'comment-like' | ''
 
@@ -338,15 +342,20 @@ async function handleCreateComment(content: string, mediaJson?: CommentMediaJson
   submittingComment.value = true
 
   try {
-    await createNewsComment(newsDetail.value.id, {
+    const newComment = await createNewsComment(newsDetail.value.id, {
       content: content || ' ',
       media_json: mediaJson ?? null,
     })
-    await loadComments()
+    const item: RichCommentItemData = { ...newComment, replies: newComment.replies || [] }
+    comments.value.unshift(item)
+    commentTotal.value += 1
     newsDetail.value = {
       ...newsDetail.value,
       comment_count: newsDetail.value.comment_count + 1,
     }
+    markReplyForceVisible(item.id)
+    await nextTick()
+    scrollToComment(item.id)
   } catch (requestError) {
     ElMessage.error(requestError instanceof Error ? requestError.message : '评论发布失败')
   } finally {
@@ -372,18 +381,40 @@ async function handleReplyComment(comment: RichCommentItemData, content: string,
   submittingComment.value = true
 
   try {
-    await replyComment(comment.id, { content, media_json: mediaJson ?? null })
+    const newReply = await replyComment(comment.id, { content, media_json: mediaJson ?? null })
     replyingId.value = null
-    await loadComments()
+    const item: RichCommentItemData = { ...newReply, replies: newReply.replies || [] }
+    const parent = findCommentById(comments.value, comment.id)
+    if (parent) {
+      if (!parent.replies) parent.replies = []
+      parent.replies.push(item)
+    } else {
+      comments.value.unshift(item)
+    }
+    commentTotal.value += 1
     newsDetail.value = {
       ...newsDetail.value,
       comment_count: newsDetail.value.comment_count + 1,
     }
+    markReplyForceVisible(item.id)
+    await nextTick()
+    scrollToComment(item.id)
   } catch (requestError) {
     ElMessage.error(requestError instanceof Error ? requestError.message : '回复失败')
   } finally {
     submittingComment.value = false
   }
+}
+
+function findCommentById(list: RichCommentItemData[], id: number): RichCommentItemData | null {
+  for (const item of list) {
+    if (item.id === id) return item
+    if (item.replies) {
+      const found = findCommentById(item.replies, id)
+      if (found) return found
+    }
+  }
+  return null
 }
 
 async function handleLikeComment(comment: RichCommentItemData) {
