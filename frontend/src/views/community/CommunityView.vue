@@ -160,14 +160,14 @@
                   text
                   size="small"
                   class="post-action-btn"
-                  :class="{ 'action-favorited': post.favorited || post.is_favorited }"
+                  :class="{ 'action-favorited': post.is_favorited }"
                   @click.stop="handleFavorite(post, $event)"
                 >
                   <el-icon>
-                    <StarFilled v-if="post.favorited || post.is_favorited" />
+                    <StarFilled v-if="post.is_favorited" />
                     <Star v-else />
                   </el-icon>
-                  <span>{{ post.favorited || post.is_favorited ? '已收藏' : '收藏' }}</span>
+                  <span>{{ post.is_favorited ? '已收藏' : '收藏' }}</span>
                   <span class="action-count">{{ post.favorite_count ?? 0 }}</span>
                 </el-button>
 
@@ -303,14 +303,14 @@
             {{ selectedPost.liked ? '已点赞' : '点赞' }}
           </el-button>
           <el-button
-            :class="{ 'action-favorited': selectedPost.favorited || selectedPost.is_favorited }"
+            :class="{ 'action-favorited': selectedPost.is_favorited }"
             @click="handleFavorite(selectedPost, $event)"
           >
             <el-icon>
-              <StarFilled v-if="selectedPost.favorited || selectedPost.is_favorited" />
+              <StarFilled v-if="selectedPost.is_favorited" />
               <Star v-else />
             </el-icon>
-            {{ selectedPost.favorited || selectedPost.is_favorited ? '已收藏' : '收藏' }}
+            {{ selectedPost.is_favorited ? '已收藏' : '收藏' }}
           </el-button>
         </div>
       </div>
@@ -606,25 +606,23 @@ async function handleLike(post: CommunityPost) {
 async function handleFavorite(post: CommunityPost, event: Event) {
   event.stopPropagation()
   try {
-    if (post.is_favorited || post.favorited) {
+    if (post.is_favorited) {
       const result = await unfavoritePost(post.id)
-      post.favorited = false
       post.is_favorited = false
-      post.favorite_count = result.count
+      post.favorite_count = result.favorite_count
     } else {
       const result = await toggleFavorite(post.id)
-      post.favorited = result.favorited
-      post.is_favorited = result.favorited
-      post.favorite_count = result.count
+      post.is_favorited = result.is_favorited
+      post.favorite_count = result.favorite_count
     }
     // 同步详情页状态
     if (selectedPost.value && selectedPost.value.id === post.id) {
-      selectedPost.value.favorited = post.favorited
       selectedPost.value.is_favorited = post.is_favorited
       selectedPost.value.favorite_count = post.favorite_count
     }
   } catch (e) {
     console.error('收藏操作失败', e)
+    ElMessage.error('收藏操作失败，请重试')
   }
 }
 
@@ -1172,9 +1170,9 @@ onMounted(() => {
 }
 
 .suggested-tag:hover {
-  color: #409eff;
-  border-color: #409eff;
-  background: rgba(64, 158, 255, 0.08);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .post-actions {
@@ -1268,7 +1266,7 @@ onMounted(() => {
 }
 
 .post-action-btn:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn .action-count {
@@ -1277,11 +1275,11 @@ onMounted(() => {
 }
 
 .post-action-btn.action-active {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-active .action-count {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-favorited {
@@ -1336,7 +1334,7 @@ onMounted(() => {
   place-items: center;
   border-radius: 999px;
   background: var(--color-primary-soft, #e8f1ff);
-  color: var(--color-primary, #409eff);
+  color: var(--color-primary, var(--color-primary));
   font-size: 13px;
   font-weight: 700;
 }
@@ -1459,7 +1457,7 @@ onMounted(() => {
 .ai-icon {
   font-size: 48px;
   margin-bottom: 12px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .ai-messages {
@@ -1480,7 +1478,7 @@ onMounted(() => {
 }
 
 .ai-message.user .message-content {
-  background-color: #409eff;
+  background-color: var(--color-primary);
   color: #fff;
 }
 
@@ -1554,7 +1552,7 @@ onMounted(() => {
 }
 
 .post-detail-actions .action-active {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-detail-actions .action-favorited {

@@ -54,7 +54,7 @@ class AIGenerateRecordItem(BaseModel):
     source_title: str
     title_count: int
     risk_level: Literal["low", "medium", "high"]
-    ai_source: Literal["mock", "llm"] = "mock"
+    ai_source: Literal["mock", "llm", "demo"] = "mock"
     created_at: str
     candidate_titles: list[str] = []
     summary_short: str = ""

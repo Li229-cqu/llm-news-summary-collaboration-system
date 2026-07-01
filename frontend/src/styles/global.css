@@ -55,3 +55,118 @@ a {
   font-size: 14px;
   line-height: 1.7;
 }
+
+/* ========================================
+   全局 Element Plus 红色按钮覆盖
+   消除 hover/focus/active 蓝色残留
+   ======================================== */
+.el-button--primary {
+  --el-button-bg-color: var(--color-primary);
+  --el-button-border-color: var(--color-primary);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: #b91c1c;
+  --el-button-hover-border-color: #b91c1c;
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #991b1b;
+  --el-button-active-border-color: #991b1b;
+  --el-button-active-text-color: #fff;
+}
+
+.el-button--primary.is-plain {
+  --el-button-bg-color: var(--color-primary-soft);
+  --el-button-border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  --el-button-text-color: var(--color-primary);
+  --el-button-hover-bg-color: var(--color-primary);
+  --el-button-hover-border-color: var(--color-primary);
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #991b1b;
+  --el-button-active-border-color: #991b1b;
+  --el-button-active-text-color: #fff;
+}
+
+/* text / link 按钮：hover 红色文字 */
+.el-button.is-text:hover,
+.el-button.is-link:hover,
+.el-button--primary.is-text:hover,
+.el-button--primary.is-link:hover {
+  color: var(--color-primary);
+}
+
+.el-button.is-text:active,
+.el-button.is-link:active {
+  color: #991b1b;
+}
+
+/* 消除按钮 focus 蓝色边框 */
+.el-button:focus-visible {
+  outline-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+
+/* 输入框 focus 红色边框（全局） */
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+.el-textarea__inner:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
+}
+
+/* Select 下拉 focus */
+.el-select .el-input.is-focus .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+/* Radio / Checkbox 选中态 */
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.el-radio__input.is-checked + .el-radio__label {
+  color: var(--color-primary);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.el-checkbox__input.is-checked + .el-checkbox__label {
+  color: var(--color-primary);
+}
+
+/* Switch 选中态 */
+.el-switch.is-checked .el-switch__core {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Pagination active */
+.el-pagination .el-pager li.is-active {
+  background-color: var(--color-primary);
+}
+
+.el-pagination .el-pager li:hover {
+  color: var(--color-primary);
+}
+
+/* Tabs active */
+.el-tabs__active-bar {
+  background-color: var(--color-primary);
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: var(--color-primary);
+}
+
+/* Select dropdown selected */
+.el-select-dropdown__item.selected {
+  color: var(--color-primary);
+}
+
+/* Date picker selected */
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text {
+  background-color: var(--color-primary);
+}

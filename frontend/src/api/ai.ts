@@ -38,7 +38,7 @@ export interface AIGenerateResponse {
   keywords: string[]
   elements: NewsElement
   consistency: ConsistencyCheck
-  source?: 'mock' | 'llm'
+  source?: 'mock' | 'llm' | 'demo'
 }
 
 /** 调用 AI 生成标题和摘要。 */
@@ -59,7 +59,7 @@ export interface AIGenerateRecordItem {
   source_title: string
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
-  ai_source?: 'mock' | 'llm'
+  ai_source?: 'mock' | 'llm' | 'demo'
   created_at: string
   candidate_titles?: string[]
   summary_short?: string

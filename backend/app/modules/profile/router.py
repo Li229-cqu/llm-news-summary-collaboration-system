@@ -14,6 +14,7 @@ from app.modules.profile.schema import (
     ReadingTrajectoryResponse,
     SubscriptionResponse,
     SubscriptionUpdateRequest,
+    WeeklyReportResponse,
 )
 from app.modules.profile.service import (
     get_ai_records,
@@ -26,6 +27,7 @@ from app.modules.profile.service import (
     get_reading_timeline,
     get_reading_trajectory,
     get_subscriptions,
+    get_weekly_report,
     update_subscriptions,
 )
 
@@ -82,7 +84,7 @@ async def get_reading_heatmap_view(
 @router.get("/browse-history", response_model=ApiResponse[dict])
 async def get_history(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50),
+    page_size: int = Query(10, ge=1, le=200),
     type: str = Query("news"),
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[dict]:
@@ -123,6 +125,20 @@ async def get_user_ai_records(
 ) -> ApiResponse[dict]:
     """获取用户 AI 生成记录。"""
     data = get_ai_records(current_user, page=page, page_size=page_size)
+    return success_response(data)
+
+
+@router.get("/weekly-report", response_model=ApiResponse[WeeklyReportResponse])
+async def get_weekly_report_view(
+    force_refresh: bool = False,
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[WeeklyReportResponse]:
+    """获取近 7 天用户阅读报告。
+
+    Args:
+        force_refresh: 跳过缓存强制重新生成 AI 文案（仅测试阶段使用）
+    """
+    data = get_weekly_report(current_user, force_refresh=force_refresh)
     return success_response(data)
 
 

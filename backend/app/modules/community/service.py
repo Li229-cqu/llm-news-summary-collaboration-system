@@ -1786,7 +1786,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
                 )
                 connection.commit()
                 count = max(0, int(post.get("favorite_count") or 0) - 1)
-                return FavoriteResponse(success=True, favorited=False, count=count)
+                return FavoriteResponse(success=True, is_favorited=False, favorite_count=count)
 
             cursor.execute(
                 """
@@ -1801,7 +1801,7 @@ def _db_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Favor
             )
             connection.commit()
             count = int(post.get("favorite_count") or 0) + 1
-            return FavoriteResponse(success=True, favorited=True, count=count)
+            return FavoriteResponse(success=True, is_favorited=True, favorite_count=count)
     except Exception:
         connection.rollback()
         raise
@@ -1823,7 +1823,7 @@ def _db_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteRe
 
     existed = _db_post_favorite_relation_exists(user_id, post_id)
     if not existed:
-        return FavoriteResponse(success=True, favorited=False, count=int(post.get("favorite_count") or 0))
+        return FavoriteResponse(success=True, is_favorited=False, favorite_count=int(post.get("favorite_count") or 0))
 
     connection = get_connection()
     try:
@@ -1846,7 +1846,7 @@ def _db_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteRe
     finally:
         connection.close()
     count = max(0, int(post.get("favorite_count") or 0) - 1)
-    return FavoriteResponse(success=True, favorited=False, count=count)
+    return FavoriteResponse(success=True, is_favorited=False, favorite_count=count)
 
 
 def _db_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> CommentLikeResult:
@@ -2121,9 +2121,9 @@ def _mock_toggle_post_favorite(post_id: int, current_user: Optional[Any]) -> Fav
     existed = any(item["user_id"] == user_id and item["post_id"] == post_id for item in FALLBACK_POST_FAVORITES)
     if existed:
         _sync_post_favorite_state_fallback(post_id, user_id, False)
-        return FavoriteResponse(success=True, favorited=False, count=max(0, int(post.get("favorite_count") or 0) - 1))
+        return FavoriteResponse(success=True, is_favorited=False, favorite_count=max(0, int(post.get("favorite_count") or 0) - 1))
     _sync_post_favorite_state_fallback(post_id, user_id, True)
-    return FavoriteResponse(success=True, favorited=True, count=int(post.get("favorite_count") or 0) + 1)
+    return FavoriteResponse(success=True, is_favorited=True, favorite_count=int(post.get("favorite_count") or 0) + 1)
 
 
 def _mock_unfavorite_post(post_id: int, current_user: Optional[Any]) -> FavoriteResponse:
@@ -2135,9 +2135,9 @@ def _mock_unfavorite_post(post_id: int, current_user: Optional[Any]) -> Favorite
         raise AppException(code=404, message="帖子不存在")
     existed = any(item["user_id"] == user_id and item["post_id"] == post_id for item in FALLBACK_POST_FAVORITES)
     if not existed:
-        return FavoriteResponse(success=True, favorited=False, count=int(post.get("favorite_count") or 0))
+        return FavoriteResponse(success=True, is_favorited=False, favorite_count=int(post.get("favorite_count") or 0))
     _sync_post_favorite_state_fallback(post_id, user_id, False)
-    return FavoriteResponse(success=True, favorited=False, count=max(0, int(post.get("favorite_count") or 0) - 1))
+    return FavoriteResponse(success=True, is_favorited=False, favorite_count=max(0, int(post.get("favorite_count") or 0) - 1))
 
 
 def _mock_toggle_comment_like(comment_id: int, current_user: Optional[Any]) -> CommentLikeResult:

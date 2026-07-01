@@ -207,10 +207,9 @@ function handleSubmit() {
   display: grid;
   gap: 12px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 8%, var(--color-border));
+  border: 1px solid var(--color-border);
   border-radius: 18px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 4%, var(--color-bg-card)), var(--color-bg-card));
-  box-shadow: 0 1px 0 rgb(15 23 42 / 3%);
+  background: var(--color-bg-card);
 }
 
 .comment-box__header {
@@ -269,6 +268,19 @@ function handleSubmit() {
 
 .comment-box__submit {
   min-width: 110px;
+}
+
+/* 消除 Element Plus 蓝色 hover */
+.comment-box :deep(.el-button--primary) {
+  --el-button-hover-bg-color: #b91c1c;
+  --el-button-hover-border-color: #b91c1c;
+  --el-button-active-bg-color: #991b1b;
+  --el-button-active-border-color: #991b1b;
+}
+
+.comment-box :deep(.el-textarea__inner:focus) {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 @media (max-width: 640px) {

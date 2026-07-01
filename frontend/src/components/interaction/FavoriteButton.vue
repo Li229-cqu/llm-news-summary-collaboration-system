@@ -1,14 +1,15 @@
 <template>
   <el-button
     class="interaction-button"
-    :class="{ 'is-active': favorited }"
-    :type="favorited ? 'primary' : 'default'"
-    :plain="!favorited"
+    :class="{ 'is-active': isFavorited }"
+    :type="isFavorited ? 'primary' : 'default'"
+    :plain="!isFavorited"
     :disabled="disabled"
     :loading="loading"
     @click="handleToggle"
   >
-    <span>{{ favorited ? '已收藏' : '收藏' }}</span>
+    <span class="interaction-button__icon">{{ isFavorited ? '⭐' : '☆' }}</span>
+    <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
     <span class="interaction-button__count">{{ count }}</span>
   </el-button>
 </template>
@@ -17,7 +18,7 @@
 const props = withDefaults(
   defineProps<{
     newsId: number | string
-    favorited: boolean
+    isFavorited: boolean
     count: number
     disabled?: boolean
     loading?: boolean
@@ -57,7 +58,7 @@ function handleToggle() {
 }
 
 .interaction-button.is-active {
-  box-shadow: 0 6px 14px rgb(37 99 235 / 14%);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 @media (max-width: 640px) {

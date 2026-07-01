@@ -45,7 +45,7 @@
             {{ userStore.userInfo.nickname.slice(0, 1) }}
           </el-avatar>
           <span>{{ userStore.userInfo.nickname }}</span>
-          <el-tag size="small" effect="plain">{{ getRoleLabel(userStore.role) }}</el-tag>
+          <span class="app-header__role-tag">{{ getRoleLabel(userStore.role) }}</span>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
@@ -239,6 +239,18 @@ async function handleUserCommand(command: string) {
 .app-header__user-trigger {
   cursor: pointer;
   outline: none;
+}
+
+.app-header__role-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .app-header__login-link {

@@ -15,7 +15,6 @@ export interface CommunityPost {
   views: number
   tags: string[]
   liked?: boolean
-  favorited?: boolean
   is_favorited?: boolean
   favorite_count?: number
   hot?: boolean
@@ -173,8 +172,8 @@ export function unlikePost(postId: number | string) {
 
 export interface FavoriteResponse {
   success: boolean
-  favorited: boolean
-  count: number
+  is_favorited: boolean
+  favorite_count: number
 }
 
 export function toggleFavorite(postId: number | string) {
@@ -190,7 +189,7 @@ export function recordPostBrowse(postId: number | string) {
 }
 
 export function getPostFavoriteStatus(postId: number | string) {
-  return request.get<{ favorited: boolean }, { favorited: boolean }>(`/api/community/posts/${postId}/favorite/status`)
+  return request.get<{ is_favorited: boolean }, { is_favorited: boolean }>(`/api/community/posts/${postId}/favorite/status`)
 }
 
 export function likeComment(commentId: number | string) {

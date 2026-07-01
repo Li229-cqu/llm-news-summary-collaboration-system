@@ -105,18 +105,18 @@ function handleClick(newsId: number) {
 
 .related-news-list__tag {
   display: inline-block;
-  padding: 1px 8px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
-  color: #409eff;
-  background: #ecf5ff;
-  border: 1px solid #d9ecff;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
 }
 
 .related-news-list__tag--hot {
-  color: #e6a23c;
-  background: #fdf6ec;
-  border-color: #faecd8;
+  color: #d92d20;
+  background: #fff1f0;
+  border-color: #fecaca;
 }
 </style>

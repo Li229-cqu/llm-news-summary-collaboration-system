@@ -159,8 +159,8 @@ class CommentLikeResult(BaseModel):
 
 class FavoriteResponse(BaseModel):
     success: bool
-    favorited: bool
-    count: int
+    is_favorited: bool
+    favorite_count: int
 
 
 class BlockResponse(BaseModel):

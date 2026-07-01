@@ -17,7 +17,8 @@
     </div>
 
     <div class="news-card__content">
-      <div class="news-card__topline">
+      <!-- 顶部分类+来源（首页精简模式下隐藏） -->
+      <div v-if="!compactHome" class="news-card__topline">
         <el-tag v-if="news.category_name" size="small" effect="plain">{{ news.category_name }}</el-tag>
         <span class="news-card__source">{{ news.source }}</span>
       </div>
@@ -29,13 +30,16 @@
         {{ news.recommendation_reason }}
       </div>
 
-      <div v-if="news.tags?.length" class="news-card__tags">
+      <!-- 英文 tags（首页精简模式下隐藏） -->
+      <div v-if="!compactHome && news.tags?.length" class="news-card__tags">
         <el-tag v-for="tag in news.tags" :key="tag" size="small" effect="light">
           {{ tag }}
         </el-tag>
       </div>
 
       <div class="news-card__meta">
+        <!-- 首页精简模式：底部显示来源 -->
+        <span v-if="compactHome && news.source" class="news-card__meta-source">{{ news.source }}</span>
         <span>{{ news.publish_time }}</span>
         <span>阅读 {{ news.view_count }}</span>
         <span>评论 {{ news.comment_count }}</span>
@@ -70,6 +74,8 @@ export interface NewsCardItem {
 
 const props = defineProps<{
   news: NewsCardItem
+  /** 首页精简模式：隐藏顶部分类标签、来源、英文 tags */
+  compactHome?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -176,6 +182,9 @@ function handleClick() {
 }
 
 .news-card__reason {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
   padding: 4px 8px;
   margin-top: 6px;
   border-radius: 4px;
@@ -183,6 +192,9 @@ function handleClick() {
   color: var(--color-primary);
   font-size: 12px;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .news-card__tags {
@@ -198,6 +210,19 @@ function handleClick() {
   margin-top: auto;
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+/* 首页精简模式下来源文字轻强调 */
+.news-card__meta-source {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.news-card__meta-source::after {
+  content: '·';
+  margin-left: 8px;
+  color: var(--color-text-secondary);
+  font-weight: 400;
 }
 
 @media (max-width: 860px) {

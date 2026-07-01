@@ -296,3 +296,94 @@ export async function getReadingHeatmap(
     params: { days: 30, dimension: 'category', ...params },
   })
 }
+
+
+// ===== 近 7 天阅读报告 =====
+
+export interface WeeklyReportRange {
+  days: number
+  start_date: string
+  end_date: string
+}
+
+export interface WeeklyReportPersona {
+  title: string
+  description: string
+}
+
+export interface WeeklyReportOverview {
+  browse_count: number
+  favorite_count: number
+  comment_count: number
+  ai_count: number
+  active_days: number
+}
+
+export interface WeeklyReportScores {
+  reading: number
+  collecting: number
+  interaction: number
+  ai_usage: number
+}
+
+export interface DailyActivityItem {
+  date: string
+  count: number
+}
+
+export interface TopicRankItem {
+  name: string
+  count: number
+  percent: number
+}
+
+export interface WeeklyReportHighlight {
+  label: string
+  value: string
+  desc: string
+  icon: string
+  narrative: string
+}
+
+export interface PageAnalyses {
+  overview: string
+  trajectory: string
+  conclusion: string
+}
+
+export interface AiAnalysisResult {
+  enabled: boolean
+  source: string
+  summary: string
+  insights: string[]
+  suggestions: string[]
+  page_analyses: PageAnalyses
+  reading_style: string
+  closing: string
+  quality_score: number
+}
+
+export interface AnalysisTexts {
+  profile_analysis: string
+  behavior_analysis: string
+  activity_analysis: string
+  topic_analysis: string
+}
+
+export interface WeeklyReportResponse {
+  range: WeeklyReportRange
+  persona: WeeklyReportPersona
+  summary: string
+  overview: WeeklyReportOverview
+  behavior_scores: WeeklyReportScores
+  daily_activity: DailyActivityItem[]
+  topic_rank: TopicRankItem[]
+  highlights: WeeklyReportHighlight[]
+  ai_analysis: AiAnalysisResult
+  analysis_texts: AnalysisTexts
+  empty: boolean
+}
+
+export async function getWeeklyReport(): Promise<WeeklyReportResponse> {
+  return request.get('/api/profile/weekly-report')
+}

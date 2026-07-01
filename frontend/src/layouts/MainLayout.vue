@@ -46,9 +46,10 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
   flex: 0 0 var(--sidebar-width);
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  overflow-y: auto;
-  background: var(--color-bg-card);
-  border-right: 1px solid var(--color-border);
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  height: calc(100vh - 24px);
 }
 
 .layout-main {
@@ -56,7 +57,16 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
   min-width: 0;
   min-height: 0;
   padding: var(--layout-main-padding);
-  overflow-y: auto;
   background: var(--color-bg);
+}
+
+/* 窄屏下取消侧边栏 sticky，恢复普通布局 */
+@media (max-width: 1200px) {
+  .layout-sidebar {
+    position: static;
+    width: 100%;
+    flex: none;
+    height: auto;
+  }
 }
 </style>
