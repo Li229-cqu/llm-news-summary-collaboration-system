@@ -160,14 +160,14 @@
                   text
                   size="small"
                   class="post-action-btn"
-                  :class="{ 'action-favorited': post.favorited || post.is_favorited }"
+                  :class="{ 'action-favorited': post.is_favorited }"
                   @click.stop="handleFavorite(post, $event)"
                 >
                   <el-icon>
-                    <StarFilled v-if="post.favorited || post.is_favorited" />
+                    <StarFilled v-if="post.is_favorited" />
                     <Star v-else />
                   </el-icon>
-                  <span>{{ post.favorited || post.is_favorited ? '已收藏' : '收藏' }}</span>
+                  <span>{{ post.is_favorited ? '已收藏' : '收藏' }}</span>
                   <span class="action-count">{{ post.favorite_count ?? 0 }}</span>
                 </el-button>
 
@@ -303,14 +303,14 @@
             {{ selectedPost.liked ? '已点赞' : '点赞' }}
           </el-button>
           <el-button
-            :class="{ 'action-favorited': selectedPost.favorited || selectedPost.is_favorited }"
+            :class="{ 'action-favorited': selectedPost.is_favorited }"
             @click="handleFavorite(selectedPost, $event)"
           >
             <el-icon>
-              <StarFilled v-if="selectedPost.favorited || selectedPost.is_favorited" />
+              <StarFilled v-if="selectedPost.is_favorited" />
               <Star v-else />
             </el-icon>
-            {{ selectedPost.favorited || selectedPost.is_favorited ? '已收藏' : '收藏' }}
+            {{ selectedPost.is_favorited ? '已收藏' : '收藏' }}
           </el-button>
         </div>
       </div>
@@ -607,25 +607,23 @@ async function handleLike(post: CommunityPost) {
 async function handleFavorite(post: CommunityPost, event: Event) {
   event.stopPropagation()
   try {
-    if (post.is_favorited || post.favorited) {
+    if (post.is_favorited) {
       const result = await unfavoritePost(post.id)
-      post.favorited = false
       post.is_favorited = false
-      post.favorite_count = result.count
+      post.favorite_count = result.favorite_count
     } else {
       const result = await toggleFavorite(post.id)
-      post.favorited = result.favorited
-      post.is_favorited = result.favorited
-      post.favorite_count = result.count
+      post.is_favorited = result.is_favorited
+      post.favorite_count = result.favorite_count
     }
     // 同步详情页状态
     if (selectedPost.value && selectedPost.value.id === post.id) {
-      selectedPost.value.favorited = post.favorited
       selectedPost.value.is_favorited = post.is_favorited
       selectedPost.value.favorite_count = post.favorite_count
     }
   } catch (e) {
     console.error('收藏操作失败', e)
+    ElMessage.error('收藏操作失败，请重试')
   }
 }
 

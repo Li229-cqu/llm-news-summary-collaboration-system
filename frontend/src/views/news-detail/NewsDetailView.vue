@@ -38,7 +38,7 @@
             />
             <FavoriteButton
               :news-id="newsDetail.id"
-              :favorited="newsDetail.is_favorited"
+              :is-favorited="newsDetail.is_favorited"
               :count="newsDetail.favorite_count"
               :loading="actionLoading === 'favorite' || actionLoading === 'unfavorite'"
               @toggle="handleFavoriteToggle"

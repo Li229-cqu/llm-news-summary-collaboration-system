@@ -1,14 +1,14 @@
 <template>
   <el-button
     class="interaction-button"
-    :class="{ 'is-active': favorited }"
-    :type="favorited ? 'primary' : 'default'"
-    :plain="!favorited"
+    :class="{ 'is-active': isFavorited }"
+    :type="isFavorited ? 'primary' : 'default'"
+    :plain="!isFavorited"
     :disabled="disabled"
     :loading="loading"
     @click="handleToggle"
   >
-    <span>{{ favorited ? '已收藏' : '收藏' }}</span>
+    <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
     <span class="interaction-button__count">{{ count }}</span>
   </el-button>
 </template>
@@ -17,7 +17,7 @@
 const props = withDefaults(
   defineProps<{
     newsId: number | string
-    favorited: boolean
+    isFavorited: boolean
     count: number
     disabled?: boolean
     loading?: boolean

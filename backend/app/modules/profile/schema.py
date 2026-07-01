@@ -208,3 +208,95 @@ class ReadingHeatmapResponse(BaseModel):
     y_axis: List[str] = Field(default_factory=list)
     cells: List[ReadingHeatmapCell] = Field(default_factory=list)
     summary: ReadingHeatmapSummary
+
+
+# ===== 近 7 天阅读报告 =====
+
+class WeeklyReportRange(BaseModel):
+    days: int = 7
+    start_date: str = ""
+    end_date: str = ""
+
+
+class WeeklyReportPersona(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
+class WeeklyReportOverview(BaseModel):
+    browse_count: int = 0
+    favorite_count: int = 0
+    comment_count: int = 0
+    ai_count: int = 0
+    active_days: int = 0
+
+
+class WeeklyReportScores(BaseModel):
+    reading: int = 0
+    collecting: int = 0
+    interaction: int = 0
+    ai_usage: int = 0
+
+
+class DailyActivityItem(BaseModel):
+    date: str = ""
+    count: int = 0
+
+
+class TopicRankItem(BaseModel):
+    name: str = ""
+    count: int = 0
+    percent: int = 0
+
+
+class WeeklyReportHighlight(BaseModel):
+    label: str = ""
+    value: str = ""
+    desc: str = ""
+
+
+class WeeklyReportHighlight(BaseModel):
+    label: str = ""
+    value: str = ""
+    desc: str = ""
+    icon: str = ""
+    narrative: str = ""
+
+
+class AnalysisTexts(BaseModel):
+    profile_analysis: str = ""
+    behavior_analysis: str = ""
+    activity_analysis: str = ""
+    topic_analysis: str = ""
+
+
+class PageAnalyses(BaseModel):
+    overview: str = ""
+    trajectory: str = ""
+    conclusion: str = ""
+
+
+class AiAnalysisResult(BaseModel):
+    enabled: bool = False
+    source: str = "fallback"
+    summary: str = ""
+    insights: List[str] = Field(default_factory=list)
+    suggestions: List[str] = Field(default_factory=list)
+    page_analyses: PageAnalyses = Field(default_factory=PageAnalyses)
+    reading_style: str = ""
+    closing: str = ""
+    quality_score: float = 0.0
+
+
+class WeeklyReportResponse(BaseModel):
+    range: WeeklyReportRange = Field(default_factory=WeeklyReportRange)
+    persona: WeeklyReportPersona = Field(default_factory=WeeklyReportPersona)
+    summary: str = ""
+    overview: WeeklyReportOverview = Field(default_factory=WeeklyReportOverview)
+    behavior_scores: WeeklyReportScores = Field(default_factory=WeeklyReportScores)
+    daily_activity: List[DailyActivityItem] = Field(default_factory=list)
+    topic_rank: List[TopicRankItem] = Field(default_factory=list)
+    highlights: List[WeeklyReportHighlight] = Field(default_factory=list)
+    ai_analysis: AiAnalysisResult = Field(default_factory=AiAnalysisResult)
+    analysis_texts: AnalysisTexts = Field(default_factory=AnalysisTexts)
+    empty: bool = True

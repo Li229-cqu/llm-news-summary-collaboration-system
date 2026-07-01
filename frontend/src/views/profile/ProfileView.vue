@@ -27,16 +27,15 @@ import {
   type CommentRecordItem,
   type FavoriteItem,
   type ProfileOverview,
-  type ReadingTimelineResponse,
   type SubscriptionCategory,
+  type WeeklyReportResponse,
   getAIRecords,
   getBrowseHistory,
   getComments,
   getFavorites,
   getProfileOverview,
-  getReadingTimeline,
-  getReadingTrajectory,
   getSubscriptions,
+  getWeeklyReport,
   updateSubscriptions,
 } from '@/api/profile'
 import { unfavoriteNews } from '@/api/interaction'
@@ -78,150 +77,148 @@ const statCards = [
   { key: 'ai-records', icon: MagicStick, label: 'AI生成记录', count: () => profileOverview.value?.ai_generate_count ?? 0, desc: '标题摘要生成历史' },
 ]
 
-// ===== 阅读洞察状态 =====
-const selectedReadingDay = ref<string | null>(null)
-const readingTimelineLoading = ref(false)
-const readingTimelineData = ref<ReadingTimelineResponse | null>(null)
+// ===== 阅读洞察 / 每周报告状态 =====
+const weeklyReport = ref<WeeklyReportResponse | null>(null)
+const weeklyReportLoading = ref(false)
+const weeklyReportError = ref('')
 
-const matrixDays = computed(() => {
-  if (!readingTimelineData.value) return []
-  const dateMap = new Map<string, number>()
-  for (const item of readingTimelineData.value.items) dateMap.set(item.date, item.total_reads)
-  const maxReads = Math.max(...Array.from(dateMap.values()), 1)
-  const days: { date: string; reads: number; level: number }[] = []
-  const now = new Date()
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now); d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    const reads = dateMap.get(key) || 0
-    let level = 0
-    if (reads > 0) { const r = reads / maxReads; level = r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4 }
-    days.push({ date: key, reads, level })
-  }
-  return days
+// 阅读报告翻页状态
+const reportPageIndex = ref(0)
+const reportPages = [
+  { key: 'overview', title: '本周总览', subtitle: '这周的你，是什么样的读者？' },
+  { key: 'trajectory', title: '阅读轨迹', subtitle: '这一周，你如何阅读？' },
+  { key: 'insights', title: '高光与建议', subtitle: '这一周，你留下了哪些阅读高光？' },
+]
+const isFirstReportPage = computed(() => reportPageIndex.value === 0)
+const isLastReportPage = computed(() => reportPageIndex.value === reportPages.length - 1)
+const currentReportPage = computed(() => reportPages[reportPageIndex.value])
+function goReportPage(idx: number) { if (idx >= 0 && idx < reportPages.length) reportPageIndex.value = idx }
+function nextReportPage() { if (!isLastReportPage.value) reportPageIndex.value++ }
+function prevReportPage() { if (!isFirstReportPage.value) reportPageIndex.value-- }
+
+// AI 来源标签
+const aiSourceLabel = computed(() => {
+  if (!weeklyReport.value?.ai_analysis?.enabled) return ''
+  const s = weeklyReport.value.ai_analysis.source
+  if (s === 'llm' || s === 'cache') return 'AI 生成'
+  if (s === 'fallback') return '规则生成'
+  return ''
 })
 
-const selectedDayInfo = computed(() => {
-  if (!selectedReadingDay.value || !readingTimelineData.value) return null
-  const item = readingTimelineData.value.items.find(i => i.date === selectedReadingDay.value)
-  return item ? { date: selectedReadingDay.value, reads: item.total_reads } : null
-})
-
-
-// ===== 主题阅读星环图 =====
-const ringLoading = ref(false)
-const hoveredRingCategory = ref<string | null>(null)
-const selectedRingCategory = ref<string | null>(null)
-interface RingCategoryRaw { name: string; count: number; color: string; news: { id?: number; title: string; readAt: string }[] }
-interface RingCategory extends RingCategoryRaw { _startDeg: number; _arcDeg: number }
-const ringCategoriesRaw = ref<RingCategoryRaw[]>([])
-
-const ringTotal = computed(() => ringCategoriesRaw.value.reduce((s, c) => s + c.count, 0))
-
-const ringCategories = computed<RingCategory[]>(() => {
-  const total = ringTotal.value
-  let currentDeg = 0
-  return ringCategoriesRaw.value.map(cat => {
-    const arcDeg = total > 0 ? Math.max((cat.count / total) * 360, 24) : 0
-    const result: RingCategory = { ...cat, _startDeg: currentDeg, _arcDeg: arcDeg }
-    currentDeg += arcDeg
-    return result
-  })
-})
-
-
-interface RingNewsDot { id?: number; title: string; readAt: string; cx: number; cy: number; color: string; lineX1: number; lineY1: number; lineX2: number; lineY2: number }
-const ringNewsDots = computed<RingNewsDot[]>(() => {
-  const dots: RingNewsDot[] = []
-  ringCategories.value.forEach(cat => {
-    cat.news.forEach((n, ni) => {
-      const angle = cat._startDeg + cat._arcDeg * (ni + 1) / (cat.news.length + 1)
-      const inner = ringPolar(270, 270, 155, angle)
-      const outer = ringPolar(270, 270, 200, angle)
-      dots.push({ id: n.id, title: n.title, readAt: n.readAt, cx: outer.x, cy: outer.y, color: cat.color, lineX1: inner.x, lineY1: inner.y, lineX2: outer.x, lineY2: outer.y })
-    })
-  })
-  return dots
-})
-function ringDegToRad(deg: number) { return (deg * Math.PI) / 180 }
-function ringPolar(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = ringDegToRad(angleDeg - 90)
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-}
-function ringArcPath(cx: number, cy: number, innerR: number, outerR: number, startDeg: number, endDeg: number): string {
-  const gap = 3; const s = startDeg + gap / 2; const e = endDeg - gap / 2; if (e <= s) return ''
-  const o1 = ringPolar(cx, cy, outerR, s); const o2 = ringPolar(cx, cy, outerR, e)
-  const i1 = ringPolar(cx, cy, innerR, e); const i2 = ringPolar(cx, cy, innerR, s)
-  const large = (e - s) > 180 ? 1 : 0
-  return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 ${large} 1 ${o2.x} ${o2.y} L ${i1.x} ${i1.y} A ${innerR} ${innerR} 0 ${large} 0 ${i2.x} ${i2.y} Z`
-}
-
-async function loadRingData() {
-  ringLoading.value = true
+async function loadWeeklyReport() {
+  weeklyReportLoading.value = true
+  weeklyReportError.value = ''
   try {
-    const trajectory = await getReadingTrajectory({ days: 30, limit: 80 })
-    const newsList = (trajectory as any).recent_news || []
-    const catMap = new Map<string, { count: number; news: { id?: number; title: string; readAt: string }[] }>()
-    newsList.forEach((n: any) => {
-      const cat = n.category_name || '未分类'
-      if (!catMap.has(cat)) catMap.set(cat, { count: 0, news: [] })
-      const entry = catMap.get(cat)!
-      entry.count++
-      if (entry.news.length < 3) entry.news.push({ id: n.news_id, title: (n.title || '').slice(0, 16), readAt: n.browse_time || '' })
-    })
-    const sorted = Array.from(catMap.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 5)
-    const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#0ea5e9']
-    ringCategoriesRaw.value = sorted.map(([name, data], i) => ({ name, count: data.count, color: colors[i] || '#94a3b8', news: data.news }))
-  } catch { ringCategoriesRaw.value = [] }
-  finally { ringLoading.value = false }
+    weeklyReport.value = await getWeeklyReport()
+  } catch (e: any) {
+    weeklyReportError.value = e?.response?.data?.message || e?.message || '加载阅读报告失败'
+    weeklyReport.value = null
+  } finally {
+    weeklyReportLoading.value = false
+  }
 }
 
-const behaviorTotal = computed(() => {
-  const overview = profileOverview.value
-  if (!overview) return 0
-  return (overview.browse_count || 0) + (overview.favorite_count || 0) + (overview.comment_count || 0) + (overview.ai_generate_count || 0)
+// ===== 阅读报告辅助 computed =====
+const topicBarColors = ['#6366f1', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#94a3b8']
+
+const maxDailyCount = computed(() => {
+  if (!weeklyReport.value) return 1
+  return Math.max(...weeklyReport.value.daily_activity.map(d => d.count), 1)
 })
 
-const behaviorRingSegments = computed(() => {
-  const overview = profileOverview.value
-  if (!overview || behaviorTotal.value === 0) return []
-  const total = behaviorTotal.value
+const mostActiveDate = computed(() => {
+  if (!weeklyReport.value) return ''
+  let max = 0, date = ''
+  weeklyReport.value.daily_activity.forEach(d => { if (d.count > max) { max = d.count; date = d.date } })
+  return date
+})
+
+function formatWeekDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const parts = dateStr.split('-')
+  return parts.length === 3 ? `${parseInt(parts[1])}/${parseInt(parts[2])}` : dateStr
+}
+
+// 雷达图计算
+const radarLabels = ['阅读探索', '内容沉淀', '社区互动', 'AI 使用']
+const radarAngles = [-90, -90 + 90, -90 + 180, -90 + 270]
+const radarMaxR = 88
+
+function radarPolar(cx: number, cy: number, r: number, angleDeg: number): [number, number] {
+  const rad = (angleDeg * Math.PI) / 180
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)]
+}
+
+const radarAxes = computed(() => radarAngles.map((angle, i) => {
+  const [x, y] = radarPolar(120, 120, radarMaxR + 16, angle)
+  const [lx, ly] = radarPolar(120, 120, radarMaxR + 26, angle)
+  return { label: radarLabels[i], x, y, labelX: lx, labelY: ly }
+}))
+
+const radarDataPoints = computed(() => {
+  if (!weeklyReport.value) return radarAngles.map(() => [120, 120] as [number, number])
+  const scores = [weeklyReport.value.behavior_scores.reading, weeklyReport.value.behavior_scores.collecting, weeklyReport.value.behavior_scores.interaction, weeklyReport.value.behavior_scores.ai_usage]
+  return radarAngles.map((angle, i) => {
+    const r = (scores[i] / 100) * radarMaxR
+    return radarPolar(120, 120, r, angle)
+  })
+})
+
+const radarLegend = computed(() => {
+  if (!weeklyReport.value) return []
+  const s = weeklyReport.value.behavior_scores
   return [
-    { key: 'history' as const, label: '浏览', count: overview.browse_count, pct: Math.round((overview.browse_count / total) * 100), color: '#3b82f6' },
-    { key: 'favorites' as const, label: '收藏', count: overview.favorite_count, pct: Math.round((overview.favorite_count / total) * 100), color: '#f59e0b' },
-    { key: 'comments' as const, label: '评论', count: overview.comment_count, pct: Math.round((overview.comment_count / total) * 100), color: '#10b981' },
-    { key: 'ai-records' as const, label: 'AI生成', count: overview.ai_generate_count, pct: Math.round((overview.ai_generate_count / total) * 100), color: '#8b5cf6' },
+    { key: 'reading', label: '阅读探索', score: s.reading, color: '#6366f1' },
+    { key: 'collecting', label: '内容沉淀', score: s.collecting, color: '#f59e0b' },
+    { key: 'interaction', label: '社区互动', score: s.interaction, color: '#10b981' },
+    { key: 'ai_usage', label: 'AI 使用', score: s.ai_usage, color: '#8b5cf6' },
   ]
 })
 
-const behaviorConicGradient = computed(() => {
-  if (behaviorRingSegments.value.length === 0) return 'conic-gradient(#e5e7eb 0deg 360deg)'
-  let acc = 0
-  const parts = behaviorRingSegments.value.map((s) => {
-    const start = acc
-    acc += (s.count / behaviorTotal.value) * 360
-    return `${s.color} ${start.toFixed(1)}deg ${acc.toFixed(1)}deg`
+function radarPoints(r: number): [number, number][] {
+  return radarAngles.map(a => radarPolar(120, 120, r, a))
+}
+
+// 放大版雷达图（300x300 viewBox）
+const radarMaxRLg = 115
+const radarAnglesLg = [-90, -90 + 90, -90 + 180, -90 + 270]
+function radarPolarLg(cx: number, cy: number, r: number, angleDeg: number): [number, number] {
+  const rad = (angleDeg * Math.PI) / 180
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)]
+}
+const radarAxesLg = computed(() => radarAnglesLg.map((angle, i) => {
+  const [x, y] = radarPolarLg(150, 150, radarMaxRLg + 20, angle)
+  const [lx, ly] = radarPolarLg(150, 150, radarMaxRLg + 34, angle)
+  return { label: radarLabels[i], x, y, labelX: lx, labelY: ly }
+}))
+const radarDataPointsLg = computed(() => {
+  if (!weeklyReport.value) return radarAnglesLg.map(() => [150, 150] as [number, number])
+  const scores = [weeklyReport.value.behavior_scores.reading, weeklyReport.value.behavior_scores.collecting, weeklyReport.value.behavior_scores.interaction, weeklyReport.value.behavior_scores.ai_usage]
+  return radarAnglesLg.map((angle, i) => {
+    const r = (scores[i] / 100) * radarMaxRLg
+    return radarPolarLg(150, 150, r, angle)
   })
-  return `conic-gradient(${parts.join(', ')})`
+})
+function radarPointsLg(r: number): [number, number][] {
+  return radarAnglesLg.map(a => radarPolarLg(150, 150, r, a))
+}
+
+// 足迹节点大小
+function footprintNodeSize(count: number): number {
+  if (count <= 0) return 18
+  const maxCount = maxDailyCount.value || 1
+  return Math.round(18 + (count / maxCount) * 30)
+}
+
+// 报告结束语
+const reportClosingText = computed(() => {
+  const title = weeklyReport.value?.persona?.title || '读者'
+  const topics = weeklyReport.value?.topic_rank?.filter(t => t.name !== '其他').slice(0, 2).map(t => t.name).join('、') || '多个领域'
+  return `作为「${title}」，你本周在${topics}等方向留下了清晰的阅读节奏。继续保持探索，系统会为你沉淀更完整的阅读画像。`
 })
 
-async function loadReadingInsights() {
-  readingTimelineLoading.value = true
-  try {
-    readingTimelineData.value = await getReadingTimeline({ days: 30 })
-  } catch {
-    readingTimelineData.value = null
-  } finally {
-    readingTimelineLoading.value = false
-  }
-}
-
-function handleBehaviorSegmentClick(tabKey: string) {
-  handleStatCardClick(tabKey)
-}
-
 function handleResize() {}
-onBeforeUnmount(() => { window.removeEventListener('resize', handleResize) })
+onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); revokePendingAvatarBlob() })
 
 const browseSearchKeyword = ref('')
 const favoriteSearchKeyword = ref('')
@@ -240,6 +237,9 @@ const editForm = reactive({
   phone: '',
   avatar: '',
 })
+// 头像本地预览状态：选择文件后暂存，保存时才真正上传
+const pendingAvatarFile = ref<File | null>(null)
+const originalAvatar = ref('')
 
 // accountDialog removed — merged into editDialog
 const passwordForm = reactive({
@@ -310,13 +310,30 @@ const filteredBrowseHistory = computed(() => {
 })
 
 // ===== 浏览分类胶囊比例条 =====
-interface CategorySegment { name: string; count: number; pct: number }
-const catSegmentColors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#0ea5e9', '#94a3b8']
+interface CategorySegment { name: string; count: number; pct: number; gradient: string; tooltip: string }
+// 新闻胶囊条：蓝紫科技色系渐变
+const NEWS_CAPSULE_GRADIENTS = [
+  'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+  'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+  'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)',
+  'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)',
+  'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)',
+  'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',  // "其他"
+]
+// 帖子胶囊条：青绿社区色系渐变
+const POST_CAPSULE_GRADIENTS = [
+  'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+  'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+  'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+  'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)',
+  'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',  // "其他"
+]
 const browseCapsuleLoading = ref(false)
 const newsCapsuleItems = ref<BrowseHistoryItem[]>([])
 const postCapsuleItems = ref<BrowseHistoryItem[]>([])
 
-function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string): CategorySegment[] {
+function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string, gradients: string[]): CategorySegment[] {
   const catMap = new Map<string, number>()
   let total = 0
   items.forEach(item => {
@@ -326,24 +343,40 @@ function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string)
   })
   if (total === 0) return []
   const sorted = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1])
-  const top = sorted.slice(0, 5)
-  const result = top.map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }))
-  if (sorted.length > 5) {
+  const hasOthers = sorted.length > 5
+  const topEntries = hasOthers ? sorted.slice(0, 5) : sorted
+
+  const result: CategorySegment[] = []
+  let pctSum = 0
+  for (let i = 0; i < topEntries.length; i++) {
+    const [name, count] = topEntries[i]
+    const isLast = i === topEntries.length - 1 && !hasOthers
+    const pct = isLast ? 100 - pctSum : Math.round((count / total) * 100)
+    const gradient = gradients[i] || gradients[gradients.length - 1]
+    result.push({ name, count, pct, gradient, tooltip: `${name}：${count} 条，占比 ${pct}%` })
+    pctSum += pct
+  }
+  if (hasOthers) {
     const otherCount = sorted.slice(5).reduce((s, [, c]) => s + c, 0)
-    result.push({ name: '其他', count: otherCount, pct: Math.round((otherCount / total) * 100) })
+    const otherPct = 100 - pctSum
+    const otherGradient = gradients[gradients.length - 1] // "其他" 颜色
+    result.push({ name: '其他', count: otherCount, pct: otherPct > 0 ? otherPct : 0, gradient: otherGradient, tooltip: `其他分类：${otherCount} 条，占比 ${otherPct > 0 ? otherPct : 0}%` })
   }
   return result
 }
 
-const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻'))
-const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览'))
+const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻', NEWS_CAPSULE_GRADIENTS))
+const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览', POST_CAPSULE_GRADIENTS))
+const newsCapsuleTotal = computed(() => newsCategorySegments.value.reduce((s, seg) => s + seg.count, 0))
+const postCapsuleTotal = computed(() => postCategorySegments.value.reduce((s, seg) => s + seg.count, 0))
 
 async function loadBrowseCapsuleData() {
   browseCapsuleLoading.value = true
   try {
+    // 获取全部浏览记录用于分类统计（page_size=200 足够覆盖绝大多数用户）
     const [newsRes, postRes] = await Promise.all([
-      getBrowseHistory(1, 50, 'news'),
-      getBrowseHistory(1, 50, 'post'),
+      getBrowseHistory(1, 200, 'news'),
+      getBrowseHistory(1, 200, 'post'),
     ])
     newsCapsuleItems.value = (newsRes as any).list || []
     postCapsuleItems.value = (postRes as any).list || []
@@ -445,6 +478,10 @@ async function openEditDialog(tab: 'profile' | 'password' = 'profile') {
   editForm.email = (userStore.userInfo as any)?.email || ''
   editForm.phone = (userStore.userInfo as any)?.phone || ''
   editForm.avatar = userStore.userInfo?.avatar || ''
+  // 保存原始头像用于取消时恢复
+  originalAvatar.value = editForm.avatar
+  // 清除未保存的头像状态
+  clearPendingAvatar()
   passwordForm.old_password = ''
   passwordForm.new_password = ''
   passwordForm.confirm_password = ''
@@ -527,20 +564,46 @@ async function handleAvatarChange(file: File) {
     return false
   }
 
-  try {
-    const result = await uploadAvatarApi(file)
-    const avatarUrl = result.avatar_url || result.avatar
-    editForm.avatar = avatarUrl
-    if (userStore.userInfo) {
-      userStore.userInfo.avatar = avatarUrl
-      userStore.setUserInfo(userStore.userInfo)
-    }
-    ElMessage.success('头像上传成功')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '头像上传失败'
-    ElMessage.error(message)
-  }
+  // 仅本地预览，不调用上传 API；保存时才真正提交
+  // 释放之前的 blob URL 防止内存泄漏
+  revokePendingAvatarBlob()
+  const blobUrl = URL.createObjectURL(file)
+  pendingAvatarFile.value = file
+  editForm.avatar = blobUrl
   return false
+}
+
+/** 释放暂存头像的 blob URL */
+function revokePendingAvatarBlob() {
+  if (editForm.avatar && editForm.avatar.startsWith('blob:')) {
+    URL.revokeObjectURL(editForm.avatar)
+  }
+}
+
+/** 清除未保存的头像状态 */
+function clearPendingAvatar() {
+  revokePendingAvatarBlob()
+  pendingAvatarFile.value = null
+}
+
+/** 取消编辑：恢复原头像并关闭弹窗 */
+function handleEditCancel() {
+  // 恢复原始头像
+  revokePendingAvatarBlob()
+  editForm.avatar = originalAvatar.value
+  clearPendingAvatar()
+  editDialogVisible.value = false
+}
+
+/** 弹窗关闭时清理未保存的头像 */
+function handleEditDialogClose() {
+  // 弹窗关闭但可能是通过 X 按钮或 ESC 关闭的（非保存/取消路径）
+  // 如果有 pending 文件说明没保存就关了，需要恢复
+  if (pendingAvatarFile.value) {
+    revokePendingAvatarBlob()
+    editForm.avatar = originalAvatar.value
+    clearPendingAvatar()
+  }
 }
 
 async function handleEditSubmit() {
@@ -559,20 +622,38 @@ async function handleEditSubmit() {
     return
   }
 
-  const avatar = editForm.avatar || ''
-  const isValidAvatar = avatar && !avatar.startsWith('data:image/') && !avatar.includes(';base64,') && avatar.length <= 255
-
-  const payload: Record<string, string> = {
-    nickname: editForm.nickname.trim(),
-    email: editForm.email.trim() || '',
-    phone: editForm.phone.trim() || '',
-  }
-  if (isValidAvatar) {
-    payload.avatar = avatar
-  }
-
   editLoading.value = true
   try {
+    // 如果有未保存的头像文件，先上传获取 URL
+    let avatarUrl = editForm.avatar || ''
+    if (pendingAvatarFile.value) {
+      try {
+        const uploadResult = await uploadAvatarApi(pendingAvatarFile.value)
+        avatarUrl = uploadResult.avatar_url || uploadResult.avatar
+        editForm.avatar = avatarUrl
+        // 清除暂存文件引用（blob URL 稍后统一释放）
+        pendingAvatarFile.value = null
+      } catch (uploadError) {
+        const message = uploadError instanceof Error ? uploadError.message : '头像上传失败，请重试'
+        ElMessage.error(message)
+        editLoading.value = false
+        // 上传失败不污染当前已保存头像，保留原值继续
+        return
+      }
+    }
+
+    const avatar = avatarUrl
+    const isValidAvatar = avatar && !avatar.startsWith('data:image/') && !avatar.includes(';base64,') && !avatar.startsWith('blob:') && avatar.length <= 255
+
+    const payload: Record<string, string> = {
+      nickname: editForm.nickname.trim(),
+      email: editForm.email.trim() || '',
+      phone: editForm.phone.trim() || '',
+    }
+    if (isValidAvatar) {
+      payload.avatar = avatar
+    }
+
     const result = await updateUserProfileApi(payload)
 
     if (userStore.userInfo) {
@@ -585,6 +666,9 @@ async function handleEditSubmit() {
 
     ElMessage.success('资料保存成功')
 
+    // 释放 blob URL（已上传或无需上传）
+    revokePendingAvatarBlob()
+
     // 重新加载完整用户资料以确保最新
     await loadCurrentUserProfile()
 
@@ -592,6 +676,12 @@ async function handleEditSubmit() {
   } catch (error) {
     const message = error instanceof Error ? error.message : '资料保存失败'
     ElMessage.error(message)
+    // 保存失败时，如果上传过头像，后端已保存了文件+DB，需要重新同步
+    // 重新加载用户资料确保 userStore 与 DB 一致
+    await loadCurrentUserProfile()
+    // 恢复编辑表单中的头像为当前已保存头像
+    editForm.avatar = userStore.userInfo?.avatar || originalAvatar.value
+    clearPendingAvatar()
   } finally {
     editLoading.value = false
   }
@@ -604,24 +694,59 @@ function openAIRecordDetail(record: AIRecordItem) {
 
 async function handleRemoveFavorite(item: FavoriteItem, event: Event) {
   event.stopPropagation()
+
+  // 第一步：确认对话框，用户取消不提示错误
   try {
     await ElMessageBox.confirm(`确定要取消收藏《${item.title}》吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning',
     })
+  } catch {
+    // 用户主动取消确认框，静默返回
+    return
+  }
+
+  // 第二步：调用后端取消收藏 API
+  try {
     if (item.target_type === 'post') {
       await unfavoritePost(item.news_id)
     } else {
       await unfavoriteNews(item.news_id)
     }
-    favorites.value = favorites.value.filter((f) => f.news_id !== item.news_id)
-    totalCount.value--
-    if (profileOverview.value) {
-      profileOverview.value.favorite_count--
-    }
     ElMessage.success('已取消收藏')
-  } catch {
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || '取消收藏失败，请重试'
+    ElMessage.error(message)
+    return
+  }
+
+  // 第三步：重新拉取数据确保与后端一致
+  // 刷新左侧概览统计
+  await loadProfileOverview()
+  // 刷新收藏列表，处理分页回退
+  await reloadFavoritesAfterRemove()
+}
+
+/** 取消收藏后重新加载收藏列表，处理最后一页清空后的回退 */
+async function reloadFavoritesAfterRemove() {
+  const newTotal = totalCount.value - 1
+  if (newTotal <= 0) {
+    await loadFavorites(1)
+    return
+  }
+  const maxPage = Math.ceil(newTotal / pageSize)
+  // 如果当前页超出最大页数，回退到上一页
+  const targetPage = Math.min(currentPage.value, maxPage)
+  await loadFavorites(targetPage)
+}
+
+/** 加载概览统计数据 */
+async function loadProfileOverview() {
+  try {
+    profileOverview.value = await getProfileOverview()
+  } catch (error) {
+    console.error('加载概览统计失败:', error)
   }
 }
 
@@ -750,6 +875,8 @@ function handleTabChange(key: string) {
     loadBrowseCapsuleData()
   } else if (key === 'favorites') {
     loadFavorites()
+    // 切换 Tab 时刷新概览，确保收藏数与其他页面同步
+    loadProfileOverview()
   } else if (key === 'comments') {
     loadComments()
   } else if (key === 'ai-records') {
@@ -770,6 +897,8 @@ function handleNavClick(key: string) {
     loadBrowseCapsuleData()
   } else if (key === 'favorites') {
     loadFavorites()
+    // 切换 Tab 时刷新概览，确保收藏数与其他页面同步
+    loadProfileOverview()
   } else if (key === 'comments') {
     loadComments()
   } else if (key === 'ai-records') {
@@ -804,6 +933,7 @@ async function handleStatCardClick(targetTab: string) {
     loadBrowseHistory()
   } else if (targetTab === 'favorites') {
     loadFavorites()
+    loadProfileOverview()
   } else if (targetTab === 'comments') {
     loadComments()
   } else if (targetTab === 'ai-records') {
@@ -834,19 +964,14 @@ function getVisiblePages(current: number, total: number): (number | string)[] {
 
 onMounted(async () => {
   await loadCurrentUserProfile()
-  // Load overview stats for quick stats display in header (not for overview tab)
-  try {
-    profileOverview.value = await getProfileOverview()
-  } catch (error) {
-    console.error('加载概览统计失败:', error)
-  }
+  // Load overview stats for quick stats display
+  await loadProfileOverview()
   // Auto-load default tab data so browse history shows immediately
   if (activeTab.value === 'history') {
     await loadBrowseHistory()
   }
-  // Load reading insights (non-blocking)
-  loadReadingInsights()
-  loadRingData()
+  // Load weekly report (non-blocking)
+  loadWeeklyReport()
   window.addEventListener('resize', handleResize)
 })
 </script>
@@ -877,19 +1002,19 @@ onMounted(async () => {
           </el-tag>
         </div>
         <div class="sidebar-user-stats">
-          <div class="sidebar-stat-item" @click="handleStatCardClick('history')">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('history')" title="浏览过的新闻与帖子数量（去重）">
             <span class="sidebar-stat-num">{{ profileOverview?.browse_count ?? 0 }}</span>
             <span class="sidebar-stat-lbl">浏览</span>
           </div>
-          <div class="sidebar-stat-item" @click="handleStatCardClick('favorites')">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('favorites')" title="有效新闻与帖子收藏数量（不含已下架内容）">
             <span class="sidebar-stat-num">{{ profileOverview?.favorite_count ?? 0 }}</span>
             <span class="sidebar-stat-lbl">收藏</span>
           </div>
-          <div class="sidebar-stat-item" @click="handleStatCardClick('comments')">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('comments')" title="新闻与帖子评论总量">
             <span class="sidebar-stat-num">{{ profileOverview?.comment_count ?? 0 }}</span>
             <span class="sidebar-stat-lbl">评论</span>
           </div>
-          <div class="sidebar-stat-item" @click="handleStatCardClick('ai-records')">
+          <div class="sidebar-stat-item" @click="handleStatCardClick('ai-records')" title="AI 标题摘要生成总量">
             <span class="sidebar-stat-num">{{ profileOverview?.ai_generate_count ?? 0 }}</span>
             <span class="sidebar-stat-lbl">AI</span>
           </div>
@@ -916,112 +1041,178 @@ onMounted(async () => {
     <section class="profile-main-panel">
       <div class="profile-module-body">
 
-        <!-- ===== 阅读洞察模块 ===== -->
+        <!-- ===== 阅读洞察 / 近 7 天阅读报告 ===== -->
         <div v-if="activeTab === 'insights'" class="module-content">
-          <div class="module-header">
-            <h2 class="module-title"><el-icon><Grid /></el-icon> 阅读洞察</h2>
-            <p class="module-desc">基于浏览、收藏、评论和AI生成记录，分析你的阅读活跃度、行为偏好与主题脉络</p>
+          <!-- Loading -->
+          <div v-if="weeklyReportLoading" class="report-loading">
+            <el-skeleton :rows="6" animated />
           </div>
-          <!-- 上排：矩阵 + 能量环 -->
-          <div class="insights-top-row">
-            <div class="portrait-card">
-              <div class="portrait-card__header">
-                <span class="portrait-card__title"><el-icon><Files /></el-icon> 近 30 天阅读活跃矩阵</span>
-              </div>
-              <div class="portrait-card__body">
-                <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
-                <div v-else-if="!readingTimelineData || matrixDays.length === 0" class="portrait-empty">
-                  <span class="portrait-empty__text">暂无阅读记录</span>
-                </div>
-                <div v-else class="activity-matrix">
-                  <div class="matrix-grid">
-                    <div
-                      v-for="day in matrixDays"
-                      :key="day.date"
-                      class="matrix-cell"
-                      :class="[`heat-${day.level}`, { 'matrix-cell--selected': selectedReadingDay === day.date }]"
-                      :title="`${day.date}: ${day.reads} 次阅读`"
-                      @click="selectedReadingDay = selectedReadingDay === day.date ? null : day.date"
-                    ></div>
-                  </div>
-                  <div class="heatmap-footer">
-                    <span v-if="selectedDayInfo" class="heatmap-selected-info">{{ selectedDayInfo.date }} · 阅读 {{ selectedDayInfo.reads }} 篇</span>
-                    <span v-else class="heatmap-hint">点击日期查看当天活跃情况</span>
-                    <div class="heatmap-legend">
-                      <span class="legend-label">少</span>
-                      <span class="legend-dot heat-0"></span><span class="legend-dot heat-1"></span><span class="legend-dot heat-2"></span><span class="legend-dot heat-3"></span><span class="legend-dot heat-4"></span>
-                      <span class="legend-label">多</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="portrait-card">
-              <div class="portrait-card__header">
-                <span class="portrait-card__title"><el-icon><Setting /></el-icon> 行为能量环</span>
-              </div>
-              <div class="portrait-card__body">
-                <div v-if="behaviorTotal === 0" class="portrait-empty">
-                  <span class="portrait-empty__text">暂无行为数据</span>
-                  <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
-                </div>
-                <div v-else class="behavior-ring-wrap">
-                  <div class="ring-chart" :style="{ background: behaviorConicGradient }">
-                    <div class="ring-center">
-                      <span class="ring-total">{{ behaviorTotal }}</span>
-                      <span class="ring-label">总行为</span>
-                    </div>
-                  </div>
-                  <div class="ring-legend">
-                    <div v-for="seg in behaviorRingSegments" :key="seg.key" class="ring-legend-item" @click="handleBehaviorSegmentClick(seg.key)">
-                      <span class="legend-dot" :style="{ background: seg.color }"></span>
-                      <span class="legend-name">{{ seg.label }}</span>
-                      <span class="legend-count">{{ seg.count }}</span>
-                      <span class="legend-pct">{{ seg.pct }}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+
+          <!-- Error -->
+          <div v-else-if="weeklyReportError" class="report-error">
+            <span class="report-error__icon">⚠️</span>
+            <span class="report-error__text">{{ weeklyReportError }}</span>
+            <el-button size="small" @click="loadWeeklyReport">重新加载</el-button>
           </div>
-          <!-- 下排：主题阅读星环图 -->
-          <div class="portrait-card ring-card">
-            <div class="portrait-card__header">
-              <span class="portrait-card__title"><el-icon><View /></el-icon> 主题阅读星环</span>
-              <span class="ring-subtitle">基于近30天浏览记录，展示你的高频阅读分类及其代表新闻</span>
-            </div>
-            <div class="portrait-card__body">
-              <el-skeleton v-if="ringLoading" :rows="4" animated />
-              <div v-else-if="ringCategories.length === 0" class="portrait-empty">
-                <span class="portrait-empty__text">暂无足够阅读脉络数据</span>
-                <span class="portrait-empty__hint">浏览更多新闻后，将生成你的主题阅读星环</span>
+
+          <!-- Empty -->
+          <div v-else-if="!weeklyReport || weeklyReport.empty" class="report-empty">
+            <span class="report-empty__icon">📋</span>
+            <span class="report-empty__title">最近 7 天还没有足够的阅读记录</span>
+            <span class="report-empty__hint">浏览新闻、收藏内容或使用 AI 摘要后，这里会生成你的阅读报告</span>
+          </div>
+
+          <!-- Report Content -->
+          <template v-else>
+            <!-- ===== 三页翻页式阅读报告 ===== -->
+            <div class="weekly-report-book">
+              <!-- 导航头 -->
+              <div class="report-book-header">
+                <div class="report-book-header__left">
+                  <span class="report-book-header__title">{{ currentReportPage.title }}</span>
+                  <span class="report-book-header__subtitle">{{ currentReportPage.subtitle }}</span>
+                </div>
+                <span class="report-book-header__count">{{ reportPageIndex + 1 }} / {{ reportPages.length }}</span>
               </div>
-              <div v-else class="ring-container">
-                <svg viewBox="0 0 540 540" class="ring-svg">
-                  <line v-for="(cat, ci) in ringCategories" :key="'cl-'+ci" :x1="270" :y1="270" :x2="ringPolar(270,270,133,cat._startDeg + cat._arcDeg/2).x" :y2="ringPolar(270,270,133,cat._startDeg + cat._arcDeg/2).y" stroke="#cbd5e1" stroke-width="1" opacity="0.4" />
-                  <path v-for="(cat, ci) in ringCategories" :key="'seg-'+ci" :d="ringArcPath(270, 270, 112, 154, cat._startDeg, cat._startDeg + cat._arcDeg)" :fill="cat.color" :opacity="hoveredRingCategory === cat.name ? 1 : 0.85" style="cursor: pointer; transition: opacity 0.2s" @mouseenter="hoveredRingCategory = cat.name" @mouseleave="hoveredRingCategory = null" @click="selectedRingCategory = selectedRingCategory === cat.name ? null : cat.name" />
-                  <line v-for="(dot, di) in ringNewsDots" :key="'nl-'+di" :x1="dot.lineX1" :y1="dot.lineY1" :x2="dot.lineX2" :y2="dot.lineY2" :stroke="dot.color" stroke-width="1" opacity="0.3" />
-                  <circle v-for="(dot, di) in ringNewsDots" :key="'nd-'+di" :cx="dot.cx" :cy="dot.cy" r="6" :fill="dot.color" opacity="0.8" :style="{ cursor: dot.id ? 'pointer' : 'default' }" @click="dot.id ? router.push(`/news/${dot.id}`) : null"><title>{{ dot.title }} · {{ dot.readAt }}</title></circle>
-                  <circle cx="270" cy="270" r="50" fill="#fff" stroke="#e5e7eb" stroke-width="2" />
-                  <text x="270" y="262" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">我的阅读</text>
-                  <text x="270" y="282" text-anchor="middle" font-size="12" fill="#94a3b8">近30天 {{ ringTotal }} 条</text>
-                </svg>
-                <!-- 详情卡片 -->
-                <div class="ring-detail">
-                  <div v-if="selectedRingCategory" class="ring-detail-card">
-                    <span class="ring-detail-name">{{ selectedRingCategory }}</span>
-                    <span class="ring-detail-stat">阅读 {{ ringCategories.find(c => c.name === selectedRingCategory)?.count || 0 }} 条</span>
-                    <div v-if="ringCategories.find(c => c.name === selectedRingCategory)?.news.length" class="ring-detail-news">
-                      <div v-for="(n, ni) in ringCategories.find(c => c.name === selectedRingCategory)?.news" :key="ni" class="ring-detail-news-item" @click="n.id ? router.push(`/news/${n.id}`) : null" :style="{ cursor: n.id ? 'pointer' : 'default' }">
-                        <span>{{ n.title }}</span><span class="ring-detail-time">{{ n.readAt }}</span>
+
+              <!-- 页面内容 (fade 过渡) -->
+              <transition name="report-fade" mode="out-in">
+                <!-- ====== 第 1 页：本周总览 ====== -->
+                <section v-if="reportPageIndex === 0" key="overview" class="report-page report-page--overview">
+                  <div class="report-cover">
+                    <div class="report-cover__bg"></div>
+                    <div class="report-cover__content">
+                      <h1 class="report-cover__title">近 7 天我的阅读报告</h1>
+                      <p class="report-cover__subtitle">基于截至昨日的最近完整 7 天浏览、收藏、评论与 AI 使用行为生成</p>
+                      <div class="report-cover__persona">
+                        <span class="report-cover__persona-badge">{{ weeklyReport.persona.title }}</span>
+                        <span v-if="aiSourceLabel" class="report-cover__ai-tag">{{ aiSourceLabel }}</span>
+                      </div>
+                      <p class="report-cover__summary">{{ weeklyReport.ai_analysis?.enabled ? weeklyReport.ai_analysis.summary : weeklyReport.summary }}</p>
+                    </div>
+                  </div>
+                  <div class="report-page__body report-page__body--overview">
+                    <!-- 画像综合区：左侧文字 + 右侧雷达图 -->
+                    <div class="overview-integrated">
+                      <div class="overview-integrated__text">
+                        <h2 class="overview-integrated__title">🧑 本周画像</h2>
+                        <p class="overview-integrated__desc">{{ weeklyReport.ai_analysis?.page_analyses?.overview || weeklyReport.analysis_texts?.profile_analysis || weeklyReport.persona.description }}</p>
+                        <p v-if="weeklyReport.ai_analysis?.reading_style" class="overview-integrated__style">「{{ weeklyReport.ai_analysis.reading_style }}」</p>
+                        <div class="overview-integrated__dimensions">
+                          <div class="ov-dim-item" v-for="d in radarLegend" :key="d.key">
+                            <span class="ov-dim-item__dot" :style="{background:d.color}"></span>
+                            <span class="ov-dim-item__label">{{ d.label }}</span>
+                            <span class="ov-dim-item__score">{{ d.score }}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="overview-integrated__radar">
+                        <svg viewBox="-20 -20 340 340" class="radar-svg radar-svg--large">
+                          <polygon v-for="level in 4" :key="'grid-'+level" :points="radarPointsLg(55 + level * 22).join(' ')" fill="none" :stroke="level===4?'#cbd5e1':'#e5e7eb'" stroke-width="1.5"/>
+                          <line v-for="(axis,ai) in radarAxesLg" :key="'ax-'+ai" :x1="150" :y1="150" :x2="axis.x" :y2="axis.y" stroke="#e5e7eb" stroke-width="1.5"/>
+                          <polygon :points="radarDataPointsLg.join(' ')" fill="rgba(99,102,241,0.12)" stroke="#6366f1" stroke-width="2.5"/>
+                          <circle v-for="(pt,pi) in radarDataPointsLg" :key="'pt-'+pi" :cx="pt[0]" :cy="pt[1]" r="6" fill="#6366f1"/>
+                          <text v-for="(axis,ai) in radarAxesLg" :key="'lbl-'+ai" :x="axis.labelX" :y="axis.labelY" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">{{ axis.label }}</text>
+                        </svg>
+                      </div>
+                    </div>
+                    <div v-if="weeklyReport.analysis_texts?.behavior_analysis" class="overview-behavior-bar">
+                      <span class="overview-behavior-bar__title">📊 行为画像解读</span>
+                      <p class="overview-behavior-bar__text">{{ weeklyReport.analysis_texts.behavior_analysis }}</p>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- ====== 第 2 页：阅读轨迹 ====== -->
+                <section v-else-if="reportPageIndex === 1" key="trajectory" class="report-page report-page--trajectory">
+                  <div class="report-page__body">
+                    <p class="page2-intro">{{ weeklyReport.ai_analysis?.page_analyses?.trajectory || ('这一周，你的阅读节奏整体较稳定，兴趣主要集中在' + (weeklyReport.topic_rank.slice(0,3).filter(t=>t.name!=='其他').map(t=>t.name).join('、') || '多个领域') + '，说明你更关注现实议题、产业变化与技术趋势。') }}</p>
+                    <!-- 阅读足迹：时间轴节点图 -->
+                    <div class="report-card report-card--footprint">
+                      <div class="report-card__header"><span class="report-card__title">📅 阅读足迹</span><span class="report-card__subtitle">近 7 天每日浏览次数</span></div>
+                      <div class="report-card__body">
+                        <div class="footprint-timeline">
+                          <div class="footprint-line"></div>
+                          <div v-for="day in weeklyReport.daily_activity" :key="day.date" class="footprint-node-wrap">
+                            <div class="footprint-node" :class="{ 'footprint-node--peak': day.count===maxDailyCount&&maxDailyCount>0, 'footprint-node--zero': day.count===0 }" :style="{ width: footprintNodeSize(day.count)+'px', height: footprintNodeSize(day.count)+'px' }">
+                              <span v-if="day.count>0" class="footprint-node__count">{{ day.count }}</span>
+                            </div>
+                            <span class="footprint-node__date">{{ formatWeekDate(day.date) }}</span>
+                          </div>
+                        </div>
+                        <div class="activity-summary"><span>活跃 {{ weeklyReport.overview.active_days }} 天</span><span v-if="maxDailyCount>0"> · 最活跃 {{ formatWeekDate(mostActiveDate) }} · 共 {{ weeklyReport.daily_activity.reduce((s,d)=>s+d.count,0) }} 次</span></div>
+                        <div v-if="weeklyReport.analysis_texts?.activity_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.activity_analysis }}</div>
+                      </div>
+                    </div>
+                    <!-- 兴趣主题：气泡标签图 -->
+                    <div class="report-card report-card--bubbles">
+                      <div class="report-card__header"><span class="report-card__title">🏷️ 兴趣主题</span><span class="report-card__subtitle">近 7 天浏览内容分类分布</span></div>
+                      <div class="report-card__body">
+                        <div v-if="weeklyReport.topic_rank.length===0" class="report-card__empty">暂无数据</div>
+                        <div v-else class="topic-list">
+                            <div v-for="(topic, idx) in weeklyReport.topic_rank" :key="topic.name" class="topic-item">
+                              <span class="topic-item__rank" :class="{ 'topic-item__rank--top3': idx < 3 }">{{ idx + 1 }}</span>
+                              <span class="topic-item__name">{{ topic.name }}</span>
+                              <div class="topic-item__bar-track"><div class="topic-item__bar-fill" :style="{ width: topic.percent + '%', background: topicBarColors[idx] || '#94a3b8' }"></div></div>
+                              <span class="topic-item__count">{{ topic.count }}</span>
+                              <span class="topic-item__pct">{{ topic.percent }}%</span>
+                            </div>
+                          </div>
+                        <div v-if="weeklyReport.analysis_texts?.topic_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.topic_analysis }}</div>
                       </div>
                     </div>
                   </div>
-                  <span v-else class="ring-detail-hint">悬停或点击分类色块，查看阅读脉络详情</span>
+                </section>
+
+                <!-- ====== 第 3 页：高光与建议 ====== -->
+                <section v-else key="insights" class="report-page report-page--insights">
+                  <div class="report-page__body report-page__body--insights">
+                    <p class="page3-intro">{{ weeklyReport.ai_analysis?.page_analyses?.conclusion || '这一周，你留下了这些阅读痕迹。从行为来看，你保持了稳定的信息获取节奏，也在积极使用 AI 工具提升效率。' }}</p>
+                    <!-- 高光叙事 -->
+                    <div class="report-card report-card--highlights">
+                      <div class="report-card__header"><span class="report-card__title">✨ 本周高光</span></div>
+                      <div class="report-card__body">
+                        <div v-if="weeklyReport.highlights.length===0" class="report-card__empty">暂无数据</div>
+                        <div v-else class="highlight-narrative-list">
+                          <div v-for="(hl, hIdx) in weeklyReport.highlights" :key="hl.label" class="highlight-narrative-item"><span class="highlight-narrative-item__icon">{{ String(hIdx + 1).padStart(2, '0') }}</span><div class="highlight-narrative-item__content"><span class="highlight-narrative-item__text">{{ hl.narrative||hl.desc }}</span></div></div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- AI 洞察 + 建议 合并卡 -->
+                    <div v-if="weeklyReport.ai_analysis?.enabled" class="report-card report-card--ai-merged">
+                      <div class="report-card__header"><span class="report-card__title">🤖 AI 给你的阅读回顾</span></div>
+                      <div class="report-card__body">
+                        <div class="ai-merged-grid">
+                          <div class="ai-merged-col">
+                            <span class="ai-merged-col__label">从你的行为中看到</span>
+                            <div class="ai-insight-list">
+                              <div v-for="(insight,idx) in weeklyReport.ai_analysis.insights" :key="'ins-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot"></span><span>{{ insight }}</span></div>
+                            </div>
+                          </div>
+                          <div class="ai-merged-col ai-merged-col--suggestions">
+                            <span class="ai-merged-col__label">下一步可以这样阅读</span>
+                            <div class="ai-insight-list">
+                              <div v-for="(sg,idx) in weeklyReport.ai_analysis.suggestions" :key="'sug-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot ai-insight-item__dot--suggestion"></span><span>{{ sg }}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="report-closing">{{ weeklyReport.ai_analysis?.closing || reportClosingText }}</p>
+                  </div>
+                </section>
+              </transition>
+
+              <!-- 底部翻页控件 -->
+              <div class="report-book-controls">
+                <button class="report-book-btn" :disabled="isFirstReportPage" @click="prevReportPage">← 上一页</button>
+                <div class="report-book-dots">
+                  <span v-for="(p, idx) in reportPages" :key="p.key" class="report-book-dot" :class="{ 'report-book-dot--active': idx === reportPageIndex }" @click="goReportPage(idx)"></span>
                 </div>
+                <button class="report-book-btn" @click="isLastReportPage ? (reportPageIndex = 0) : nextReportPage()">{{ isLastReportPage ? '↻ 回到首页' : '下一页 →' }}</button>
               </div>
             </div>
-          </div>
+          </template>
         </div>
 
         <!-- ===== 记录模块 ===== -->
@@ -1040,53 +1231,95 @@ onMounted(async () => {
 
           <template v-else-if="activeTab === 'history'">
             <!-- ===== 浏览分类胶囊比例条 ===== -->
-            <div class="browse-capsule-panel">
-              <div v-if="browseCapsuleLoading" class="capsule-loading">
-                <el-skeleton :rows="2" animated />
+            <div v-if="browseCapsuleLoading" class="capsule-loading">
+              <div class="capsule-card capsule-card--news">
+                <div class="capsule-card__skeleton"><el-skeleton :rows="2" animated /></div>
               </div>
-              <div class="capsule-row">
-                <span class="capsule-title">新闻浏览分类分布</span>
-                <span class="capsule-subtitle">基于最近浏览记录样本统计</span>
-                <div v-if="newsCategorySegments.length > 0" class="capsule-bar-wrap">
+              <div class="capsule-card capsule-card--post">
+                <div class="capsule-card__skeleton"><el-skeleton :rows="2" animated /></div>
+              </div>
+            </div>
+            <div v-else class="browse-capsule-panel">
+              <!-- 新闻胶囊卡片 -->
+              <div class="capsule-card capsule-card--news">
+                <div class="capsule-card__header">
+                  <div class="capsule-card__title-row">
+                    <span class="capsule-card__icon capsule-card__icon--news"></span>
+                    <span class="capsule-card__title">新闻分类分布</span>
+                    <span v-if="newsCapsuleTotal > 0" class="capsule-card__badge">共 {{ newsCapsuleTotal }} 条</span>
+                  </div>
+                  <span class="capsule-card__subtitle">按浏览过的新闻分类去重统计</span>
+                </div>
+                <div v-if="newsCategorySegments.length > 0" class="capsule-card__body">
                   <div class="capsule-bar">
                     <div
-                      v-for="(seg, idx) in newsCategorySegments"
+                      v-for="seg in newsCategorySegments"
                       :key="seg.name"
                       class="capsule-seg"
-                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
-                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                      :style="{ width: seg.pct + '%', background: seg.gradient }"
+                      :title="seg.tooltip"
                     ></div>
                   </div>
                   <div class="capsule-legend">
-                    <span v-for="(seg, idx) in newsCategorySegments" :key="seg.name" class="capsule-legend-item">
-                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
-                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    <span
+                      v-for="seg in newsCategorySegments"
+                      :key="seg.name"
+                      class="capsule-legend__item"
+                      :title="seg.name"
+                    >
+                      <span class="capsule-legend__dot" :style="{ background: seg.gradient }"></span>
+                      <span class="capsule-legend__name">{{ seg.name }}</span>
+                      <span class="capsule-legend__count">{{ seg.count }}</span>
+                      <span class="capsule-legend__pct">{{ seg.pct }}%</span>
                     </span>
                   </div>
                 </div>
-                <div v-else class="capsule-empty">暂无新闻浏览分类数据</div>
+                <div v-else class="capsule-card__empty">
+                  <span class="capsule-card__empty-icon">📊</span>
+                  <span class="capsule-card__empty-text">暂无新闻浏览分类数据</span>
+                  <span class="capsule-card__empty-hint">浏览新闻后将自动生成分类分布</span>
+                </div>
               </div>
-              <div class="capsule-row">
-                <span class="capsule-title">帖子浏览标签分布</span>
-                <span class="capsule-subtitle">基于当前已加载浏览记录统计</span>
-                <div v-if="postCategorySegments.length > 0" class="capsule-bar-wrap">
+
+              <!-- 帖子胶囊卡片 -->
+              <div class="capsule-card capsule-card--post">
+                <div class="capsule-card__header">
+                  <div class="capsule-card__title-row">
+                    <span class="capsule-card__icon capsule-card__icon--post"></span>
+                    <span class="capsule-card__title">帖子标签分布</span>
+                    <span v-if="postCapsuleTotal > 0" class="capsule-card__badge">共 {{ postCapsuleTotal }} 条</span>
+                  </div>
+                  <span class="capsule-card__subtitle">按浏览过的帖子标签去重统计</span>
+                </div>
+                <div v-if="postCategorySegments.length > 0" class="capsule-card__body">
                   <div class="capsule-bar">
                     <div
-                      v-for="(seg, idx) in postCategorySegments"
+                      v-for="seg in postCategorySegments"
                       :key="seg.name"
                       class="capsule-seg"
-                      :style="{ width: seg.pct + '%', background: catSegmentColors[idx] || '#94a3b8' }"
-                      :title="`${seg.name}: ${seg.count} 条 (${seg.pct}%)`"
+                      :style="{ width: seg.pct + '%', background: seg.gradient }"
+                      :title="seg.tooltip"
                     ></div>
                   </div>
                   <div class="capsule-legend">
-                    <span v-for="(seg, idx) in postCategorySegments" :key="seg.name" class="capsule-legend-item">
-                      <span class="capsule-dot" :style="{ background: catSegmentColors[idx] || '#94a3b8' }"></span>
-                      {{ seg.name }} {{ seg.count }} 条 {{ seg.pct }}%
+                    <span
+                      v-for="seg in postCategorySegments"
+                      :key="seg.name"
+                      class="capsule-legend__item"
+                      :title="seg.name"
+                    >
+                      <span class="capsule-legend__dot" :style="{ background: seg.gradient }"></span>
+                      <span class="capsule-legend__name">{{ seg.name }}</span>
+                      <span class="capsule-legend__count">{{ seg.count }}</span>
+                      <span class="capsule-legend__pct">{{ seg.pct }}%</span>
                     </span>
                   </div>
                 </div>
-                <div v-else class="capsule-empty">暂无帖子浏览标签数据</div>
+                <div v-else class="capsule-card__empty">
+                  <span class="capsule-card__empty-icon">🏷️</span>
+                  <span class="capsule-card__empty-text">暂无帖子浏览标签数据</span>
+                  <span class="capsule-card__empty-hint">浏览社区帖子后将自动生成标签分布</span>
+                </div>
               </div>
             </div>
 
@@ -1396,7 +1629,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <el-dialog v-model="editDialogVisible" title="编辑资料" width="520px" class="edit-dialog" :close-on-click-modal="false">
+    <el-dialog v-model="editDialogVisible" title="编辑资料" width="520px" class="edit-dialog" :close-on-click-modal="false" @close="handleEditDialogClose">
       <el-tabs v-model="activeEditTab" class="edit-tabs">
         <el-tab-pane label="基本资料" name="profile">
           <el-form :model="editForm" label-width="80px" class="edit-form">
@@ -1429,7 +1662,7 @@ onMounted(async () => {
             </el-form-item>
           </el-form>
           <div class="dialog-footer">
-            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button @click="handleEditCancel">取消</el-button>
             <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">保存</el-button>
           </div>
         </el-tab-pane>
@@ -1453,7 +1686,7 @@ onMounted(async () => {
             />
           </el-form>
           <div class="dialog-footer">
-            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button @click="handleEditCancel">取消</el-button>
             <el-button type="primary" :loading="passwordLoading" @click="handleChangePassword">确认修改</el-button>
           </div>
         </el-tab-pane>
@@ -1886,119 +2119,13 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.portrait-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  overflow: hidden;
-  background: #fff;
-  transition: box-shadow 0.3s ease;
-}
-
-.portrait-card:hover {
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
-}
-
-.portrait-card__header {
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.portrait-card__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #475569;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.portrait-card__body {
-  padding: 16px 18px;
-  min-height: 220px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.portrait-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: #94a3b8;
-}
-
-.portrait-empty__icon {
-  font-size: 32px;
-}
-
-.portrait-empty__text {
-  font-size: 14px;
-  font-weight: 500;
-  color: #64748b;
-}
-
-.portrait-empty__hint {
-  font-size: 12px;
-  color: #cbd5e1;
-}
 
 /* -- 阅读洞察矩阵 + 星轨 -- */
-.insights-top-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
 
-.activity-matrix {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-}
-
-.matrix-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 36px);
-  grid-template-rows: repeat(5, 36px);
-  gap: 8px;
-}
-
-.matrix-cell {
-  border-radius: 10px;
-  cursor: pointer;
-  transition: transform 0.15s, outline 0.1s;
-}
-
-.matrix-cell:hover { transform: scale(1.15); z-index: 1; }
-.matrix-cell--selected { outline: 2.5px solid #4338ca; }
-
-.heat-0 { background: #f1f5f9; }
-.heat-1 { background: #e0e7ff; }
-.heat-2 { background: #a5b4fc; }
-.heat-3 { background: #6366f1; }
-.heat-4 { background: #4338ca; }
-
-.ring-card { margin-top: 0; }
-.ring-subtitle { font-size: 12px; color: #94a3b8; margin-left: 8px; }
-.ring-container { display: flex; gap: 16px; align-items: flex-start; }
-.ring-svg { width: 300px; height: 300px; flex-shrink: 0; }
-.ring-detail { flex: 1; min-width: 0; padding-top: 8px; }
-.ring-detail-card { display: flex; flex-direction: column; gap: 8px; }
-.ring-detail-name { font-size: 15px; font-weight: 700; color: #1e293b; }
-.ring-detail-stat { font-size: 13px; color: #64748b; }
-.ring-detail-news { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.ring-detail-news-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #475569; padding: 6px 8px; background: #f8fafc; border-radius: 6px; }
-.ring-detail-news-item:hover { background: #eff6ff; }
-.ring-detail-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
-.ring-detail-hint { font-size: 13px; color: #cbd5e1; }
 
 @media (max-width: 768px) {
   .insights-top-row { grid-template-columns: 1fr; }
   .matrix-grid { grid-template-columns: repeat(6, 28px); grid-template-rows: repeat(5, 28px); gap: 6px; }
-  .ring-container { flex-direction: column; align-items: center; }
-  .ring-svg { width: 260px; height: 260px; }
 }
 
 /* -- 旧热力图样式保留用于兼容 -- */
@@ -2114,11 +2241,7 @@ onMounted(async () => {
 .heat-empty { background: transparent; outline: none; cursor: default; }
 
 /* 蓝紫色热力 */
-.heat-0 { background: #f1f5f9; }
-.heat-1 { background: #e0e7ff; }
-.heat-2 { background: #a5b4fc; }
-.heat-3 { background: #6366f1; }
-.heat-4 { background: #4338ca; }
+
 
 .heatmap-footer {
   display: flex;
@@ -2180,32 +2303,39 @@ onMounted(async () => {
 }
 
 .ring-chart {
-  width: 150px;
-  height: 150px;
+  width: 156px;
+  height: 156px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
 }
 
 .ring-center {
-  width: 90px;
-  height: 90px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   background: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .ring-total {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   color: #1e293b;
   line-height: 1.1;
+}
+
+.ring-label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 1px;
 }
 
 .ring-label {
@@ -2231,6 +2361,7 @@ onMounted(async () => {
 
 .ring-legend-item:hover {
   background: #f1f5f9;
+  color: #1e293b;
 }
 
 .legend-dot {
@@ -2365,78 +2496,326 @@ onMounted(async () => {
 .browse-capsule-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 20px;
 }
 
-.capsule-row {
-  padding: 14px 16px;
-  background: #f8fafc;
-  border-radius: 14px;
-  border: 1px solid #e5e7eb;
+/* ---- 卡片容器 ---- */
+.capsule-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #e8ecf1;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fb 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.capsule-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
+}
+.capsule-card--news {
+  border-left: 3px solid #818cf8;
+}
+.capsule-card--post {
+  border-left: 3px solid #34d399;
+}
+.capsule-card__skeleton {
+  padding: 4px 0;
 }
 
-.capsule-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
-  margin-right: 10px;
-}
-
-.capsule-subtitle {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-.capsule-bar-wrap {
-  margin-top: 10px;
+/* ---- 头部 ---- */
+.capsule-card__header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.capsule-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.capsule-card__icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.capsule-card__icon--news {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+.capsule-card__icon--post {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+.capsule-card__title {
+  font-size: 14px;
+  font-weight: 650;
+  color: #1e293b;
+}
+.capsule-card__badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.capsule-card__subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 18px;
 }
 
+/* ---- 胶囊条 ---- */
+.capsule-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .capsule-bar {
   display: flex;
   height: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   gap: 2px;
+  background: #e5e7eb;
+  padding: 1px;
 }
-
 .capsule-seg {
-  transition: filter 0.2s;
+  transition: filter 0.22s ease, transform 0.22s ease;
   cursor: default;
+  min-width: 4px;
 }
-
+.capsule-seg:first-child {
+  border-radius: 9px 0 0 9px;
+}
+.capsule-seg:last-child {
+  border-radius: 0 9px 9px 0;
+}
 .capsule-seg:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.18) saturate(1.1);
+  transform: scaleY(1.25);
 }
 
+/* ---- 图例 ---- */
 .capsule-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 12px;
 }
-
-.capsule-legend-item {
+.capsule-legend__item {
   font-size: 12px;
   color: #64748b;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  cursor: default;
+  transition: color 0.18s;
+  max-width: 100%;
 }
-
-.capsule-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.capsule-legend__item:hover {
+  color: #334155;
+}
+.capsule-legend__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
   flex-shrink: 0;
 }
+.capsule-legend__name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capsule-legend__count {
+  font-weight: 600;
+  color: #475569;
+}
+.capsule-legend__pct {
+  color: #94a3b8;
+  font-size: 11px;
+}
 
-.capsule-empty {
-  margin-top: 8px;
-  font-size: 12px;
+/* ---- 空状态 ---- */
+.capsule-card__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 0 6px;
   color: #cbd5e1;
+}
+.capsule-card__empty-icon {
+  font-size: 22px;
+  opacity: 0.6;
+}
+.capsule-card__empty-text {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.capsule-card__empty-hint {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* ---- loading ---- */
+.capsule-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+/* ===== 近 7 天阅读报告 ===== */
+.report-loading, .report-error, .report-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 48px 24px; gap: 12px;
+}
+.report-error__icon, .report-empty__icon { font-size: 36px; }
+.report-error__text { font-size: 14px; color: #ef4444; }
+.report-empty__title { font-size: 15px; font-weight: 600; color: #64748b; }
+.report-empty__hint { font-size: 13px; color: #94a3b8; text-align: center; }
+
+/* ---- 翻页报告书 ---- */
+.weekly-report-book { background: #fff; border-radius: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); overflow: hidden; min-height: calc(100vh - 140px); }
+.report-book-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 30px 16px; border-bottom: 1px solid #f1f5f9; }
+.report-book-header__left { display: flex; align-items: baseline; gap: 10px; }
+.report-book-header__title { font-size: 30px; font-weight: 850; color: #1e293b; letter-spacing: -0.5px; }
+.report-book-header__subtitle { font-size: 16px; color: #64748b; font-weight: 400; }
+.report-book-header__count { font-size: 13px; color: #6366f1; font-weight: 650; background: #eef2ff; padding: 4px 14px; border-radius: 14px; white-space: nowrap; }
+.report-page { min-height: 560px; }
+.report-page__body { padding: 24px 30px; display: flex; flex-direction: column; gap: 20px; }
+.report-page__body--overview { padding: 0 30px 24px; }
+.report-page__body--insights { gap: 18px; }
+.report-page-summary { font-size: 15px; color: #64748b; line-height: 1.7; margin: 0; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; }
+.report-closing { font-size: 14px; color: #94a3b8; text-align: center; padding: 18px 12px 4px; margin: 0; line-height: 1.7; }
+
+/* 第 2 页 intro */
+.page2-intro { font-size: 16px; color: #334155; line-height: 1.8; margin: 0 0 8px; }
+.page3-intro { font-size: 17px; color: #334155; line-height: 1.8; margin: 0 0 4px; }
+
+/* 行为分析宽卡片 */
+.overview-behavior-bar { margin-top: 8px; padding: 16px 20px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #6366f1; }
+.overview-behavior-bar__title { font-size: 15px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px; }
+.overview-behavior-bar__text { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; }
+
+/* 翻页控件 */
+.report-book-controls { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px 18px; border-top: 1px solid #f1f5f9; }
+.report-book-btn { padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 20px; background: #fff; color: #475569; font-size: 13px; cursor: pointer; transition: all 0.2s ease; }
+.report-book-btn:hover:not(:disabled) { background: #f8fafc; border-color: #6366f1; color: #6366f1; }
+.report-book-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.report-book-dots { display: flex; gap: 8px; }
+.report-book-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5e7eb; cursor: pointer; transition: all 0.25s ease; }
+.report-book-dot--active { background: #6366f1; transform: scale(1.3); }
+.report-fade-enter-active, .report-fade-leave-active { transition: opacity 0.22s ease; }
+.report-fade-enter-from, .report-fade-leave-to { opacity: 0; }
+
+/* 封面卡 — 浅色报告风格 */
+.report-cover { position: relative; border-radius: 22px; overflow: hidden; margin-bottom: 0; background: linear-gradient(135deg, #fafbff 0%, #f0f3ff 50%, #f8fafc 100%); border: 1px solid #eef2ff; }
+.report-cover__bg { display: none; }
+.report-cover__content { position: relative; padding: 32px 30px 28px; color: #1e293b; }
+.report-cover__title { font-size: 24px; font-weight: 750; margin: 0 0 4px; letter-spacing: -0.3px; color: #1e293b; }
+.report-cover__subtitle { font-size: 14px; color: #64748b; margin: 0 0 16px; }
+.report-cover__persona { margin-bottom: 12px; }
+.report-cover__persona-badge { display: inline-block; padding: 6px 20px; background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-radius: 24px; font-size: 16px; font-weight: 700; color: #4f46e5; }
+.report-cover__ai-tag { display: inline-block; font-size: 11px; padding: 3px 10px; background: #eef2ff; color: #6366f1; border-radius: 12px; margin-left: 10px; vertical-align: middle; }
+.report-cover__summary { font-size: 17px; line-height: 1.8; color: #475569; margin: 0; }
+
+/* 第 1 页：画像综合区 */
+.overview-integrated { display: grid; grid-template-columns: 1fr 360px; gap: 32px; align-items: start; }
+.overview-integrated__text { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.overview-integrated__title { font-size: 24px; font-weight: 750; color: #1e293b; margin: 0; }
+.overview-integrated__desc { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; }
+.overview-integrated__style { font-size: 16px; color: #6366f1; font-weight: 600; line-height: 1.7; margin: 0; padding: 8px 0; font-style: italic; }
+.overview-integrated__dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.ov-dim-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #64748b; padding: 6px 10px; background: #fafbfc; border-radius: 8px; }
+.ov-dim-item__dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.ov-dim-item__label { flex: 1; }
+.ov-dim-item__score { font-weight: 700; color: #334155; font-size: 16px; }
+.overview-integrated__insight { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; }
+.overview-integrated__radar { display: flex; align-items: flex-start; justify-content: center; padding-top: 24px; overflow: visible; }
+.radar-svg--large { width: 340px; height: 340px; overflow: visible; }
+
+/* 图表行 */
+.report-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 0; }
+
+/* 通用卡片 */
+.report-card { background: #fff; border-radius: 18px; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden; }
+.report-card--radar { overflow: visible; }
+.report-card__header { padding: 16px 20px 12px; border-bottom: 1px solid #f8fafc; display: flex; align-items: baseline; gap: 8px; }
+.report-card__title { font-size: 17px; font-weight: 700; color: #1e293b; }
+.report-card__subtitle { font-size: 13px; color: #94a3b8; }
+.report-card__body { padding: 18px 20px; }
+.report-card__empty { font-size: 14px; color: #cbd5e1; text-align: center; padding: 20px 0; }
+
+/* 雷达图 */
+.radar-wrap { display: flex; align-items: center; gap: 12px; }
+.radar-svg { width: 200px; height: 200px; flex-shrink: 0; }
+.radar-legend { display: flex; flex-direction: column; gap: 6px; }
+.radar-legend__item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #64748b; }
+.radar-legend__dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.radar-legend__score { margin-left: auto; font-weight: 650; color: #475569; }
+
+/* 足迹时间轴 */
+.footprint-timeline { display: flex; align-items: flex-end; justify-content: space-between; padding: 16px 8px 8px; position: relative; min-height: 90px; }
+.footprint-line { position: absolute; top: 50%; left: 8%; right: 8%; height: 2px; background: #e5e7eb; transform: translateY(-50%); }
+.footprint-node-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 1; }
+.footprint-node { border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; background: #e0e7ff; border: 2px solid #c7d2fe; min-width: 18px; min-height: 18px; }
+.footprint-node--peak { background: #6366f1; border-color: #4f46e5; box-shadow: 0 0 14px rgba(99,102,241,0.35); }
+.footprint-node--zero { background: #f1f5f9; border-color: #e5e7eb; }
+.footprint-node__count { font-size: 13px; font-weight: 700; color: #fff; }
+.footprint-node--zero .footprint-node__count { color: transparent; }
+.footprint-node__date { font-size: 12px; color: #94a3b8; }
+.activity-summary { margin-top: 12px; font-size: 13px; color: #94a3b8; }
+
+/* 兴趣主题横向条形榜 */
+.topic-list { display: flex; flex-direction: column; gap: 10px; }
+.topic-item { display: flex; align-items: center; gap: 10px; }
+.topic-item__rank { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #94a3b8; flex-shrink: 0; }
+.topic-item__rank--top3 { background: #eef2ff; color: #6366f1; }
+.topic-item__name { font-size: 13px; color: #475569; width: 52px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-item__bar-track { flex: 1; height: 12px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+.topic-item__bar-fill { height: 100%; border-radius: 6px; min-width: 2px; transition: width 0.5s ease; }
+.topic-item__count { font-size: 13px; font-weight: 600; color: #475569; width: 22px; text-align: right; flex-shrink: 0; }
+.topic-item__pct { font-size: 12px; color: #94a3b8; width: 32px; text-align: right; flex-shrink: 0; }
+
+/* AI 合并卡 */
+.ai-merged-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.ai-merged-col { display: flex; flex-direction: column; gap: 10px; }
+.ai-merged-col__label { font-size: 14px; font-weight: 650; color: #475569; padding-bottom: 4px; border-bottom: 2px solid #f1f5f9; }
+
+/* 高光编号式列表 */
+.highlight-narrative-list { display: flex; flex-direction: column; gap: 12px; }
+.highlight-narrative-item { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; background: #fafbfc; border-radius: 12px; border: 1px solid #f1f5f9; }
+.highlight-narrative-item__icon { font-size: 13px; font-weight: 800; color: #6366f1; background: #eef2ff; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.highlight-narrative-item__text { font-size: 15px; color: #334155; line-height: 1.65; }
+
+/* 图表解读 */
+.chart-insight { margin-top: 12px; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; font-size: 16px; color: #475569; line-height: 1.8; }
+
+/* AI 洞察列表 */
+.ai-insight-list { display: flex; flex-direction: column; gap: 10px; }
+.ai-insight-item { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; color: #475569; line-height: 1.7; }
+.ai-insight-item__dot { width: 6px; height: 6px; border-radius: 50%; background: #8b5cf6; flex-shrink: 0; margin-top: 6px; }
+.ai-insight-item__dot--suggestion { background: #10b981; }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .report-charts-row { grid-template-columns: 1fr; }
+  .report-cover__title { font-size: 22px; }
+  .report-cover__content { padding: 24px 20px 20px; }
+  .report-cover__summary { font-size: 15px; }
+  .radar-wrap { flex-direction: column; }
+  .report-book-controls { flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .report-book-dots { order: -1; width: 100%; justify-content: center; }
+  .overview-integrated { grid-template-columns: 1fr; }
+  .overview-integrated__radar { order: -1; padding-top: 0; }
+  .radar-svg--large { width: 260px; height: 260px; }
+  .ai-merged-grid { grid-template-columns: 1fr; }
+  .report-page__body { padding: 16px 18px; }
 }
 
 /* ===== 内容 Tab 区域 ===== */

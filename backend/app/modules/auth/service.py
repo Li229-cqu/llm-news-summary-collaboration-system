@@ -7,13 +7,6 @@ from app.db.database import execute_insert, execute_one, execute_update
 from app.mock.users import MOCK_USERS
 from app.modules.auth.schema import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ResetPasswordRequest, UserInfo
 
-TOKEN_USERNAME_MAP = {
-    "mock-token-user": "user",
-    "mock-token-editor": "editor",
-    "mock-token-admin": "admin",
-}
-
-
 def _to_user_info(user: dict[str, Any]) -> UserInfo:
     """Convert a db/mock user row into API user info."""
     return UserInfo(
@@ -28,12 +21,9 @@ def _to_user_info(user: dict[str, Any]) -> UserInfo:
     )
 
 
-def _get_token_for_role(role: str) -> str:
-    return {
-        "user": "mock-token-user",
-        "editor": "mock-token-editor",
-        "admin": "mock-token-admin",
-    }.get(role, "mock-token-user")
+def _get_token_for_user(user_id: int, role: str) -> str:
+    """Generate a mock token that uniquely identifies the user by id and role."""
+    return f"mock-token-{role}-{user_id}"
 
 
 def _get_db_user_by_username(username: str) -> dict[str, Any] | None:
@@ -76,7 +66,7 @@ def login_mock_user(request: LoginRequest) -> LoginResponse:
         if db_user["password"] != request.password:
             raise AppException(code=401, message="账号或密码错误")
         return LoginResponse(
-            token=_get_token_for_role(str(db_user["role"])),
+            token=_get_token_for_user(int(db_user["id"]), str(db_user["role"])),
             user=_to_user_info(db_user),
         )
 
@@ -93,8 +83,32 @@ def logout_mock_user() -> None:
 
 
 def get_mock_user_by_token(token: str) -> Optional[UserInfo]:
-    """Resolve a user by mock token, preferring the database user table."""
-    username = TOKEN_USERNAME_MAP.get(token)
+    """Resolve a user by mock token, preferring the database user table.
+
+    Token format: mock-token-{role}-{user_id}
+    Falls back to legacy TOKEN_USERNAME_MAP for backward compatibility.
+    """
+    # New format: mock-token-{role}-{user_id}
+    parts = token.rsplit("-", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        user_id = int(parts[1])
+        try:
+            db_user = execute_one(
+                "SELECT id, username, password, nickname, avatar, role, status, email, phone FROM user WHERE id = %s AND status = 1 LIMIT 1",
+                (user_id,),
+            )
+        except Exception:
+            db_user = None
+        if db_user is not None:
+            return _to_user_info(db_user)
+
+    # Legacy fallback: old role-based tokens
+    legacy_map = {
+        "mock-token-user": "user",
+        "mock-token-editor": "editor",
+        "mock-token-admin": "admin",
+    }
+    username = legacy_map.get(token)
     if username is not None:
         try:
             db_user = _get_db_user_by_username(username)
