@@ -31,8 +31,6 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
   width: 100%;
   min-width: 0;
   min-height: 100vh;
-  height: 100%;
-  overflow: hidden;
   background: var(--color-bg);
 }
 
@@ -40,7 +38,7 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
   display: flex;
   flex-direction: row;
   width: 100%;
-  height: calc(100vh - var(--header-height));
+  flex: 1;
   min-height: 0;
 }
 
@@ -56,6 +54,7 @@ const isHomeRoute = computed(() => route.name === 'home' || route.path === '/hom
 .layout-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: var(--layout-main-padding);
   overflow-y: auto;
   background: var(--color-bg);
