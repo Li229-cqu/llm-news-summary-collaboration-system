@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -21,7 +21,6 @@ import {
   ZoomIn,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import * as echarts from 'echarts'
 import {
   type AIRecordItem,
   type BrowseHistoryItem,
@@ -36,6 +35,7 @@ import {
   getFavorites,
   getProfileOverview,
   getReadingTimeline,
+  getReadingTrajectory,
   getSubscriptions,
   updateSubscriptions,
 } from '@/api/profile'
@@ -43,7 +43,6 @@ import { unfavoriteNews } from '@/api/interaction'
 import { unfavoritePost } from '@/api/community'
 import { changePasswordApi, getUserProfileApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import ReadingTrajectory from '@/components/profile/ReadingTrajectory.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -79,15 +78,103 @@ const statCards = [
   { key: 'ai-records', icon: MagicStick, label: 'AI生成记录', count: () => profileOverview.value?.ai_generate_count ?? 0, desc: '标题摘要生成历史' },
 ]
 
-// ===== 阅读画像状态 =====
-const readingRange = ref<30 | 60>(30)
+// ===== 阅读洞察状态 =====
 const selectedReadingDay = ref<string | null>(null)
 const readingTimelineLoading = ref(false)
 const readingTimelineData = ref<ReadingTimelineResponse | null>(null)
-const aiInsightLoading = ref(false)
-const recentAIRecords = ref<AIRecordItem[]>([])
-const categoryRadarRef = ref<HTMLDivElement | null>(null)
-let categoryRadarChart: echarts.ECharts | null = null
+
+const matrixDays = computed(() => {
+  if (!readingTimelineData.value) return []
+  const dateMap = new Map<string, number>()
+  for (const item of readingTimelineData.value.items) dateMap.set(item.date, item.total_reads)
+  const maxReads = Math.max(...Array.from(dateMap.values()), 1)
+  const days: { date: string; reads: number; level: number }[] = []
+  const now = new Date()
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const reads = dateMap.get(key) || 0
+    let level = 0
+    if (reads > 0) { const r = reads / maxReads; level = r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4 }
+    days.push({ date: key, reads, level })
+  }
+  return days
+})
+
+const selectedDayInfo = computed(() => {
+  if (!selectedReadingDay.value || !readingTimelineData.value) return null
+  const item = readingTimelineData.value.items.find(i => i.date === selectedReadingDay.value)
+  return item ? { date: selectedReadingDay.value, reads: item.total_reads } : null
+})
+
+
+// ===== 主题阅读星环图 =====
+const ringLoading = ref(false)
+const hoveredRingCategory = ref<string | null>(null)
+const selectedRingCategory = ref<string | null>(null)
+interface RingCategoryRaw { name: string; count: number; color: string; news: { id?: number; title: string; readAt: string }[] }
+interface RingCategory extends RingCategoryRaw { _startDeg: number; _arcDeg: number }
+const ringCategoriesRaw = ref<RingCategoryRaw[]>([])
+
+const ringTotal = computed(() => ringCategoriesRaw.value.reduce((s, c) => s + c.count, 0))
+
+const ringCategories = computed<RingCategory[]>(() => {
+  const total = ringTotal.value
+  let currentDeg = 0
+  return ringCategoriesRaw.value.map(cat => {
+    const arcDeg = total > 0 ? Math.max((cat.count / total) * 360, 24) : 0
+    const result: RingCategory = { ...cat, _startDeg: currentDeg, _arcDeg: arcDeg }
+    currentDeg += arcDeg
+    return result
+  })
+})
+
+
+interface RingNewsDot { id?: number; title: string; readAt: string; cx: number; cy: number; color: string; lineX1: number; lineY1: number; lineX2: number; lineY2: number }
+const ringNewsDots = computed<RingNewsDot[]>(() => {
+  const dots: RingNewsDot[] = []
+  ringCategories.value.forEach(cat => {
+    cat.news.forEach((n, ni) => {
+      const angle = cat._startDeg + cat._arcDeg * (ni + 1) / (cat.news.length + 1)
+      const inner = ringPolar(270, 270, 155, angle)
+      const outer = ringPolar(270, 270, 200, angle)
+      dots.push({ id: n.id, title: n.title, readAt: n.readAt, cx: outer.x, cy: outer.y, color: cat.color, lineX1: inner.x, lineY1: inner.y, lineX2: outer.x, lineY2: outer.y })
+    })
+  })
+  return dots
+})
+function ringDegToRad(deg: number) { return (deg * Math.PI) / 180 }
+function ringPolar(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = ringDegToRad(angleDeg - 90)
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
+function ringArcPath(cx: number, cy: number, innerR: number, outerR: number, startDeg: number, endDeg: number): string {
+  const gap = 3; const s = startDeg + gap / 2; const e = endDeg - gap / 2; if (e <= s) return ''
+  const o1 = ringPolar(cx, cy, outerR, s); const o2 = ringPolar(cx, cy, outerR, e)
+  const i1 = ringPolar(cx, cy, innerR, e); const i2 = ringPolar(cx, cy, innerR, s)
+  const large = (e - s) > 180 ? 1 : 0
+  return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 ${large} 1 ${o2.x} ${o2.y} L ${i1.x} ${i1.y} A ${innerR} ${innerR} 0 ${large} 0 ${i2.x} ${i2.y} Z`
+}
+
+async function loadRingData() {
+  ringLoading.value = true
+  try {
+    const trajectory = await getReadingTrajectory({ days: 30, limit: 80 })
+    const newsList = (trajectory as any).recent_news || []
+    const catMap = new Map<string, { count: number; news: { id?: number; title: string; readAt: string }[] }>()
+    newsList.forEach((n: any) => {
+      const cat = n.category_name || '未分类'
+      if (!catMap.has(cat)) catMap.set(cat, { count: 0, news: [] })
+      const entry = catMap.get(cat)!
+      entry.count++
+      if (entry.news.length < 3) entry.news.push({ id: n.news_id, title: (n.title || '').slice(0, 16), readAt: n.browse_time || '' })
+    })
+    const sorted = Array.from(catMap.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 5)
+    const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#0ea5e9']
+    ringCategoriesRaw.value = sorted.map(([name, data], i) => ({ name, count: data.count, color: colors[i] || '#94a3b8', news: data.news }))
+  } catch { ringCategoriesRaw.value = [] }
+  finally { ringLoading.value = false }
+}
 
 const behaviorTotal = computed(() => {
   const overview = profileOverview.value
@@ -118,167 +205,23 @@ const behaviorConicGradient = computed(() => {
   return `conic-gradient(${parts.join(', ')})`
 })
 
-const heatmapWeeks = computed(() => {
-  if (!readingTimelineData.value) return { weeks: [] as { days: { date: string; weekday: number; reads: number; level: number; isEmpty: boolean }[] }[], totalReads: 0, maxReads: 0 }
-  const data = readingTimelineData.value
-  const dateMap = new Map<string, number>()
-  let totalReads = 0
-  for (const item of data.items) { dateMap.set(item.date, item.total_reads); totalReads += item.total_reads }
-  const maxReads = Math.max(...Array.from(dateMap.values()), 1)
-  const days: { date: string; weekday: number; reads: number; level: number }[] = []
-  const now = new Date()
-  for (let i = readingRange.value - 1; i >= 0; i--) {
-    const d = new Date(now); d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    const reads = dateMap.get(key) || 0
-    let level = 0
-    if (reads > 0) { const r = reads / maxReads; level = r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4 }
-    days.push({ date: key, weekday: d.getDay(), reads, level })
-  }
-  const firstWeekday = days[0]?.weekday ?? 0
-  const padStart = Array.from({ length: firstWeekday }, (_, p) => ({ date: '', weekday: p, reads: 0, level: 0, isEmpty: true }))
-  const allDays = [...padStart, ...days.map(d => ({ ...d, isEmpty: false }))]
-  const weeks: { days: typeof allDays }[] = []
-  for (let i = 0; i < allDays.length; i += 7) weeks.push({ days: allDays.slice(i, i + 7) })
-  return { weeks, totalReads, maxReads }
-})
-
-const heatmapMonths = computed(() => {
-  const months: { name: string; colStart: number }[] = []
-  let lastMonth = ''
-  heatmapWeeks.value.weeks.forEach((week, wi) => {
-    const firstDay = week.days.find(d => !d.isEmpty)
-    if (!firstDay) return
-    const d = new Date(firstDay.date); const mk = `${d.getFullYear()}-${d.getMonth()}`
-    if (mk !== lastMonth) { lastMonth = mk; months.push({ name: `${d.getMonth() + 1}月`, colStart: wi }) }
-  })
-  return months
-})
-
-const selectedDayInfo = computed(() => {
-  if (!selectedReadingDay.value || !readingTimelineData.value) return null
-  const data = readingTimelineData.value
-  const item = data.items.find(i => i.date === selectedReadingDay.value)
-  return item ? { date: selectedReadingDay.value, reads: item.total_reads } : null
-})
-
-const categoryRadarData = computed(() => {
-  if (!readingTimelineData.value) return []
-  const catMap = new Map<string, number>()
-  for (const item of readingTimelineData.value.items) {
-    for (const cat of item.categories) {
-      const name = cat.category_name || '未分类'
-      catMap.set(name, (catMap.get(name) || 0) + cat.read_count)
-    }
-  }
-  return Array.from(catMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([name, count]) => ({ name, count }))
-})
-
-const aiInsightSummary = computed(() => {
-  if (recentAIRecords.value.length === 0) return null
-  const records = recentAIRecords.value
-  const manualCount = records.filter((r) => r.source === 'manual').length
-  const newsCount = records.filter((r) => r.source === 'news').length
-  const lowCount = records.filter((r) => (r.risk_level || 'low') === 'low').length
-  const mediumCount = records.filter((r) => r.risk_level === 'medium').length
-  const highCount = records.filter((r) => r.risk_level === 'high').length
-  const lastRecord = records[0]
-  return { total: records.length, manualCount, newsCount, lowCount, mediumCount, highCount, lastRecord }
-})
-
 async function loadReadingInsights() {
   readingTimelineLoading.value = true
   try {
-    readingTimelineData.value = await getReadingTimeline({ days: readingRange.value })
+    readingTimelineData.value = await getReadingTimeline({ days: 30 })
   } catch {
     readingTimelineData.value = null
   } finally {
     readingTimelineLoading.value = false
-    scheduleRadarRender()
   }
-}
-
-async function loadAIInsight() {
-  aiInsightLoading.value = true
-  try {
-    const result = await getAIRecords(1, 50)
-    recentAIRecords.value = result.list || []
-  } catch {
-    recentAIRecords.value = []
-  } finally {
-    aiInsightLoading.value = false
-  }
-}
-
-function handleReadingRangeChange(days: 30 | 60) {
-  readingRange.value = days
-  loadReadingInsights()
 }
 
 function handleBehaviorSegmentClick(tabKey: string) {
   handleStatCardClick(tabKey)
 }
 
-function renderCategoryRadar() {
-  const el = categoryRadarRef.value
-  if (!el) return
-  const { clientWidth, clientHeight } = el
-  if (clientWidth === 0 || clientHeight === 0) {
-    requestAnimationFrame(() => renderCategoryRadar())
-    return
-  }
-  if (categoryRadarChart) {
-    categoryRadarChart.dispose()
-    categoryRadarChart = null
-  }
-  const data = categoryRadarData.value
-  if (data.length < 3) return
-  const indicators = data.map((d) => ({ name: d.name, max: Math.max(...data.map((x) => x.count)) * 1.2 || 10 }))
-  categoryRadarChart = echarts.init(el)
-  categoryRadarChart.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { show: true, bottom: 0, textStyle: { fontSize: 11 } },
-    radar: {
-      center: ['50%', '48%'],
-      radius: '65%',
-      indicator: indicators,
-      axisName: { fontSize: 11 },
-    },
-    series: [{
-      type: 'radar',
-      data: [{ value: data.map((d) => d.count), name: '阅读分布', areaStyle: { color: 'rgba(37,99,235,0.2)' }, lineStyle: { color: '#2563eb', width: 2 }, itemStyle: { color: '#2563eb' } }],
-    }],
-  })
-}
-
-function scheduleRadarRender() {
-  nextTick(() => { requestAnimationFrame(() => renderCategoryRadar()) })
-}
-
-function handleResize() {
-  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
-    categoryRadarChart.resize()
-  } else {
-    scheduleRadarRender()
-  }
-}
-
-watch(activeTab, (tab) => {
-  if (tab === 'insights') scheduleRadarRender()
-})
-
-watch(readingRange, () => {}, { flush: 'post' })
-
-onBeforeUnmount(() => {
-  if (categoryRadarChart && !categoryRadarChart.isDisposed()) {
-    categoryRadarChart.dispose()
-    categoryRadarChart = null
-  }
-  window.removeEventListener('resize', handleResize)
-})
+function handleResize() {}
+onBeforeUnmount(() => { window.removeEventListener('resize', handleResize) })
 
 const browseSearchKeyword = ref('')
 const favoriteSearchKeyword = ref('')
@@ -348,12 +291,11 @@ const categoryDescs: Record<string, string> = {
 }
 
 const profileNavItems = [
-  { key: 'insights', label: '阅读画像', icon: Grid, desc: '趋势与兴趣分析' },
+  { key: 'insights', label: '阅读洞察', icon: Grid, desc: '活跃、行为与主题脉络' },
   { key: 'history', label: '浏览记录', icon: Clock, desc: '新闻与帖子足迹' },
   { key: 'favorites', label: '收藏记录', icon: Star, desc: '保存的新闻与帖子' },
   { key: 'comments', label: '评论记录', icon: ChatDotRound, desc: '你的互动发言' },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick, desc: '标题摘要历史' },
-  { key: 'trajectory', label: '阅读脉络', icon: View, desc: '主题与阅读路径' },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -902,9 +844,9 @@ onMounted(async () => {
   if (activeTab.value === 'history') {
     await loadBrowseHistory()
   }
-  // Load reading portrait insights (non-blocking)
+  // Load reading insights (non-blocking)
   loadReadingInsights()
-  loadAIInsight()
+  loadRingData()
   window.addEventListener('resize', handleResize)
 })
 </script>
@@ -974,162 +916,115 @@ onMounted(async () => {
     <section class="profile-main-panel">
       <div class="profile-module-body">
 
-        <!-- ===== 阅读画像模块 ===== -->
+        <!-- ===== 阅读洞察模块 ===== -->
         <div v-if="activeTab === 'insights'" class="module-content">
           <div class="module-header">
-            <h2 class="module-title"><el-icon><Grid /></el-icon> 阅读画像</h2>
-            <p class="module-desc">通过浏览、收藏、评论和 AI 生成记录，了解你的内容行为偏好</p>
+            <h2 class="module-title"><el-icon><Grid /></el-icon> 阅读洞察</h2>
+            <p class="module-desc">基于浏览、收藏、评论和AI生成记录，分析你的阅读活跃度、行为偏好与主题脉络</p>
           </div>
-          <div class="reading-portrait">
-            <div class="portrait-header-right">
-              <el-radio-group v-model="readingRange" size="small" @change="handleReadingRangeChange">
-                <el-radio-button :value="30">近30天</el-radio-button>
-                <el-radio-button :value="60">近60天</el-radio-button>
-              </el-radio-group>
+          <!-- 上排：矩阵 + 能量环 -->
+          <div class="insights-top-row">
+            <div class="portrait-card">
+              <div class="portrait-card__header">
+                <span class="portrait-card__title"><el-icon><Files /></el-icon> 近 30 天阅读活跃矩阵</span>
+              </div>
+              <div class="portrait-card__body">
+                <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
+                <div v-else-if="!readingTimelineData || matrixDays.length === 0" class="portrait-empty">
+                  <span class="portrait-empty__text">暂无阅读记录</span>
+                </div>
+                <div v-else class="activity-matrix">
+                  <div class="matrix-grid">
+                    <div
+                      v-for="day in matrixDays"
+                      :key="day.date"
+                      class="matrix-cell"
+                      :class="[`heat-${day.level}`, { 'matrix-cell--selected': selectedReadingDay === day.date }]"
+                      :title="`${day.date}: ${day.reads} 次阅读`"
+                      @click="selectedReadingDay = selectedReadingDay === day.date ? null : day.date"
+                    ></div>
+                  </div>
+                  <div class="heatmap-footer">
+                    <span v-if="selectedDayInfo" class="heatmap-selected-info">{{ selectedDayInfo.date }} · 阅读 {{ selectedDayInfo.reads }} 篇</span>
+                    <span v-else class="heatmap-hint">点击日期查看当天活跃情况</span>
+                    <div class="heatmap-legend">
+                      <span class="legend-label">少</span>
+                      <span class="legend-dot heat-0"></span><span class="legend-dot heat-1"></span><span class="legend-dot heat-2"></span><span class="legend-dot heat-3"></span><span class="legend-dot heat-4"></span>
+                      <span class="legend-label">多</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="portrait-grid">
-              <!-- 1. 阅读活跃日历 -->
-              <div class="portrait-card">
-                <div class="portrait-card__header">
-                  <span class="portrait-card__title"><el-icon><Files /></el-icon> 阅读活跃日历</span>
+            <div class="portrait-card">
+              <div class="portrait-card__header">
+                <span class="portrait-card__title"><el-icon><Setting /></el-icon> 行为能量环</span>
+              </div>
+              <div class="portrait-card__body">
+                <div v-if="behaviorTotal === 0" class="portrait-empty">
+                  <span class="portrait-empty__text">暂无行为数据</span>
+                  <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
                 </div>
-                <div class="portrait-card__body">
-                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
-                  <div v-else-if="!readingTimelineData || heatmapWeeks.totalReads === 0" class="portrait-empty">
-                    <span class="portrait-empty__text">暂无阅读记录</span>
+                <div v-else class="behavior-ring-wrap">
+                  <div class="ring-chart" :style="{ background: behaviorConicGradient }">
+                    <div class="ring-center">
+                      <span class="ring-total">{{ behaviorTotal }}</span>
+                      <span class="ring-label">总行为</span>
+                    </div>
                   </div>
-                  <div v-else class="activity-calendar">
-                    <div class="heatmap-title-row">
-                      <span class="heatmap-title">近 {{ readingRange }} 天阅读活跃 · 共 {{ heatmapWeeks.totalReads }} 次阅读</span>
-                    </div>
-                    <div class="heatmap-grid-wrap" :class="`range-${readingRange}`">
-                      <div class="heatmap-y-labels">
-                        <span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span><span></span>
-                      </div>
-                      <div class="heatmap-scroll">
-                        <div class="heatmap-months">
-                          <span v-for="m in heatmapMonths" :key="m.name" :style="{ gridColumn: `${m.colStart + 1} / span 1` }" class="heatmap-month-label">{{ m.name }}</span>
-                        </div>
-                        <div class="heatmap-board">
-                          <div class="heatmap-weeks" :style="{ gridTemplateColumns: `repeat(${heatmapWeeks.weeks.length}, var(--cell-size))` }">
-                            <template v-for="(week, wi) in heatmapWeeks.weeks" :key="wi">
-                              <div
-                                v-for="(day, di) in week.days"
-                                :key="`${wi}-${di}`"
-                                class="heatmap-cell"
-                                :class="{ [`heat-${day.level}`]: !day.isEmpty, 'heat-empty': day.isEmpty, 'heat-selected': selectedReadingDay === day.date }"
-                                :style="{ gridColumn: wi + 1, gridRow: di + 1 }"
-                                :title="day.isEmpty ? '' : `${day.date}: ${day.reads} 次阅读`"
-                                @click="day.isEmpty ? null : selectedReadingDay = selectedReadingDay === day.date ? null : day.date"
-                              ></div>
-                            </template>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="heatmap-footer">
-                      <span v-if="selectedDayInfo" class="heatmap-selected-info">{{ selectedDayInfo.date }} · 阅读 {{ selectedDayInfo.reads }} 篇</span>
-                      <span v-else class="heatmap-hint">点击日期查看当天活跃情况</span>
-                      <div class="heatmap-legend">
-                        <span class="legend-label">少</span>
-                        <span class="legend-dot heat-0"></span><span class="legend-dot heat-1"></span><span class="legend-dot heat-2"></span><span class="legend-dot heat-3"></span><span class="legend-dot heat-4"></span>
-                        <span class="legend-label">多</span>
-                      </div>
+                  <div class="ring-legend">
+                    <div v-for="seg in behaviorRingSegments" :key="seg.key" class="ring-legend-item" @click="handleBehaviorSegmentClick(seg.key)">
+                      <span class="legend-dot" :style="{ background: seg.color }"></span>
+                      <span class="legend-name">{{ seg.label }}</span>
+                      <span class="legend-count">{{ seg.count }}</span>
+                      <span class="legend-pct">{{ seg.pct }}%</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <!-- 2. 兴趣星盘 -->
-              <div class="portrait-card">
-                <div class="portrait-card__header">
-                  <span class="portrait-card__title"><el-icon><Grid /></el-icon> 兴趣星盘</span>
-                </div>
-                <div class="portrait-card__body">
-                  <el-skeleton v-if="readingTimelineLoading" :rows="3" animated />
-                  <div v-else-if="categoryRadarData.length < 3" class="portrait-empty">
-                    <span class="portrait-empty__icon">📡</span>
-                    <span class="portrait-empty__text">阅读分类不足，暂无法生成星盘</span>
-                    <span class="portrait-empty__hint">多阅读几个分类的文章吧</span>
-                  </div>
-                  <div v-else ref="categoryRadarRef" class="radar-chart"></div>
-                </div>
+            </div>
+          </div>
+          <!-- 下排：主题阅读星环图 -->
+          <div class="portrait-card ring-card">
+            <div class="portrait-card__header">
+              <span class="portrait-card__title"><el-icon><View /></el-icon> 主题阅读星环</span>
+              <span class="ring-subtitle">基于近30天浏览记录，展示你的高频阅读分类及其代表新闻</span>
+            </div>
+            <div class="portrait-card__body">
+              <el-skeleton v-if="ringLoading" :rows="4" animated />
+              <div v-else-if="ringCategories.length === 0" class="portrait-empty">
+                <span class="portrait-empty__text">暂无足够阅读脉络数据</span>
+                <span class="portrait-empty__hint">浏览更多新闻后，将生成你的主题阅读星环</span>
               </div>
-              <!-- 3. 行为能量环 -->
-              <div class="portrait-card">
-                <div class="portrait-card__header">
-                  <span class="portrait-card__title"><el-icon><Setting /></el-icon> 行为能量环</span>
-                </div>
-                <div class="portrait-card__body">
-                  <div v-if="behaviorTotal === 0" class="portrait-empty">
-                    <span class="portrait-empty__text">暂无行为数据</span>
-                    <span class="portrait-empty__hint">开始你的第一次阅读吧</span>
-                  </div>
-                  <div v-else class="behavior-ring-wrap">
-                    <div class="ring-chart" :style="{ background: behaviorConicGradient }">
-                      <div class="ring-center">
-                        <span class="ring-total">{{ behaviorTotal }}</span>
-                        <span class="ring-label">总行为</span>
-                      </div>
-                    </div>
-                    <div class="ring-legend">
-                      <div v-for="seg in behaviorRingSegments" :key="seg.key" class="ring-legend-item" @click="handleBehaviorSegmentClick(seg.key)">
-                        <span class="legend-dot" :style="{ background: seg.color }"></span>
-                        <span class="legend-name">{{ seg.label }}</span>
-                        <span class="legend-count">{{ seg.count }}</span>
-                        <span class="legend-pct">{{ seg.pct }}%</span>
+              <div v-else class="ring-container">
+                <svg viewBox="0 0 540 540" class="ring-svg">
+                  <line v-for="(cat, ci) in ringCategories" :key="'cl-'+ci" :x1="270" :y1="270" :x2="ringPolar(270,270,133,cat._startDeg + cat._arcDeg/2).x" :y2="ringPolar(270,270,133,cat._startDeg + cat._arcDeg/2).y" stroke="#cbd5e1" stroke-width="1" opacity="0.4" />
+                  <path v-for="(cat, ci) in ringCategories" :key="'seg-'+ci" :d="ringArcPath(270, 270, 112, 154, cat._startDeg, cat._startDeg + cat._arcDeg)" :fill="cat.color" :opacity="hoveredRingCategory === cat.name ? 1 : 0.85" style="cursor: pointer; transition: opacity 0.2s" @mouseenter="hoveredRingCategory = cat.name" @mouseleave="hoveredRingCategory = null" @click="selectedRingCategory = selectedRingCategory === cat.name ? null : cat.name" />
+                  <line v-for="(dot, di) in ringNewsDots" :key="'nl-'+di" :x1="dot.lineX1" :y1="dot.lineY1" :x2="dot.lineX2" :y2="dot.lineY2" :stroke="dot.color" stroke-width="1" opacity="0.3" />
+                  <circle v-for="(dot, di) in ringNewsDots" :key="'nd-'+di" :cx="dot.cx" :cy="dot.cy" r="6" :fill="dot.color" opacity="0.8" :style="{ cursor: dot.id ? 'pointer' : 'default' }" @click="dot.id ? router.push(`/news/${dot.id}`) : null"><title>{{ dot.title }} · {{ dot.readAt }}</title></circle>
+                  <circle cx="270" cy="270" r="50" fill="#fff" stroke="#e5e7eb" stroke-width="2" />
+                  <text x="270" y="262" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">我的阅读</text>
+                  <text x="270" y="282" text-anchor="middle" font-size="12" fill="#94a3b8">近30天 {{ ringTotal }} 条</text>
+                </svg>
+                <!-- 详情卡片 -->
+                <div class="ring-detail">
+                  <div v-if="selectedRingCategory" class="ring-detail-card">
+                    <span class="ring-detail-name">{{ selectedRingCategory }}</span>
+                    <span class="ring-detail-stat">阅读 {{ ringCategories.find(c => c.name === selectedRingCategory)?.count || 0 }} 条</span>
+                    <div v-if="ringCategories.find(c => c.name === selectedRingCategory)?.news.length" class="ring-detail-news">
+                      <div v-for="(n, ni) in ringCategories.find(c => c.name === selectedRingCategory)?.news" :key="ni" class="ring-detail-news-item" @click="n.id ? router.push(`/news/${n.id}`) : null" :style="{ cursor: n.id ? 'pointer' : 'default' }">
+                        <span>{{ n.title }}</span><span class="ring-detail-time">{{ n.readAt }}</span>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-              <!-- 4. AI 使用洞察 -->
-              <div class="portrait-card">
-                <div class="portrait-card__header">
-                  <span class="portrait-card__title"><el-icon><MagicStick /></el-icon> AI 使用洞察</span>
-                </div>
-                <div class="portrait-card__body">
-                  <el-skeleton v-if="aiInsightLoading" :rows="3" animated />
-                  <div v-else-if="!aiInsightSummary" class="portrait-empty">
-                    <span class="portrait-empty__text">暂无 AI 生成记录</span>
-                    <span class="portrait-empty__hint">去 AI 生成页面体验智能摘要吧</span>
-                  </div>
-                  <div v-else class="ai-insight">
-                    <div class="ai-insight__total">
-                      <span class="ai-insight__big-num">{{ aiInsightSummary.total }}</span>
-                      <span class="ai-insight__big-label">AI 生成总次数</span>
-                    </div>
-                    <div class="ai-insight__bars">
-                      <div class="ai-bar-row">
-                        <span class="ai-bar-label">新闻导入</span>
-                        <div class="ai-bar-track"><div class="ai-bar-fill news" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.newsCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
-                        <span class="ai-bar-val">{{ aiInsightSummary.newsCount }}</span>
-                      </div>
-                      <div class="ai-bar-row">
-                        <span class="ai-bar-label">手动输入</span>
-                        <div class="ai-bar-track"><div class="ai-bar-fill manual" :style="{ width: aiInsightSummary.total ? (aiInsightSummary.manualCount / aiInsightSummary.total * 100).toFixed(0) + '%' : '0%' }"></div></div>
-                        <span class="ai-bar-val">{{ aiInsightSummary.manualCount }}</span>
-                      </div>
-                    </div>
-                    <div class="ai-insight__risk">
-                      <span class="risk-label">风险分布</span>
-                      <div class="risk-tags">
-                        <el-tag size="small" type="success" round>低 {{ aiInsightSummary.lowCount }}</el-tag>
-                        <el-tag size="small" type="warning" round>中 {{ aiInsightSummary.mediumCount }}</el-tag>
-                        <el-tag size="small" type="danger" round>高 {{ aiInsightSummary.highCount }}</el-tag>
-                      </div>
-                    </div>
-                    <div v-if="aiInsightSummary.lastRecord" class="ai-insight__last">
-                      <span class="last-label">最近生成：</span>
-                      <span class="last-title">{{ aiInsightSummary.lastRecord.source_title || `记录 #${aiInsightSummary.lastRecord.id}` }}</span>
-                    </div>
-                  </div>
+                  <span v-else class="ring-detail-hint">悬停或点击分类色块，查看阅读脉络详情</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- ===== 记录模块（浏览/收藏/评论/AI/阅读脉络） ===== -->
+        <!-- ===== 记录模块 ===== -->
         <div v-else class="module-content">
           <div class="module-header">
             <h2 class="module-title">
@@ -1495,10 +1390,6 @@ onMounted(async () => {
               <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(currentPage + 1)" title="下一页">&gt;</button>
               <button class="page-btn" :disabled="currentPage >= Math.ceil(totalCount / pageSize)" @click="handlePageChange(Math.ceil(totalCount / pageSize))" title="尾页">&gt;&gt;</button>
             </div>
-          </template>
-
-          <template v-else-if="activeTab === 'trajectory'">
-            <ReadingTrajectory />
           </template>
 
         </div>
@@ -2052,7 +1943,65 @@ onMounted(async () => {
   color: #cbd5e1;
 }
 
-/* -- GitHub 风格热力图 -- */
+/* -- 阅读洞察矩阵 + 星轨 -- */
+.insights-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.activity-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 36px);
+  grid-template-rows: repeat(5, 36px);
+  gap: 8px;
+}
+
+.matrix-cell {
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, outline 0.1s;
+}
+
+.matrix-cell:hover { transform: scale(1.15); z-index: 1; }
+.matrix-cell--selected { outline: 2.5px solid #4338ca; }
+
+.heat-0 { background: #f1f5f9; }
+.heat-1 { background: #e0e7ff; }
+.heat-2 { background: #a5b4fc; }
+.heat-3 { background: #6366f1; }
+.heat-4 { background: #4338ca; }
+
+.ring-card { margin-top: 0; }
+.ring-subtitle { font-size: 12px; color: #94a3b8; margin-left: 8px; }
+.ring-container { display: flex; gap: 16px; align-items: flex-start; }
+.ring-svg { width: 300px; height: 300px; flex-shrink: 0; }
+.ring-detail { flex: 1; min-width: 0; padding-top: 8px; }
+.ring-detail-card { display: flex; flex-direction: column; gap: 8px; }
+.ring-detail-name { font-size: 15px; font-weight: 700; color: #1e293b; }
+.ring-detail-stat { font-size: 13px; color: #64748b; }
+.ring-detail-news { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.ring-detail-news-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #475569; padding: 6px 8px; background: #f8fafc; border-radius: 6px; }
+.ring-detail-news-item:hover { background: #eff6ff; }
+.ring-detail-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+.ring-detail-hint { font-size: 13px; color: #cbd5e1; }
+
+@media (max-width: 768px) {
+  .insights-top-row { grid-template-columns: 1fr; }
+  .matrix-grid { grid-template-columns: repeat(6, 28px); grid-template-rows: repeat(5, 28px); gap: 6px; }
+  .ring-container { flex-direction: column; align-items: center; }
+  .ring-svg { width: 260px; height: 260px; }
+}
+
+/* -- 旧热力图样式保留用于兼容 -- */
 .activity-calendar {
   width: 100%;
   display: flex;
