@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 MOCK_AI_RECORDS = [
     {
         "id": 3,
+        "user_id": 1,
         "source": "manual",
         "source_news_id": None,
         "source_title": "用户自输入",
@@ -51,6 +52,7 @@ MOCK_AI_RECORDS = [
     },
     {
         "id": 2,
+        "user_id": 1,
         "source": "news",
         "source_news_id": 5,
         "source_title": "中国科学家在量子计算领域取得新突破",
@@ -98,6 +100,7 @@ MOCK_AI_RECORDS = [
     },
     {
         "id": 1,
+        "user_id": 1,
         "source": "news",
         "source_news_id": 3,
         "source_title": "教育改革取得明显成效，学生核心素养得到提升",
@@ -154,12 +157,13 @@ def get_all_records():
     return MOCK_AI_RECORDS + _runtime_records
 
 
-def get_record_by_id(record_id):
+def get_record_by_id(record_id, user_id=None):
     """获取指定 ID 的历史记录。"""
     all_records = get_all_records()
     for record in all_records:
         if record["id"] == record_id or record["id"] == int(record_id):
-            return record
+            if user_id is None or record.get("user_id", 0) == user_id:
+                return record
     return None
 
 

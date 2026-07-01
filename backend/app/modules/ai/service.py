@@ -17,6 +17,7 @@ from app.modules.ai.schema import (
     AIGenerateRequest,
     AIGenerateResponse,
     ConsistencyCheck,
+    EvidenceChain,
     NewsElement,
 )
 
@@ -98,6 +99,8 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
             "suggestions": [],
         }
 
+    evidence_chain_raw = _load_json(row.get("evidence_json"), None)
+
     return AIGenerateResponse(
         candidate_titles=list(_load_json(row.get("candidate_titles"), [])),
         summary_short=str(row.get("summary_short") or ""),
@@ -106,6 +109,11 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
         keywords=list(_load_json(row.get("keywords"), [])),
         elements=NewsElement(**elements_raw),
         consistency=ConsistencyCheck(**consistency_raw),
+        source=row.get("ai_source") or "mock",
+        evidence_chain=EvidenceChain(**evidence_chain_raw) if evidence_chain_raw else None,
+        risk_level=row.get("risk_level") or consistency_raw.get("risk_level", "low"),
+        risk_details=row.get("risk_details") or "",
+        evidence_coverage=row.get("evidence_coverage") or 0.0,
     )
 
 
@@ -113,7 +121,7 @@ async def _call_ai_service(request: AIGenerateRequest) -> AIGenerateResponse:
     endpoint = f"{settings.ai_service_url.rstrip('/')}/ai/generate-title-summary"
     logger.info(f"🚀 [REAL API] 调用 AI 服务: {endpoint}")
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(endpoint, json=request.model_dump())
             response.raise_for_status()
             payload = response.json()
@@ -141,8 +149,15 @@ def _save_ai_record(
     request: AIGenerateRequest,
     result: AIGenerateResponse,
     current_user: Optional[Any] = None,
+    response_ms: int = 0,
 ) -> None:
     user_id = _get_user_id(current_user)
+    evidence_chain_json = _dump_json(result.evidence_chain.model_dump()) if result.evidence_chain else None
+    evidence_status = 1 if result.evidence_chain else 0
+    risk_level_value = result.risk_level if result.risk_level else result.consistency.risk_level
+    risk_details_value = result.risk_details or ""
+    evidence_coverage_value = result.evidence_coverage or 0.0
+    
     record_payload = {
         "user_id": user_id,
         "source": request.source,
@@ -160,9 +175,14 @@ def _save_ai_record(
         "summary_points": _dump_json(result.summary_points),
         "keywords": _dump_json(result.keywords),
         "news_elements": _dump_json(result.elements.model_dump()),
-        "risk_level": result.consistency.risk_level,
+        "risk_level": risk_level_value,
         "check_result": _dump_json(result.consistency.model_dump()),
         "ai_source": result.source or "mock",
+        "response_ms": response_ms,
+        "evidence_json": evidence_chain_json,
+        "evidence_status": evidence_status,
+        "risk_details": risk_details_value,
+        "evidence_coverage": evidence_coverage_value,
         "created_at": _now_text(),
         "updated_at": _now_text(),
         "status": 1,
@@ -175,12 +195,16 @@ def _save_ai_record(
                 user_id, source, source_news_id, source_title, input_text, title_count, summary_type,
                 summary_style, title_style, summary_length, candidate_titles,
                 summary_short, summary_long, summary_points, keywords,
-                news_elements, risk_level, check_result, ai_source, created_at, updated_at, status
+                news_elements, risk_level, check_result, ai_source, response_ms,
+                evidence_json, evidence_status, risk_details, evidence_coverage,
+                created_at, updated_at, status
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s
             )
             """,
             [
@@ -203,6 +227,11 @@ def _save_ai_record(
                 record_payload["risk_level"],
                 record_payload["check_result"],
                 record_payload["ai_source"],
+                record_payload["response_ms"],
+                record_payload["evidence_json"],
+                record_payload["evidence_status"],
+                record_payload["risk_details"],
+                record_payload["evidence_coverage"],
                 record_payload["created_at"],
                 record_payload["updated_at"],
                 record_payload["status"],
@@ -234,11 +263,18 @@ def _save_ai_record(
 
 def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[str, Any]] | None:
     user_id = _get_user_id(current_user)
-    if user_id == 0:
+    
+    if user_id is not None:
+        if user_id > 0:
+            params = [user_id]
+        else:
+            params = [1]
+        where_clause = "user_id = %s AND status = 1"
+    else:
         return None
 
     rows = execute_query(
-        """
+        f"""
         SELECT
             id,
             user_id,
@@ -260,13 +296,17 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
             risk_level,
             check_result,
             ai_source,
+            evidence_json,
+            evidence_status,
+            risk_details,
+            evidence_coverage,
             created_at,
             status
         FROM ai_generate_record
-        WHERE user_id = %s AND status = 1
+        WHERE {where_clause}
         ORDER BY created_at DESC, id DESC
         """,
-        [user_id],
+        params,
     )
     if not rows:
         return None
@@ -296,10 +336,7 @@ def _query_ai_record_detail_from_db(
 ) -> Optional[Dict[str, Any]]:
     user_id = _get_user_id(current_user)
     params: list[Any] = [record_id]
-    where_clause = "id = %s"
-    if user_id:
-        where_clause += " AND user_id = %s"
-        params.append(user_id)
+    where_clause = "id = %s AND status = 1"
 
     row = execute_one(
         f"""
@@ -324,6 +361,10 @@ def _query_ai_record_detail_from_db(
             risk_level,
             check_result,
             ai_source,
+            evidence_json,
+            evidence_status,
+            risk_details,
+            evidence_coverage,
             created_at,
             status
         FROM ai_generate_record
@@ -349,7 +390,7 @@ def _query_ai_record_detail_from_db(
             "title_style": row["title_style"],
             "summary_length": row["summary_length"],
         },
-        "result": result.model_dump(),
+        "result": result,
         "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
     }
 
@@ -380,9 +421,13 @@ async def generate_title_summary(
     if not 1 <= request.title_count <= 5:
         raise AppException(code=400, message="标题数量必须在 1-5 范围内")
 
+    import time
+    start_time = time.time()
     result = await _call_ai_service(request)
+    response_ms = int((time.time() - start_time) * 1000)
+    
     try:
-        _save_ai_record(request, result, current_user=current_user)
+        _save_ai_record(request, result, current_user=current_user, response_ms=response_ms)
     except Exception as exc:  # noqa: BLE001
         logger.warning("AI 生成记录保存失败，继续返回结果：%s", exc)
     return result
@@ -391,6 +436,8 @@ async def generate_title_summary(
 def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordItem]:
     """获取 AI 生成记录列表，数据库优先，mock 兜底。"""
     rows = None
+    user_id = _get_user_id(current_user)
+    
     try:
         rows = _query_ai_records_from_db(current_user)
     except Exception as exc:  # noqa: BLE001
@@ -414,10 +461,12 @@ def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordI
         ]
 
     all_records = get_all_records()
-    user_id = _get_user_id(current_user)
-    if user_id:
-        all_records = [record for record in all_records if record.get("user_id", 0) == user_id]
-
+    if user_id is not None:
+        if user_id > 0:
+            all_records = [record for record in all_records if record.get("user_id", 0) == user_id]
+        else:
+            all_records = [record for record in all_records if record.get("user_id", 0) == 1]
+    
     return [
         AIGenerateRecordItem(
             id=record["id"],
@@ -439,6 +488,8 @@ def get_ai_record_detail(
     current_user: Optional[Any] = None,
 ) -> AIGenerateRecordDetail:
     """获取 AI 生成记录详情，数据库优先，mock 兜底。"""
+    user_id = _get_user_id(current_user)
+    
     try:
         row = _query_ai_record_detail_from_db(record_id, current_user=current_user)
         if row is not None:
@@ -446,7 +497,8 @@ def get_ai_record_detail(
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取 AI 生成记录详情失败，回退 mock：%s", exc)
 
-    record = get_record_by_id(record_id)
+    mock_user_id = user_id if user_id > 0 else 1
+    record = get_record_by_id(record_id, user_id=mock_user_id)
     if not record:
         raise AppException(code=404, message="历史记录不存在")
 

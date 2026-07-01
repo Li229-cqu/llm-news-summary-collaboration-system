@@ -12,6 +12,7 @@ export interface AIGenerateRequest {
   source?: 'manual' | 'news'
   source_news_id?: number | string | null
   source_title?: string
+  skip_evidence?: boolean
 }
 
 export interface NewsElement {
@@ -30,6 +31,27 @@ export interface ConsistencyCheck {
   suggestions: string[]
 }
 
+export interface EvidenceItem {
+  news_id: number
+  source_name: string
+  text: string
+  position: string
+  confidence: number
+  similarity: number
+}
+
+export interface SentenceEvidence {
+  text: string
+  evidence: EvidenceItem[]
+  has_evidence: boolean
+  risk_level: number
+}
+
+export interface EvidenceChain {
+  sentences: SentenceEvidence[]
+  evidence_coverage: number
+}
+
 export interface AIGenerateResponse {
   candidate_titles: string[]
   summary_short: string
@@ -39,16 +61,21 @@ export interface AIGenerateResponse {
   elements: NewsElement
   consistency: ConsistencyCheck
   source?: 'mock' | 'llm' | 'demo'
+  evidence_chain?: EvidenceChain
+  evidence_chain_short?: EvidenceChain
+  evidence_chain_long?: EvidenceChain
+  risk_level?: 'low' | 'medium' | 'high'
+  risk_details?: string
+  evidence_coverage?: number
 }
 
 /** 调用 AI 生成标题和摘要。 */
 export function generateTitleSummary(data: AIGenerateRequest) {
-  // AI 生成接口可能需要调用智谱 GLM-4-Flash，耗时 2-5 秒
-  // 因此单独设置更长的 timeout（60 秒）
+  // 双AI架构：DeepSeek生成(30-60秒) + 智谱评估(30-60秒)，总耗时可能超过60秒
   return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(
     '/api/ai/generate',
     data,
-    { timeout: 60000 }  // 60 秒 timeout
+    { timeout: 120000 }  // 120 秒 timeout
   )
 }
 

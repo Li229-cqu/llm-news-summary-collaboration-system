@@ -39,7 +39,6 @@ function loadNewsDraftFromSession() {
       content: draft.content,
     })
   } catch {
-    // 无效草稿数据直接忽略，保持页面可用
   }
 }
 
@@ -59,18 +58,15 @@ function syncDraftFromNewsRoute() {
 }
 
 const handleGenerate = async () => {
-  // 输入验证
   if (aiDraft.inputText.trim().length === 0) {
     aiDraft.setError('请输入新闻正文后再生成')
     ElMessage.warning('请输入新闻正文后再生成')
     return
   }
 
-  // 清空旧结果和错误
   aiDraft.clearResult()
   aiDraft.setError('')
 
-  // 开始生成
   aiDraft.setLoading(true)
 
   try {
@@ -88,7 +84,6 @@ const handleGenerate = async () => {
 
     aiDraft.setResult(result)
     ElMessage.success('标题和摘要生成成功')
-    // 刷新生成历史
     await nextTick()
     await historyRef.value?.loadHistory?.()
   } catch (error) {
@@ -96,7 +91,6 @@ const handleGenerate = async () => {
 
     if (error instanceof Error) {
       const msg = error.message || ''
-      // 特殊处理 timeout 错误
       if (msg.includes('timeout') || msg.includes('60000ms')) {
         errorMessage = 'AI 生成耗时较长，请稍后重试或缩短新闻正文'
       } else {
@@ -109,6 +103,26 @@ const handleGenerate = async () => {
   } finally {
     aiDraft.setLoading(false)
   }
+}
+
+function handleLoadSample() {
+  const sampleText = `近日，我国新能源汽车产业发展再传捷报。据中国汽车工业协会最新数据显示，今年前五个月，全国新能源汽车销量达到224.7万辆，同比增长46.8%，市场占有率达到27.7%。
+
+在技术创新方面，多家车企宣布在固态电池领域取得重大突破。某知名新能源车企发布公告称，其自主研发的固态电池能量密度已突破500Wh/kg，预计明年将率先搭载于旗下高端车型。该技术将使纯电动汽车续航里程轻松突破1000公里，大幅缓解消费者的续航焦虑。
+
+与此同时，充电基础设施建设也在加速推进。国家能源局数据显示，截至目前，全国充电基础设施累计达630万台，同比增长56%。其中，公共充电桩180万台，私人充电桩450万台，形成了较为完善的充电网络体系。
+
+业内专家表示，随着技术进步和政策支持，新能源汽车产业正处于快速发展的黄金期，预计全年销量有望突破500万辆，继续保持全球领先地位。`
+  aiDraft.inputText = sampleText
+  aiDraft.clearResult()
+  aiDraft.setError('')
+  ElMessage.success('已加载示例新闻')
+}
+
+function handleClear() {
+  aiDraft.inputText = ''
+  aiDraft.clearResult()
+  aiDraft.setError('')
 }
 
 onMounted(() => {
@@ -129,26 +143,45 @@ watch(
 </script>
 
 <template>
-  <main class="page-container">
-    <!-- 页面标题 -->
-    <el-card class="app-card page-header">
-      <h1>AI 标题摘要生成</h1>
-      <p>智能生成新闻标题和摘要，支持多种风格和参数配置。</p>
-    </el-card>
-
-    <!-- 主要内容区：左侧输入，右侧参数 -->
-    <div class="content-layout">
-      <div class="content-left">
-        <!-- 输入区组件 -->
-        <AIInputPanel />
+  <main class="ai-generate-container">
+    <header class="page-header">
+      <div class="header-content">
+        <div class="header-text">
+          <h1>新闻标题与摘要生成</h1>
+          <p>输入新闻正文，自动生成多个候选标题和不同长度的摘要内容</p>
+        </div>
       </div>
+    </header>
 
-      <div class="content-right">
-        <!-- 参数选择区组件 -->
+    <div class="main-content">
+      <aside class="sidebar">
         <AIParamPanel />
-
-        <!-- 生成按钮 -->
-        <el-card class="app-card generate-action">
+      </aside>
+      
+      <div class="main-area">
+        <AIInputPanel />
+        
+        <div class="action-wrapper">
+          <div class="tips-section">
+            <div class="tip-item">
+              <span class="tip-dot"></span>
+              <span>支持粘贴新闻正文，自动提取关键信息</span>
+            </div>
+            <div class="tip-item">
+              <span class="tip-dot"></span>
+              <span>可生成1-5个候选标题供选择</span>
+            </div>
+            <div class="tip-item">
+              <span class="tip-dot"></span>
+              <span>短摘要150字以内，长摘要300-800字</span>
+            </div>
+          </div>
+          
+          <div class="shortcuts-section">
+            <button class="shortcut-btn" @click="handleClear">清空内容</button>
+            <button class="shortcut-btn" @click="handleLoadSample">加载示例</button>
+          </div>
+          
           <el-button
             type="primary"
             size="large"
@@ -157,114 +190,299 @@ watch(
             :loading="aiDraft.loading"
             :disabled="aiDraft.loading"
           >
-            {{ aiDraft.loading ? '✨ 生成中...' : '✨ 生成标题和摘要' }}
+            {{ aiDraft.loading ? '生成中...' : '生成标题和摘要' }}
           </el-button>
-        </el-card>
+        </div>
+
+        <AIResultPanel />
+        <AIGenerateHistory ref="historyRef" />
       </div>
     </div>
-
-    <!-- 生成结果区域 -->
-    <AIResultPanel />
-
-    <!-- 生成历史区域 -->
-    <AIGenerateHistory ref="historyRef" />
   </main>
 </template>
 
 <style scoped>
-.page-container {
-  padding: 24px;
+.ai-generate-container {
+  padding: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
 }
 
 .page-header {
+  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  padding: 32px 40px;
   margin-bottom: 24px;
-}
-
-.page-header h1 {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 24px;
-  color: var(--color-text-primary);
-}
-
-.page-header p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-/* 内容布局：响应式两栏 */
-.content-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-@media (max-width: 1200px) {
-  .content-layout {
-    grid-template-columns: 1fr;
+  
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  .header-text {
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+    }
+    
+    p {
+      margin: 6px 0 0;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.85);
+    }
   }
 }
 
-.content-left {
-  /* 左侧输入区 */
+.main-content {
+  padding: 0 24px 24px;
+  display: flex;
+  gap: 24px;
 }
 
-.content-right {
-  /* 右侧参数区和生成按钮 */
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+}
+
+.main-area {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 20px;
 }
 
-/* 生成操作卡片 */
-.generate-action {
-  border-top: none;
-  border-radius: 0 0 var(--border-radius-card) var(--border-radius-card);
+@media (max-width: 900px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    position: static;
+  }
+}
+
+.action-wrapper {
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tips-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  
+  .tip-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #666666;
+    
+    .tip-dot {
+      width: 4px;
+      height: 4px;
+      background-color: #ff4d4f;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+  }
+}
+
+.shortcuts-section {
+  display: flex;
+  gap: 10px;
+  
+  .shortcut-btn {
+    flex: 1;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #666666;
+    background-color: #f8f8f8;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      background-color: #fff5f5;
+      border-color: #ffccc7;
+      color: #ff4d4f;
+    }
+  }
 }
 
 .generate-button {
   width: 100%;
-  height: 48px;
+  height: 46px;
   font-size: 16px;
   font-weight: 600;
-}
-
-/* 占位区域 */
-.placeholder-section {
-  margin-bottom: 16px;
-
-  &:last-child {
-    margin-bottom: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  border: none;
+  transition: all 0.25s ease;
+  
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ff7875 0%, #ff4d4f 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(255, 77, 79, 0.4);
+  }
+  
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 3px 10px rgba(255, 77, 79, 0.3);
   }
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+.ai-generate-container :deep(.input-panel) {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  
+  :deep(.el-card__header) {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f5f5f5;
+    background-color: #fafafa;
+    border-radius: 10px 10px 0 0;
+  }
+  
+  :deep(.el-card__body) {
+    padding: 20px;
+  }
 }
 
-.placeholder-content {
-  padding: 40px 20px;
-  text-align: center;
-  background-color: rgba(64, 158, 255, 0.05);
+.ai-generate-container :deep(.result-panel),
+.ai-generate-container :deep(.history-panel) {
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  margin: 0;
+  
+  :deep(.el-card__header) {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f5f5f5;
+    background-color: #fafafa;
+    border-radius: 10px 10px 0 0;
+  }
+  
+  :deep(.el-card__body) {
+    padding: 20px;
+  }
+}
+
+.ai-generate-container :deep(.el-radio__inner) {
+  border-color: #d9d9d9;
+  width: 16px;
+  height: 16px;
+  
+  &:checked {
+    border-color: #ff4d4f;
+    background-color: #ff4d4f;
+  }
+}
+
+.ai-generate-container :deep(.el-radio__input.is-checked + .el-radio__label) {
+  color: #ff4d4f;
+}
+
+.ai-generate-container :deep(.el-select .el-input__wrapper) {
+  border-radius: 6px;
+  border-color: #d9d9d9;
+  
+  &:hover {
+    border-color: #bfbfbf;
+  }
+  
+  &.is-focus {
+    box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.1);
+    border-color: #ff4d4f;
+  }
+}
+
+.ai-generate-container :deep(.el-button--primary) {
+  --el-button-bg-color: #ff4d4f;
+  --el-button-border-color: #ff4d4f;
+  --el-button-hover-bg-color: #ff7875;
+  --el-button-hover-border-color: #ff7875;
+  --el-button-active-bg-color: #d9363e;
+  --el-button-active-border-color: #d9363e;
+  --el-button-text-color: #ffffff;
+  border-radius: 6px;
+}
+
+.ai-generate-container :deep(.el-button--default) {
+  border-radius: 6px;
+  border-color: #f0f0f0;
+  
+  &:hover {
+    border-color: #ff4d4f;
+    color: #ff4d4f;
+  }
+}
+
+.ai-generate-container :deep(.el-tag--primary) {
+  --el-tag-bg-color: #fff5f5;
+  --el-tag-border-color: #ffe4e4;
+  --el-tag-text-color: #ff4d4f;
   border-radius: 4px;
 }
 
-.placeholder-text {
-  margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--color-text-primary);
-  font-weight: 500;
+.ai-generate-container :deep(.el-tag--success) {
+  --el-tag-bg-color: #f0fff4;
+  --el-tag-border-color: #c6f6d5;
+  --el-tag-text-color: #38a169;
+  border-radius: 4px;
 }
 
-.placeholder-description {
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-text-secondary);
+.ai-generate-container :deep(.el-tag--warning) {
+  --el-tag-bg-color: #fffaf0;
+  --el-tag-border-color: #feebc8;
+  --el-tag-text-color: #d69e2e;
+  border-radius: 4px;
+}
+
+.ai-generate-container :deep(.el-tag--danger) {
+  --el-tag-bg-color: #fff5f5;
+  --el-tag-border-color: #ffe4e4;
+  --el-tag-text-color: #ff4d4f;
+  border-radius: 4px;
+}
+
+.ai-generate-container :deep(.el-alert--success) {
+  --el-alert-bg-color: #f0fff4;
+  --el-alert-border-color: #c6f6d5;
+  border-radius: 8px;
+}
+
+.ai-generate-container :deep(.el-dialog) {
+  border-radius: 10px;
+}
+
+.ai-generate-container :deep(.el-dialog__header) {
+  padding: 18px 24px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.ai-generate-container :deep(.el-dialog__body) {
+  padding: 24px;
+}
+
+.ai-generate-container :deep(.el-dialog__footer) {
+  padding: 14px 24px;
+  border-top: 1px solid #f5f5f5;
 }
 </style>

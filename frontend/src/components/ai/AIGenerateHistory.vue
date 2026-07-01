@@ -427,24 +427,21 @@ defineExpose({ loadHistory })
   <el-card class="app-card history-panel">
     <template #header>
       <div class="card-header">
-        <span class="title">📚 生成历史</span>
+        <span class="title">生成历史</span>
         <el-button type="text" @click="loadHistory" :loading="loading">
           刷新
         </el-button>
       </div>
     </template>
 
-    <!-- 空状态 -->
     <div v-if="historyRecords.length === 0" class="empty-state">
       <p class="empty-text">暂无生成历史</p>
       <p class="empty-description">生成标题和摘要后，记录将显示在这里</p>
     </div>
 
-    <!-- 历史列表 -->
     <div v-else class="history-list">
       <div v-for="record in historyRecords" :key="record.id" class="history-item">
         <div class="item-main">
-          <!-- 生成标题预览（置顶） -->
           <div v-if="getFirstTitle(record)" class="history-title">
             {{ getFirstTitle(record) }}
           </div>
@@ -503,7 +500,6 @@ defineExpose({ loadHistory })
       </div>
     </div>
 
-    <!-- 详情弹窗 -->
     <el-dialog
       v-model="showDetailDialog"
       title="生成结果详情"
@@ -549,14 +545,12 @@ defineExpose({ loadHistory })
           </div>
         </div>
 
-        <!-- 结果展示 -->
         <div class="result-section">
           <AIResultPanel :has-result="true" :override-result="selectedRecord.result" />
         </div>
       </div>
     </el-dialog>
 
-    <!-- 导出格式选择对话框 -->
     <el-dialog
       v-model="showExportDialog"
       title="选择导出格式"
@@ -572,7 +566,7 @@ defineExpose({ loadHistory })
           @click="selectedExportFormat = format"
         >
           <div class="format-icon">
-            {{ format === 'txt' ? '📄' : format === 'docx' ? '📝' : '📑' }}
+            {{ format === 'txt' ? 'TXT' : format === 'docx' ? 'DOC' : 'PDF' }}
           </div>
           <div class="format-info">
             <div class="format-name">{{ format === 'txt' ? 'TXT 文本' : format === 'docx' ? 'Word 文档' : 'PDF 文档' }}</div>
@@ -590,7 +584,7 @@ defineExpose({ loadHistory })
 
 <style scoped>
 .history-panel {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .card-header {
@@ -600,69 +594,69 @@ defineExpose({ loadHistory })
 }
 
 .title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #374151;
 }
 
 .empty-state {
   padding: 40px 20px;
   text-align: center;
-  background-color: rgba(64, 158, 255, 0.05);
-  border-radius: 4px;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border: 1px dashed #e5e7eb;
 }
 
 .empty-text {
   margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--color-text-primary);
+  font-size: 15px;
+  color: #374151;
   font-weight: 500;
 }
 
 .empty-description {
   margin: 0;
   font-size: 14px;
-  color: var(--color-text-secondary);
+  color: #6b7280;
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .history-item {
-  padding: 12px;
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  padding: 12px 14px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  transition: all 0.3s;
+  transition: border-color 0.2s ease;
 
   &:hover {
-    background-color: rgba(64, 158, 255, 0.02);
-    border-color: var(--color-primary);
+    border-color: #d1d5db;
   }
 }
 
 .item-main {
   flex: 1;
+  min-width: 0;
 }
 
 .item-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
 .item-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  font-size: 13px;
+  color: #6b7280;
   flex: 1;
   word-break: break-word;
 }
@@ -670,15 +664,16 @@ defineExpose({ loadHistory })
 .header-tags {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .history-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: #374151;
   margin: 0 0 8px;
-  line-height: 1.45;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -688,9 +683,9 @@ defineExpose({ loadHistory })
 .item-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #6b7280;
 }
 
 .meta-item {
@@ -700,12 +695,18 @@ defineExpose({ loadHistory })
 .item-actions {
   display: flex;
   gap: 4px;
-  margin-left: 16px;
+  margin-left: 12px;
   flex-shrink: 0;
 }
 
 .item-actions :deep(.el-button) {
   padding: 4px 8px;
+  font-size: 12px;
+  color: #6b7280;
+
+  &:hover {
+    color: #374151;
+  }
 }
 
 .detail-dialog :deep(.el-dialog__body) {
@@ -716,50 +717,50 @@ defineExpose({ loadHistory })
 .detail-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .detail-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #f3f4f6;
 }
 
 .detail-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #374151;
   flex: 1;
 }
 
 .detail-section {
   padding: 12px;
-  background-color: var(--color-bg);
-  border-radius: 4px;
+  background-color: #f9fafb;
+  border-radius: 6px;
 }
 
 .detail-section h4 {
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #374151;
 }
 
 .input-text {
   margin: 0;
   font-size: 14px;
-  line-height: 1.8;
-  color: var(--color-text-primary);
+  line-height: 1.6;
+  color: #374151;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .params-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 
@@ -770,25 +771,30 @@ defineExpose({ loadHistory })
 }
 
 .param-label {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 12px;
-  color: var(--color-primary);
+  color: #6b7280;
+}
+
+.param-item span:last-child {
+  font-size: 14px;
+  color: #374151;
 }
 
 .result-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f3f4f6;
 }
 
 .export-dialog :deep(.el-dialog__body) {
-  padding: 20px;
+  padding: 16px;
 }
 
 .export-format-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .format-item {
@@ -796,24 +802,24 @@ defineExpose({ loadHistory })
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 2px solid transparent;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.3s;
-  background-color: var(--color-bg);
+  transition: border-color 0.2s ease;
+  background-color: #f9fafb;
 
   &:hover {
-    background-color: rgba(64, 158, 255, 0.05);
+    border-color: #d1d5db;
   }
 
   &.selected {
-    border-color: var(--color-primary);
-    background-color: rgba(64, 158, 255, 0.08);
+    border-color: #ff4d4f;
+    background-color: #fff5f5;
   }
 }
 
 .format-icon {
-  font-size: 28px;
+  font-size: 24px;
 }
 
 .format-info {
@@ -821,14 +827,14 @@ defineExpose({ loadHistory })
 }
 
 .format-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 }
 
 .format-desc {
   font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 4px;
+  color: #6b7280;
+  margin-top: 2px;
 }
 </style>

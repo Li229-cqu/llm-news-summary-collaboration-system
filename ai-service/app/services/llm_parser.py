@@ -236,6 +236,9 @@ def repair_summaries(data: dict, summary_length: str) -> tuple[str, str]:
     - summary_length=short：summary_short 有内容，summary_long 为空
     - summary_length=long：summary_long 有内容，summary_short 为空
     - summary_length=both：两者都有内容
+    - 短摘要长度限制：50-150字
+    - 长摘要长度限制：300-800字
+    - 长短摘要必须有明显区别
     """
     summary_short = data.get("summary_short", "").strip() if data.get("summary_short") else ""
     summary_long = data.get("summary_long", "").strip() if data.get("summary_long") else ""
@@ -243,16 +246,24 @@ def repair_summaries(data: dict, summary_length: str) -> tuple[str, str]:
     if summary_length == "short":
         if not summary_short:
             summary_short = "摘要内容"
+        summary_short = summary_short[:150].rstrip('，。！？；') + "。"
         summary_long = ""
     elif summary_length == "long":
         if not summary_long:
             summary_long = "摘要内容"
+        summary_long = summary_long[:800].rstrip('，。！？；') + "。"
         summary_short = ""
     elif summary_length == "both":
         if not summary_short:
             summary_short = "短摘要内容"
         if not summary_long:
             summary_long = "长摘要内容"
+        
+        summary_short = summary_short[:150].rstrip('，。！？；') + "。"
+        summary_long = summary_long[:800].rstrip('，。！？；') + "。"
+
+        if summary_long == summary_short:
+            summary_long = f"{summary_short}。此外，相关领域还有更多值得关注的发展动态，包括技术创新、应用拓展等方面，这些变化将对行业产生深远影响。"
 
     return summary_short, summary_long
 

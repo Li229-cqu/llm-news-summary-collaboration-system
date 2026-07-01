@@ -2218,10 +2218,14 @@ def get_dashboard() -> AdminDashboard:
             row = execute_one("SELECT COUNT(*) AS total FROM admin_operation_log WHERE DATE(created_at) = CURDATE() AND action IN ('approve','reject','fold','restore')")
             today_review_done = int((row or {}).get('total') or 0)
         today_ai_calls = 0
+        avg_response_ms = 0
         if _ops_table_exists('ai_generate_record'):
             row = execute_one('SELECT COUNT(*) AS total FROM ai_generate_record WHERE DATE(created_at) = CURDATE()')
             today_ai_calls = int((row or {}).get('total') or 0)
-        avg_response_ms = None  # ai_generate_record has no latency field
+            row = execute_one('SELECT AVG(response_ms) AS avg_ms FROM ai_generate_record WHERE DATE(created_at) = CURDATE() AND response_ms > 0')
+            avg_ms = (row or {}).get('avg_ms')
+            if avg_ms is not None:
+                avg_response_ms = int(round(avg_ms))
         timeline_pending = 0
         if _ops_table_exists('event_timeline'):
             row = execute_one("SELECT COUNT(*) AS total FROM event_timeline WHERE generate_status != 'generated'")

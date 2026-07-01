@@ -19,7 +19,7 @@ const elementLabels = {
 
 <template>
   <div class="elements-section">
-    <h4 class="section-title">📋 新闻六要素</h4>
+    <h4 class="section-title">新闻六要素</h4>
     <div class="elements-grid">
       <div
         v-for="(label, key) in elementLabels"

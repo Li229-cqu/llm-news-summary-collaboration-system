@@ -64,11 +64,10 @@ const handleFileChange = async (event: Event) => {
   <el-card class="app-card input-panel">
     <template #header>
       <div class="card-header">
-        <span class="title">📝 新闻正文输入</span>
+        <span class="title">新闻正文输入</span>
       </div>
     </template>
 
-    <!-- 来源新闻提示 -->
     <div v-if="aiDraft.sourceTitle" class="source-news-info">
       <el-alert
         :title="`已从新闻详情导入：${aiDraft.sourceTitle}`"
@@ -78,7 +77,6 @@ const handleFileChange = async (event: Event) => {
       />
     </div>
 
-    <!-- 输入区 -->
     <div class="input-area">
       <textarea
         :value="aiDraft.inputText"
@@ -87,18 +85,15 @@ const handleFileChange = async (event: Event) => {
         class="text-input"
       />
 
-      <!-- 字数统计 -->
       <div class="char-count">
         已输入 <span class="count-number">{{ charCount }}</span> 字
       </div>
     </div>
 
-    <!-- 提示信息 -->
     <div v-if="isInputEmpty" class="empty-tip">
-      💡 请输入新闻正文后再生成
+      请输入新闻正文后再生成
     </div>
 
-    <!-- 操作按钮 -->
     <div class="action-buttons">
       <el-button type="default" @click="handleClearInput" :disabled="isInputEmpty">
         清空正文
@@ -120,7 +115,9 @@ const handleFileChange = async (event: Event) => {
 
 <style scoped>
 .input-panel {
-  margin-bottom: 16px;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -130,9 +127,9 @@ const handleFileChange = async (event: Event) => {
 }
 
 .title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #374151;
 }
 
 .source-news-info {
@@ -146,46 +143,49 @@ const handleFileChange = async (event: Event) => {
 
 .text-input {
   width: 100%;
-  min-height: 350px;
-  height: 350px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  height: 280px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.6;
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-card);
+  color: #374151;
+  background-color: #ffffff;
   resize: vertical;
-  transition: border-color 0.3s;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
 }
 
 .text-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  border-color: #ff4d4f;
+}
+
+.text-input::placeholder {
+  color: #9ca3af;
 }
 
 .char-count {
   margin-top: 8px;
   text-align: right;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #6b7280;
 }
 
 .count-number {
   font-weight: 600;
-  color: var(--color-primary);
+  color: #ff4d4f;
 }
 
 .empty-tip {
-  padding: 12px;
+  padding: 12px 14px;
   margin-bottom: 12px;
-  background-color: var(--color-primary-soft);
-  border-radius: 4px;
+  background-color: #f9fafb;
+  border-radius: 6px;
   font-size: 14px;
-  color: var(--color-text-primary);
-  border-left: 3px solid var(--color-primary);
+  color: #6b7280;
+  border-left: 3px solid #d1d5db;
 }
 
 .action-buttons {
@@ -195,6 +195,8 @@ const handleFileChange = async (event: Event) => {
 
 .action-buttons :deep(.el-button) {
   flex: 1;
+  height: 40px;
+  font-size: 14px;
 }
 
 .hidden-file-input {

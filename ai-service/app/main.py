@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.routers.chat import router as chat_router
 from app.routers.check import router as check_router
 from app.routers.comment_summary import router as comment_summary_router
+from app.routers.evidence import router as evidence_router
 from app.routers.extract import router as extract_router
 from app.routers.generate import router as generate_router
 from app.routers.health import router as health_router
@@ -36,6 +37,7 @@ async def test_error():
 
 app.include_router(health_router)
 app.include_router(generate_router)
+app.include_router(evidence_router)
 app.include_router(extract_router)
 app.include_router(check_router)
 app.include_router(chat_router)

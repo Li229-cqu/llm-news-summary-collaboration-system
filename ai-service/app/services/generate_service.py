@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 import re
 import logging
 
 from app.common.exceptions import AIServiceException
 from app.core.config import settings
 from app.schemas.generate import GenerateRequest, GenerateResponse, NewsElement, ConsistencyCheck
-from app.services.llm_client import call_llm
+from app.schemas.evidence import EvidenceChain, EvidenceRequest, EvidenceResponse
+from app.services.llm_client import call_llm, call_summary_llm
 from app.services.prompt_builder import build_messages
 from app.services.llm_parser import parse_llm_response
+from app.services.evidence_service import evaluate_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +31,21 @@ CLICKBAIT_WORDS = [
     "不看后悔", "看了后悔", "不看亏大", "看了吓一跳", "看了沉默",
     "看了流泪", "看了心碎", "看了崩溃", "看了窒息", "看了抑郁",
     "深度好文", "深度解析", "深度揭秘", "深度曝光", "深度好文",
-    "深度好文", "深度好文", "深度好文", "深度好文", "深度好文",
 ]
 
 
 def _remove_clickbait(text: str) -> str:
-    """去除标题党词汇。"""
     for word in CLICKBAIT_WORDS:
         text = text.replace(word, "")
     return text.strip()
 
 
 def _split_sentences(text: str) -> list[str]:
-    """按中文句号、问号、感叹号、分号等分割句子。"""
     sentences = re.split(r'[。！？；\n]+', text.strip())
     return [s.strip() for s in sentences if s.strip()]
 
 
 def _extract_keywords(text: str, max_keywords: int = 5) -> list[str]:
-    """从文本中提取关键词（简单实现：提取较长的词汇）。"""
     words = re.findall(r'[一-鿿]{2,}', text)
     keyword_freq = {}
     for word in words:
@@ -62,7 +60,6 @@ def _generate_dynamic_titles(
     title_count: int,
     title_style: str
 ) -> list[str]:
-    """根据输入文本动态生成标题（去除标题党模板）。"""
     sentences = _split_sentences(input_text)
     keywords = _extract_keywords(input_text, max_keywords=3)
 
@@ -72,20 +69,17 @@ def _generate_dynamic_titles(
     titles = []
     main_topic = keywords[0] if keywords else sentences[0][:20]
 
-    # 从输入文本中提取合适的标题
     for i in range(title_count):
         if i < len(sentences):
             title = sentences[i]
         else:
             title = sentences[0]
 
-        # 超过 30 字则裁剪
         if len(title) > 30:
             title = title[:30] + "..."
 
         titles.append(title)
 
-    # 如果需要更多标题，使用不同组合
     while len(titles) < title_count:
         if keywords:
             title = f"{keywords[0]}相关新闻"
@@ -103,7 +97,6 @@ def _generate_summary_short(
     summary_style: str,
     summary_type: str
 ) -> str:
-    """生成短摘要（固定最大长度100字，提取核心要点）。"""
     sentences = _split_sentences(input_text)
     text_length = len(input_text)
 
@@ -111,7 +104,7 @@ def _generate_summary_short(
         return "文本过短，无法生成摘要"
 
     min_length = 50
-    max_length = 100
+    max_length = 150
 
     target_length = int(text_length * 0.2)
     target_length = max(min_length, min(target_length, max_length))
@@ -154,21 +147,16 @@ def _generate_summary_long(
     summary_style: str,
     summary_type: str
 ) -> str:
-    """生成长摘要（长度为短摘要的4-5倍，与短摘要有明显区分）。"""
     sentences = _split_sentences(input_text)
     text_length = len(input_text)
 
     if not sentences:
         return "文本过短，无法生成长摘要"
 
-    short_summary_result = _generate_summary_short(input_text, summary_style, summary_type)
-    short_length = len(short_summary_result)
+    min_length = 300
+    max_length = 800
 
-    long_multiplier = 8
-    target_length = short_length * long_multiplier
-    min_length = 400
-    max_length = 1200
-
+    target_length = int(text_length * 0.6)
     target_length = max(min_length, min(target_length, max_length))
 
     if summary_type == "extract":
@@ -186,13 +174,18 @@ def _generate_summary_long(
     else:
         keywords = _extract_keywords(input_text, max_keywords=5)
         key_keywords = "、".join(keywords[:3]) if keywords else "相关内容"
+        
         first_part = ""
-        for sentence in sentences[:10]:
-            if len(first_part) + len(sentence) <= target_length - 100:
+        for sentence in sentences[:15]:
+            if len(first_part) + len(sentence) <= target_length - 150:
                 first_part += sentence
             else:
                 break
-        long_summary = f"本文围绕{key_keywords}展开，详细介绍了相关领域的最新发展动态。{first_part}这些变化不仅反映了当前行业趋势，也为未来发展提供了重要参考，值得持续关注。"
+        
+        background_info = "这一事件的背景可以追溯到前期的相关政策铺垫，随着近年来相关领域的持续发展，此次举措具有重要的里程碑意义。"
+        impact_info = "业内人士认为，这一举措将对相关行业产生深远影响，不仅能够提升整体效率，还将推动行业向更高质量方向发展。"
+        
+        long_summary = f"本文围绕{key_keywords}展开，详细介绍了相关领域的最新发展动态。{first_part}。{background_info}。{impact_info}。这些变化不仅反映了当前行业趋势，也为未来发展提供了重要参考，值得持续关注。"
 
     long_summary = long_summary[:max_length].rstrip('，。！？；') + "。"
 
@@ -205,7 +198,6 @@ def _generate_summary_long(
 
 
 def _generate_summary_points(input_text: str, summary_type: str) -> list[str]:
-    """生成摘要要点。"""
     sentences = _split_sentences(input_text)
 
     if not sentences:
@@ -230,7 +222,6 @@ def _generate_summary_points(input_text: str, summary_type: str) -> list[str]:
 
 
 def _extract_news_elements(input_text: str) -> NewsElement:
-    """从文本中提取新闻六要素。"""
     sentences = _split_sentences(input_text)
 
     who = ""
@@ -298,7 +289,6 @@ def _extract_news_elements(input_text: str) -> NewsElement:
 
 
 def _check_consistency(input_text: str) -> ConsistencyCheck:
-    """检查文本一致性和质量。"""
     score = 90
     risk_level = "low"
     issues = []
@@ -346,11 +336,6 @@ def _check_consistency(input_text: str) -> ConsistencyCheck:
 
 
 def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
-    """
-    生成动态 mock 响应。
-
-    保留所有原有的 mock 生成逻辑，作为 fallback 或 LLM_ENABLED=false 时的默认实现。
-    """
     input_text = request.input_text.strip()
 
     candidate_titles = _generate_dynamic_titles(
@@ -384,6 +369,48 @@ def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
 
     consistency = _check_consistency(input_text)
 
+    evidence_chain = None
+    evidence_chain_short = None
+    evidence_chain_long = None
+    risk_level = None
+    risk_details = None
+    evidence_coverage = None
+
+    if not request.skip_evidence:
+        if summary_short:
+            evidence_request_short = EvidenceRequest(
+                summary_text=summary_short,
+                original_text=input_text,
+                news_id=0,
+                summary_type=request.summary_type
+            )
+            evidence_response_short = evaluate_evidence_mock(evidence_request_short)
+            evidence_chain_short = evidence_response_short.evidence_chain
+
+        if summary_long:
+            evidence_request_long = EvidenceRequest(
+                summary_text=summary_long,
+                original_text=input_text,
+                news_id=0,
+                summary_type=request.summary_type
+            )
+            evidence_response_long = evaluate_evidence_mock(evidence_request_long)
+            evidence_chain_long = evidence_response_long.evidence_chain
+
+        combined_text = summary_short + summary_long
+        if combined_text:
+            evidence_request = EvidenceRequest(
+                summary_text=combined_text,
+                original_text=input_text,
+                news_id=0,
+                summary_type=request.summary_type
+            )
+            evidence_response = evaluate_evidence_mock(evidence_request)
+            evidence_chain = evidence_response.evidence_chain
+            risk_level = evidence_response.risk_level
+            risk_details = evidence_response.risk_details
+            evidence_coverage = evidence_response.evidence_chain.evidence_coverage if evidence_response.evidence_chain else None
+
     return GenerateResponse(
         candidate_titles=candidate_titles,
         summary_short=summary_short,
@@ -392,67 +419,211 @@ def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
         keywords=keywords,
         elements=elements,
         consistency=consistency,
-        source="mock"
+        source="mock",
+        evidence_chain=evidence_chain,
+        evidence_chain_short=evidence_chain_short,
+        evidence_chain_long=evidence_chain_long,
+        risk_level=risk_level,
+        risk_details=risk_details,
+        evidence_coverage=evidence_coverage
     )
 
 
-def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
-    """
-    生成标题和摘要的主函数。
+async def _evaluate_evidence_background(
+    summary_text: str,
+    original_text: str,
+    news_id: int = 0,
+    summary_type: str = "generate"
+) -> Optional[EvidenceResponse]:
+    try:
+        evidence_request = EvidenceRequest(
+            summary_text=summary_text,
+            original_text=original_text,
+            news_id=news_id,
+            summary_type=summary_type
+        )
+        return await evaluate_evidence(evidence_request)
+    except Exception as e:
+        logger.error(f"后台证据评估任务失败: {type(e).__name__}: {str(e)}")
+        return None
 
-    流程：
-    1. 输入验证
-    2. 如果 LLM_ENABLED=false，直接使用 mock
-    3. 如果 LLM_ENABLED=true：
-       - 构造 prompt
-       - 调用智谱 GLM
-       - 解析返回结果
-       - 失败则 fallback 到 mock
-    4. 返回 GenerateResponse
-    """
-    # 输入验证
+
+async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
     if not request.input_text.strip():
         raise AIServiceException(code=400, message="输入文本不能为空")
 
     if not 1 <= request.title_count <= 5:
         raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
 
-    # 如果 LLM 未启用，直接使用 mock
-    if not settings.llm_enabled:
+    if not settings.llm_enabled and not settings.summary_llm_enabled:
         logger.info("LLM 未启用，使用动态 mock 生成响应")
         return generate_mock_response(request)
 
-    # LLM 启用，尝试调用模型
-    logger.info(f"LLM 已启用，准备调用智谱 GLM: model={settings.llm_model}")
+    if settings.summary_llm_enabled:
+        logger.info(f"双AI架构已启用，准备调用 DeepSeek 生成摘要: model={settings.summary_llm_model}")
 
-    try:
-        # 构造消息
-        messages = build_messages(request)
+        try:
+            short_response = None
+            long_response = None
 
-        # 调用 LLM
-        llm_response = call_llm(messages)
+            if request.summary_length in ("short", "both"):
+                logger.info("开始生成短摘要（独立调用）")
+                short_messages = build_messages(request, "short")
+                short_llm_response = await call_summary_llm(short_messages)
+                
+                logger.info(f"短摘要原始响应长度: {len(short_llm_response)}")
+                
+                short_response = parse_llm_response(
+                    short_llm_response,
+                    title_count=request.title_count,
+                    summary_length="short"
+                )
 
-        # 解析返回结果
-        response = parse_llm_response(
-            llm_response,
-            title_count=request.title_count,
-            summary_length=request.summary_length
-        )
+            if request.summary_length in ("long", "both"):
+                logger.info("开始生成长摘要（独立调用）")
+                long_messages = build_messages(request, "long")
+                long_llm_response = await call_summary_llm(long_messages)
+                
+                logger.info(f"长摘要原始响应长度: {len(long_llm_response)}")
+                
+                long_response = parse_llm_response(
+                    long_llm_response,
+                    title_count=request.title_count,
+                    summary_length="long"
+                )
 
-        if response is not None:
-            logger.info("智谱 GLM 调用成功，返回有效响应")
-            return response
+            if short_response is None and long_response is None:
+                logger.warning("长短摘要都无法解析，fallback 到 mock")
+                return generate_mock_response(request)
 
-        # 解析失败，fallback
-        logger.warning("智谱 GLM 返回内容无法解析，fallback 到 mock")
-        return generate_mock_response(request)
+            response = short_response if short_response else long_response
+            
+            if short_response and long_response:
+                response.summary_short = short_response.summary_short
+                response.summary_long = long_response.summary_long
+                response.summary_points = short_response.summary_points
+                response.keywords = short_response.keywords
+                response.elements = short_response.elements
+                response.consistency = short_response.consistency
 
-    except ValueError as e:
-        # 配置错误、API Key 未配置等
-        logger.warning(f"智谱 LLM 参数错误，fallback 到 mock: {str(e)}")
-        return generate_mock_response(request)
+            if response is not None:
+                logger.info("DeepSeek 调用成功，返回有效响应")
+                logger.info(f"解析后 - 短摘要长度: {len(response.summary_short)}, 长摘要长度: {len(response.summary_long)}")
+                logger.info(f"短摘要前100字: {response.summary_short[:100]}")
+                logger.info(f"长摘要前100字: {response.summary_long[:100]}")
 
-    except Exception as e:
-        # 网络错误、API 错误、超时等
-        logger.warning(f"智谱 LLM 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
-        return generate_mock_response(request)
+                if not request.skip_evidence:
+                    logger.info("正在执行证据评估")
+                    combined_summary = response.summary_short + response.summary_long
+
+                    evidence_response = await _evaluate_evidence_background(
+                        combined_summary,
+                        request.input_text,
+                        0,
+                        request.summary_type
+                    )
+
+                    if evidence_response:
+                        response.evidence_chain = evidence_response.evidence_chain
+                        response.risk_level = evidence_response.risk_level
+                        response.risk_details = evidence_response.risk_details
+                        response.evidence_coverage = evidence_response.evidence_chain.evidence_coverage if evidence_response.evidence_chain else None
+
+                    if response.summary_short:
+                        evidence_response_short = await _evaluate_evidence_background(
+                            response.summary_short,
+                            request.input_text,
+                            0,
+                            request.summary_type
+                        )
+                        if evidence_response_short:
+                            response.evidence_chain_short = evidence_response_short.evidence_chain
+
+                    if response.summary_long:
+                        evidence_response_long = await _evaluate_evidence_background(
+                            response.summary_long,
+                            request.input_text,
+                            0,
+                            request.summary_type
+                        )
+                        if evidence_response_long:
+                            response.evidence_chain_long = evidence_response_long.evidence_chain
+
+                return response
+
+            logger.warning("DeepSeek 返回内容无法解析，fallback 到 mock")
+            return generate_mock_response(request)
+
+        except ValueError as e:
+            logger.warning(f"DeepSeek 参数错误，fallback 到 mock: {str(e)}")
+            return generate_mock_response(request)
+
+        except Exception as e:
+            logger.warning(f"DeepSeek 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
+            return generate_mock_response(request)
+
+    else:
+        logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.llm_model}")
+
+        try:
+            messages = build_messages(request)
+            llm_response = await call_llm(messages)
+
+            response = parse_llm_response(
+                llm_response,
+                title_count=request.title_count,
+                summary_length=request.summary_length
+            )
+
+            if response is not None:
+                logger.info("智谱 GLM 调用成功，返回有效响应")
+
+                if not request.skip_evidence:
+                    logger.info("正在执行证据评估")
+                    combined_summary = response.summary_short + response.summary_long
+
+                    evidence_response = await _evaluate_evidence_background(
+                        combined_summary,
+                        request.input_text,
+                        0,
+                        request.summary_type
+                    )
+
+                    if evidence_response:
+                        response.evidence_chain = evidence_response.evidence_chain
+                        response.risk_level = evidence_response.risk_level
+                        response.risk_details = evidence_response.risk_details
+                        response.evidence_coverage = evidence_response.evidence_chain.evidence_coverage if evidence_response.evidence_chain else None
+
+                    if response.summary_short:
+                        evidence_response_short = await _evaluate_evidence_background(
+                            response.summary_short,
+                            request.input_text,
+                            0,
+                            request.summary_type
+                        )
+                        if evidence_response_short:
+                            response.evidence_chain_short = evidence_response_short.evidence_chain
+
+                    if response.summary_long:
+                        evidence_response_long = await _evaluate_evidence_background(
+                            response.summary_long,
+                            request.input_text,
+                            0,
+                            request.summary_type
+                        )
+                        if evidence_response_long:
+                            response.evidence_chain_long = evidence_response_long.evidence_chain
+
+                return response
+
+            logger.warning("智谱 GLM 返回内容无法解析，fallback 到 mock")
+            return generate_mock_response(request)
+
+        except ValueError as e:
+            logger.warning(f"智谱 LLM 参数错误，fallback 到 mock: {str(e)}")
+            return generate_mock_response(request)
+
+        except Exception as e:
+            logger.warning(f"智谱 LLM 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
+            return generate_mock_response(request)

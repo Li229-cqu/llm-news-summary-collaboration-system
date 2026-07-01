@@ -8,7 +8,7 @@ defineProps<Props>()
 
 <template>
   <div class="keywords-section">
-    <h4 class="section-title">🏷️ 关键词</h4>
+    <h4 class="section-title">关键词</h4>
     <div v-if="keywords.length > 0" class="keywords-container">
       <el-tag
         v-for="(keyword, index) in keywords"

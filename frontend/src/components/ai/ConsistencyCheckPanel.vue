@@ -63,7 +63,7 @@ const scoreStatus = computed(() => {
 
     <!-- 问题列表 -->
     <div v-if="consistency.issues.length > 0" class="issues-section">
-      <h5 class="subsection-title">⚠️ 检测到的问题</h5>
+      <h5 class="subsection-title">检测到的问题</h5>
       <ul class="issues-list">
         <li v-for="(issue, index) in consistency.issues" :key="index" class="issue-item">
           {{ issue }}
@@ -73,7 +73,7 @@ const scoreStatus = computed(() => {
 
     <!-- 建议列表 -->
     <div v-if="consistency.suggestions.length > 0" class="suggestions-section">
-      <h5 class="subsection-title">💡 改进建议</h5>
+      <h5 class="subsection-title">改进建议</h5>
       <ul class="suggestions-list">
         <li v-for="(suggestion, index) in consistency.suggestions" :key="index" class="suggestion-item">
           {{ suggestion }}

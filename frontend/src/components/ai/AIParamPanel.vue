@@ -48,166 +48,257 @@ const handleResetParams = () => {
 </script>
 
 <template>
-  <el-card class="app-card param-panel">
-    <template #header>
-      <div class="card-header">
-        <span class="title">⚙️ 生成参数</span>
+  <div class="param-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">参数选择</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-header">
+        <div class="section-title">标题数量</div>
+        <div class="section-desc">选择生成的标题数量</div>
       </div>
-    </template>
-
-    <!-- 标题数量 -->
-    <div class="param-group">
-      <label class="param-label">标题数量</label>
-      <el-radio-group
-        :model-value="aiDraft.params.title_count"
-        @update:model-value="(val: unknown) => handleParamChange('title_count', val)"
-        class="radio-group"
-      >
-        <el-radio
+      <div class="option-list">
+        <button
           v-for="option in titleCountOptions"
           :key="option.value"
-          :label="option.value"
-          :value="option.value"
+          :class="{ active: aiDraft.params.title_count === option.value }"
+          @click="handleParamChange('title_count', option.value)"
+          class="option-item"
         >
-          {{ option.label }}
-        </el-radio>
-      </el-radio-group>
+          <span class="option-dot"></span>
+          <span class="option-text">{{ option.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 摘要类型 -->
-    <div class="param-group">
-      <label class="param-label">摘要类型</label>
-      <el-radio-group
-        :model-value="aiDraft.params.summary_type"
-        @update:model-value="(val: unknown) => handleParamChange('summary_type', val)"
-        class="radio-group"
-      >
-        <el-radio
+    <div class="sidebar-section">
+      <div class="section-header">
+        <div class="section-title">摘要类型</div>
+        <div class="section-desc">选择摘要生成方式</div>
+      </div>
+      <div class="option-list">
+        <button
           v-for="option in summaryTypeOptions"
           :key="option.value"
-          :label="option.value"
-          :value="option.value"
+          :class="{ active: aiDraft.params.summary_type === option.value }"
+          @click="handleParamChange('summary_type', option.value)"
+          class="option-item"
         >
-          {{ option.label }}
-        </el-radio>
-      </el-radio-group>
+          <span class="option-dot"></span>
+          <span class="option-text">{{ option.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 标题风格 -->
-    <div class="param-group">
-      <label class="param-label">标题风格</label>
-      <el-select
-        :model-value="aiDraft.params.title_style"
-        @update:model-value="(val: unknown) => handleParamChange('title_style', val)"
-        class="param-select"
-      >
-        <el-option
+    <div class="sidebar-section">
+      <div class="section-header">
+        <div class="section-title">标题风格</div>
+        <div class="section-desc">选择标题写作风格</div>
+      </div>
+      <div class="option-list">
+        <button
           v-for="option in titleStyleOptions"
           :key="option.value"
-          :label="option.label"
-          :value="option.value"
-        />
-      </el-select>
+          :class="{ active: aiDraft.params.title_style === option.value }"
+          @click="handleParamChange('title_style', option.value)"
+          class="option-item"
+        >
+          <span class="option-dot"></span>
+          <span class="option-text">{{ option.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 摘要风格 -->
-    <div class="param-group">
-      <label class="param-label">摘要风格</label>
-      <el-select
-        :model-value="aiDraft.params.summary_style"
-        @update:model-value="(val: unknown) => handleParamChange('summary_style', val)"
-        class="param-select"
-      >
-        <el-option
+    <div class="sidebar-section">
+      <div class="section-header">
+        <div class="section-title">摘要风格</div>
+        <div class="section-desc">选择摘要写作风格</div>
+      </div>
+      <div class="option-list">
+        <button
           v-for="option in summaryStyleOptions"
           :key="option.value"
-          :label="option.label"
-          :value="option.value"
-        />
-      </el-select>
+          :class="{ active: aiDraft.params.summary_style === option.value }"
+          @click="handleParamChange('summary_style', option.value)"
+          class="option-item"
+        >
+          <span class="option-dot"></span>
+          <span class="option-text">{{ option.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 摘要长度 -->
-    <div class="param-group">
-      <label class="param-label">摘要长度</label>
-      <el-radio-group
-        :model-value="aiDraft.params.summary_length"
-        @update:model-value="(val: unknown) => handleParamChange('summary_length', val)"
-        class="radio-group"
-      >
-        <el-radio
+    <div class="sidebar-section">
+      <div class="section-header">
+        <div class="section-title">摘要长度</div>
+        <div class="section-desc">选择摘要输出长度</div>
+      </div>
+      <div class="option-list">
+        <button
           v-for="option in summaryLengthOptions"
           :key="option.value"
-          :label="option.value"
-          :value="option.value"
+          :class="{ active: aiDraft.params.summary_length === option.value }"
+          @click="handleParamChange('summary_length', option.value)"
+          class="option-item"
         >
-          {{ option.label }}
-        </el-radio>
-      </el-radio-group>
+          <span class="option-dot"></span>
+          <span class="option-text">{{ option.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 恢复默认按钮 -->
-    <div class="action-buttons">
-      <el-button type="default" @click="handleResetParams" class="reset-button">
-        🔄 恢复默认参数
-      </el-button>
+    <div class="sidebar-footer">
+      <button class="reset-btn" @click="handleResetParams">
+        恢复默认参数
+      </button>
     </div>
-  </el-card>
+  </div>
 </template>
 
 <style scoped>
-.param-panel {
-  margin-bottom: 16px;
-}
-
-.card-header {
+.param-sidebar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  background-color: var(--color-bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  padding: 20px 0;
 }
 
-.title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.param-group {
+.sidebar-header {
+  padding: 0 20px 20px;
+  border-bottom: 2px solid #ff4d4f;
   margin-bottom: 20px;
+}
 
+.sidebar-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.sidebar-section {
+  padding: 0 20px;
+  margin-bottom: 24px;
+  
+  &:not(:last-of-type):not(.sidebar-footer) {
+    border-bottom: 1px dashed var(--color-border);
+    padding-bottom: 20px;
+  }
+  
   &:last-of-type {
-    margin-bottom: 16px;
+    margin-bottom: 0;
   }
 }
 
-.param-label {
-  display: block;
-  margin-bottom: 8px;
+.section-header {
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+  padding-left: 10px;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 18px;
+    background-color: #ff4d4f;
+    border-radius: 2px;
+  }
+}
+
+.section-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  padding-left: 14px;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option-item {
+  width: 100%;
+  padding: 10px 14px 10px 28px;
+  text-align: left;
   font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.radio-group {
+  color: #475569;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: all 0.25s ease;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  
+  &:hover {
+    background-color: #fef2f2;
+    color: #dc2626;
+  }
+  
+  &:hover .option-dot {
+    background-color: #fca5a5;
+  }
 }
 
-.radio-group :deep(.el-radio) {
-  flex-basis: auto;
+.option-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #cbd5e1;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
 }
 
-.param-select {
+.option-text {
+  flex: 1;
+}
+
+.option-item.active {
+  background-color: #fff1f0;
+  color: #dc2626;
+  font-weight: 600;
+  border-radius: 8px;
+  
+  .option-dot {
+    background-color: #dc2626;
+  }
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  margin-top: auto;
+  border-top: 1px solid var(--color-border);
+}
+
+.reset-btn {
   width: 100%;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.reset-button {
-  width: 100%;
+  padding: 11px 16px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  
+  &:hover {
+    background-color: var(--color-primary-soft);
+    border-color: var(--color-primary-light);
+    color: var(--color-primary-dark);
+  }
 }
 </style>
