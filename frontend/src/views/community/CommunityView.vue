@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <main class="page-container">
     <div class="community-layout">
       <div class="community-main">
@@ -439,7 +439,6 @@ import {
   getHotTags,
   getAvailableTags,
   type CommunityPost,
-  type CommentItem as CommunityCommentItem,
   type HotSearchItem,
   type CommentsSummaryResponse,
   type TagCount,
@@ -507,7 +506,7 @@ const aiLoading = ref(false)
 const postDialogVisible = ref(false)
 const showPostModal = ref(false)
 const selectedPost = ref<CommunityPost | null>(null)
-const comments = ref<CommunityCommentItem[]>([])
+const comments = ref<RichCommentItemData[]>([])
 const loadingComments = ref(false)
 const submittingComment = ref(false)
 const newComment = ref('')
@@ -820,9 +819,9 @@ async function handleGenerateSummary() {
   }
 }
 
-function collectCommentContents(items: CommunityCommentItem[]): string[] {
+function collectCommentContents(items: RichCommentItemData[]): string[] {
   const result: string[] = []
-  function traverse(list: CommunityCommentItem[]) {
+  function traverse(list: RichCommentItemData[]) {
     for (const item of list) {
       if (item.content && item.content.trim()) {
         result.push(item.content.trim())
@@ -1711,3 +1710,4 @@ onMounted(() => {
   }
 }
 </style>
+

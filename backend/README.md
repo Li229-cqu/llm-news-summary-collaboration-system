@@ -1,4 +1,4 @@
-﻿# 《基于大语言模型的智能新闻摘要与协同互动系统》后端服务
+# 《基于大语言模型的智能新闻摘要与协同互动系统》后端服务
 
 ## 一、后端项目说明
 
@@ -155,10 +155,16 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 ## A3 验收补充说明
 
 - 后端数据库访问层已接入 `DBUtils.PooledDB` 连接池，`get_connection()` 从连接池获取连接，`close()` 时归还连接池。
-- `admin` 模块的 dashboard、用户列表、待审核帖子列表已改为数据库优先，数据库异常时保留 mock fallback。
+- `admin` 模块的 dashboard 和用户列表保持数据库优先，数据库异常时保留 mock fallback。
+- 管理后台待审核中心已接入真实数据库，不再使用 mock 数据作为审核中心数据源。
+- 新增待审核中心接口：
+  - `GET /api/admin/pending-items`
+  - `GET /api/admin/pending-items/{item_type}/{item_id}`
+  - `POST /api/admin/pending-items/{item_type}/{item_id}/review`
+- 待审核中心支持 `all/news/post/comment` 分类筛选，支持 `approve/reject/fold/delete/restore` 审核动作。
 - 管理后台接口需要 `admin` 或 `editor` 权限，`/api/admin/users` 仅 `admin` 可访问。
 - 用户列表不会返回 `password` 字段。
-- 管理后台待审核帖子接口实际路径为 `/api/admin/pending-posts`。
+- `/api/admin/pending-posts` 保留为兼容旧前端的待审核帖子接口。
 
 ## F1 阅读脉络接口补充
 
@@ -170,4 +176,178 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 - 如果用户没有浏览历史，接口返回空结构，不回退 mock 阅读脉络。
 - 当前实现只负责后端数据结构准备，不新增前端页面。
 
+## M4 Admin News Content Management
+
+- The admin page now includes a news content management menu for `editor` and `admin`.
+- News list, detail, edit, status actions, and topic binding all read or write the real `news` table. No mock news fallback is used.
+- The list supports keyword, category, source, status, featured, topic binding, and publish-time filters.
+- The current `news` table has no `is_featured / featured / is_recommended / recommend_flag` column, so featured actions are disabled and the API returns a clear error.
+- The M3 pending center remains available; M4 is full news management, not only pending news.
+
+## M5 Admin Community Post Management
+
+The admin module includes database-backed community post management:
+
+- `GET /api/admin/posts/options`
+- `GET /api/admin/posts`
+- `GET /api/admin/posts/{post_id}`
+- `POST /api/admin/posts/{post_id}/review`
+- `POST /api/admin/posts/{post_id}/feature`
+- `DELETE /api/admin/posts/{post_id}/feature`
+
+These endpoints require editor/admin permission. The list/detail/action endpoints read and update `community_post` directly and do not use mock post fallback. The current database schema does not include a post featured field, so featured actions are disabled with a 400 response until a real field such as `is_featured` is added.
+
+## M6 Admin Comment Review
+
+The admin module includes database-backed comment review APIs:
+
+- `GET /api/admin/comments/options`
+- `GET /api/admin/comments`
+- `GET /api/admin/comments/{comment_type}/{comment_id}`
+- `POST /api/admin/comments/{comment_type}/{comment_id}/review`
+
+These endpoints require editor/admin permission. They read and update `news_comment` and `post_comment` directly and do not use mock comment fallback. `comment_type` uses `news` for news comments and `post` for community post comments. The current schema has no comment report table, so reported comment review is not supported yet.
+
+## M7 Admin hot search and topic management
+
+The admin module includes database-backed hot search and topic management:
+
+- `GET /api/admin/hot-topics/options`
+- `GET /api/admin/hot-topics`
+- `GET /api/admin/hot-topics/{hot_id}`
+- `POST /api/admin/hot-topics/{hot_id}/rank`
+- `POST /api/admin/hot-topics/{hot_id}/pin`
+- `DELETE /api/admin/hot-topics/{hot_id}/pin`
+- `POST /api/admin/hot-topics/{hot_id}/hide`
+- `DELETE /api/admin/hot-topics/{hot_id}/hide`
+- `POST /api/admin/hot-topics/{hot_id}/refresh-heat`
+- `GET /api/admin/topics/options`
+- `GET /api/admin/topics`
+- `GET /api/admin/topics/{topic_id}`
+- `POST /api/admin/topics`
+- `PUT /api/admin/topics/{topic_id}`
+- `POST /api/admin/topics/{topic_id}/status`
+- `GET /api/admin/topics/{topic_id}/news`
+- `GET /api/admin/topics/{topic_id}/candidate-news`
+- `POST /api/admin/topics/{topic_id}/bind-news`
+- `POST /api/admin/topics/{topic_id}/unbind-news`
+
+These endpoints require editor/admin permission. They use the real `hot_topic`, `news_topic`, `news`, and `community_post` tables and do not use mock hot/topic fallback. The current schema supports manual rank through `rank_no`. The current schema has no pin field, so pin/unpin returns 400 until a real field such as `is_pinned` is added. Hide/restore is implemented with `hot_topic.status=0/1`.
+
+## M8 Admin Timeline Management
+
+The admin module includes database-backed timeline management:
+
+- `GET /api/admin/timelines/options`
+- `GET /api/admin/timelines`
+- `GET /api/admin/timelines/{topic_id}`
+- `GET /api/admin/timelines/{topic_id}/source-news`
+- `POST /api/admin/timelines/{topic_id}/generate`
+- `POST /api/admin/timelines/{topic_id}/refresh`
+- `DELETE /api/admin/timelines/{topic_id}/cache`
+
+These endpoints require editor/admin permission. They use the real `event_timeline` and `news_topic` tables and do not use mock timeline fallback. Timeline generation uses the AI service (`POST /ai/generate-timeline`) when available, with a local rule-based fallback. Cache validation checks JSON validity and source news ID coherence. The `generate_status` field tracks state: `generated`, `generated (fallback)`, `not_generated`, `failed`, or `generating`.
+
+## M9 Admin User & Permission Management
+
+The admin module includes database-backed user management with permissions:
+
+- `GET /api/admin/users/options`
+- `GET /api/admin/users`
+- `GET /api/admin/users/{user_id}`
+- `POST /api/admin/users/{user_id}/role`
+- `POST /api/admin/users/{user_id}/status`
+
+These endpoints require admin permission only. They use the real `user`, `community_post`, `news_comment`, `post_comment`, `ai_generate_record`, `browse_history`, and `favorite` tables and do not use mock user fallback. Role change guards prevent an admin from changing their own role or removing the last active admin. Status change guards prevent disabling oneself or the last active admin. The current `user` schema has no `last_login_time` column, and password reset is deferred to a subsequent phase.
+
+## M10 System Config & AI Model Rules Management
+
+The admin module includes database-backed system configuration and AI model rules management:
+
+**System Config:**
+- `GET /api/admin/system-config` — List all system config items
+- `PUT /api/admin/system-config` — Update editable config items
+
+**AI Config:**
+- `GET /api/admin/ai-config` — Get AI configuration (service URL, model, timeout, thresholds, sensitive words, risk rules, fallback strategy; API key masked)
+- `PUT /api/admin/ai-config` — Update AI configuration
+- `POST /api/admin/ai-config/test` — Test AI service connection
+
+**Prompt Templates:**
+- `GET /api/admin/prompt-templates/options` — Function type list for filter dropdown
+- `GET /api/admin/prompt-templates` — List templates with filters (function_type, status, keyword)
+- `GET /api/admin/prompt-templates/{id}` — Template detail
+- `POST /api/admin/prompt-templates` — Create template
+- `PUT /api/admin/prompt-templates/{id}` — Update template
+- `POST /api/admin/prompt-templates/{id}/status` — Enable/disable template
+- `POST /api/admin/prompt-templates/{id}/default` — Set as default for its function_type
+
+**AI Call Records:**
+- `GET /api/admin/ai-call-records` — Browse AI generation records with filters (function_type, status, risk_level, is_fallback, user_id, time range)
+
+All M10 endpoints require admin permission. System config and AI config are backed by the `system_config` table. Prompt templates are backed by the `ai_prompt_template` table. AI call records read from `ai_generate_record` with JOIN to `user` for username. The old hardcoded mock `get_system_config()` has been replaced with a database-backed implementation.
+
+## M11 System Operations and Operation Logs
+
+The admin backend now includes a system operations module for administrators only.
+
+Endpoints:
+
+- `GET /api/admin/ops/status`
+- `GET /api/admin/ops/database`
+- `GET /api/admin/ops/backups`
+- `POST /api/admin/ops/backups`
+- `GET /api/admin/ops/storage`
+- `GET /api/admin/ops/logs`
+- `GET /api/admin/ops/logs/{log_id}`
+
+Permissions:
+
+- `admin`: allowed
+- `editor`: 403
+- `user`: 403
+- unauthenticated: 401
+
+Database migrations required:
+
+```powershell
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\015_create_admin_operation_log.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\016_create_backup_record.sql"
+```
+
+Notes:
+
+- Runtime status uses real backend/database checks; AI service status is returned as `unknown` unless a reliable health check is available.
+- Database status uses real SQL row counts for important tables.
+- Manual backup does not perform restore or delete operations. If no backup script is configured, a `backup_record` row is written with `status=unsupported`.
+- File storage status reads `upload_file` when available and does not scan the full disk.
+- Operation logs are stored in `admin_operation_log`.
+
+## M12 Data Analytics & Content Overview
+
+M12 adds an analytics dashboard with 6 admin-only endpoints backed by real database queries.
+
+Endpoints:
+
+- `GET /api/admin/analytics/overview` — Core metrics (users, news, posts, comments, AI calls, timelines, pending)
+- `GET /api/admin/analytics/trends` — Daily content growth trend + AI usage trend
+- `GET /api/admin/analytics/top-content` — Top news by views + top posts by heat score
+- `GET /api/admin/analytics/ai-risk` — AI risk level distribution (low/medium/high/unknown)
+- `GET /api/admin/analytics/review-summary` — Pending counts + processed counts from operation logs
+- `GET /api/admin/analytics/content-overview` — Unified paginated content list across 5 content types with jump-to support
+
+Permissions:
+
+- `admin`: allowed
+- `editor`: 403
+- `user`: 403
+- unauthenticated: 401
+
+Notes:
+
+- All data is queried from real MySQL tables. No frontend mock data.
+- Empty tables return 0 counts or empty arrays, not errors.
+- Content overview UNIONs across news, community_post, comments (news + post), event_timeline, and news_topic tables.
+- Frontend uses ECharts 6.x for trend charts and pie charts.
+- Jump-to-management links use existing section-switching logic (no window.open).
 

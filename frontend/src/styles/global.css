@@ -12,12 +12,17 @@ body,
 
 body {
   margin: 0;
-  overflow: hidden;
+  overflow-y: auto;
   color: var(--color-text-primary);
   background: var(--color-bg);
   font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+/* Admin route needs natural page scroll */
+.admin-container {
+  overflow-y: visible !important;
 }
 
 a {

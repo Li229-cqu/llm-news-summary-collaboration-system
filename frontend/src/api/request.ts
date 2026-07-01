@@ -43,6 +43,20 @@ function createHandledError(message: string): HandledRequestError {
   return error
 }
 
+function normalizeRequestErrorMessage(message: string) {
+  const normalized = (message || '').trim()
+  if (!normalized) {
+    return '??????????????????'
+  }
+  if (normalized === 'Network Error') {
+    return '??????????????????'
+  }
+  if (/timeout/i.test(normalized)) {
+    return '??????????'
+  }
+  return normalized
+}
+
 function isLoginRequest(url?: string) {
   return url?.includes('/api/auth/login') ?? false
 }
