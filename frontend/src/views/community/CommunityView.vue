@@ -1170,9 +1170,9 @@ onMounted(() => {
 }
 
 .suggested-tag:hover {
-  color: #409eff;
-  border-color: #409eff;
-  background: rgba(64, 158, 255, 0.08);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .post-actions {
@@ -1266,7 +1266,7 @@ onMounted(() => {
 }
 
 .post-action-btn:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn .action-count {
@@ -1275,11 +1275,11 @@ onMounted(() => {
 }
 
 .post-action-btn.action-active {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-active .action-count {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-favorited {
@@ -1334,7 +1334,7 @@ onMounted(() => {
   place-items: center;
   border-radius: 999px;
   background: var(--color-primary-soft, #e8f1ff);
-  color: var(--color-primary, #409eff);
+  color: var(--color-primary, var(--color-primary));
   font-size: 13px;
   font-weight: 700;
 }
@@ -1457,7 +1457,7 @@ onMounted(() => {
 .ai-icon {
   font-size: 48px;
   margin-bottom: 12px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .ai-messages {
@@ -1478,7 +1478,7 @@ onMounted(() => {
 }
 
 .ai-message.user .message-content {
-  background-color: #409eff;
+  background-color: var(--color-primary);
   color: #fff;
 }
 
@@ -1552,7 +1552,7 @@ onMounted(() => {
 }
 
 .post-detail-actions .action-active {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .post-detail-actions .action-favorited {

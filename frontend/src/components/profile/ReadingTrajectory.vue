@@ -205,7 +205,7 @@ const visibleNodeTypes = ref<string[]>(['category', 'topic', 'news'])
 
 function getNodeColor(type: string): string {
   const colors: Record<string, string> = {
-    category: '#409EFF',
+    category: '#d92d20',
     topic: '#67C23A',
     news: '#F56C6C',
   }

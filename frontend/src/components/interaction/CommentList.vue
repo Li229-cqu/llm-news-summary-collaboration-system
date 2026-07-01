@@ -307,4 +307,13 @@ function handleReloadComments() {
   color: var(--color-text-secondary);
   font-size: 13px;
 }
+
+/* 消除 Element Plus 按钮蓝色 hover */
+.comment-list :deep(.el-button--primary:hover) {
+  color: #b91c1c;
+}
+
+.comment-list :deep(.el-button--primary.is-link:hover) {
+  color: #b91c1c;
+}
 </style>

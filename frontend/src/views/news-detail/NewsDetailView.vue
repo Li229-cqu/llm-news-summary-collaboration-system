@@ -5,23 +5,32 @@
     <el-alert v-else-if="error" :title="error" type="error" show-icon>
       <template #default>
         <div class="news-detail-page__error-actions">
-          <el-button type="primary" @click="goHome">返回首页</el-button>
+          <button class="back-btn" @click="goHome">
+            <span class="back-btn__arrow">←</span>
+            <span>返回首页</span>
+          </button>
         </div>
       </template>
     </el-alert>
 
     <el-empty v-else-if="!newsDetail" description="新闻不存在">
-      <el-button type="primary" @click="goHome">返回首页</el-button>
+      <button class="back-btn" @click="goHome">
+        <span class="back-btn__arrow">←</span>
+        <span>返回首页</span>
+      </button>
     </el-empty>
 
     <div v-else class="news-detail-layout">
       <section class="news-detail-main">
         <el-card class="news-detail-card" shadow="never">
           <div class="news-detail-card__header">
-            <el-button text type="primary" @click="goHome">返回首页</el-button>
+            <button class="back-btn" @click="goHome">
+              <span class="back-btn__arrow">←</span>
+              <span>返回首页</span>
+            </button>
             <div class="news-detail-card__header-actions">
               <ShareButton target-selector=".news-detail-main" :title="newsDetail?.title || ''" />
-              <el-button type="primary" plain @click="goToAiGenerate">用 AI 生成标题和摘要</el-button>
+              <button class="ai-gen-btn" @click="goToAiGenerate">用 AI 生成标题和摘要</button>
             </div>
           </div>
 
@@ -29,20 +38,23 @@
           <NewsDetailContent :news="newsDetail" />
 
           <div class="news-detail-actions">
-            <LikeButton
-              :news-id="newsDetail.id"
-              :liked="newsDetail.is_liked"
-              :count="newsDetail.like_count"
-              :loading="actionLoading === 'like' || actionLoading === 'unlike'"
-              @toggle="handleLikeToggle"
-            />
-            <FavoriteButton
-              :news-id="newsDetail.id"
-              :is-favorited="newsDetail.is_favorited"
-              :count="newsDetail.favorite_count"
-              :loading="actionLoading === 'favorite' || actionLoading === 'unfavorite'"
-              @toggle="handleFavoriteToggle"
-            />
+            <div class="news-detail-actions__left">
+              <LikeButton
+                :news-id="newsDetail.id"
+                :liked="newsDetail.is_liked"
+                :count="newsDetail.like_count"
+                :loading="actionLoading === 'like' || actionLoading === 'unlike'"
+                @toggle="handleLikeToggle"
+              />
+              <FavoriteButton
+                :news-id="newsDetail.id"
+                :is-favorited="newsDetail.is_favorited"
+                :count="newsDetail.favorite_count"
+                :loading="actionLoading === 'favorite' || actionLoading === 'unfavorite'"
+                @toggle="handleFavoriteToggle"
+              />
+            </div>
+            <span class="news-detail-actions__views">阅读 {{ newsDetail.view_count }}</span>
           </div>
         </el-card>
 
@@ -517,6 +529,68 @@ onMounted(() => {
   padding: 20px;
 }
 
+/* 返回按钮：白底红字胶囊 */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 18px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+  border-radius: 999px;
+  background: var(--color-bg-card);
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background .18s ease,
+    border-color .18s ease;
+}
+
+.back-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-card));
+  border-color: var(--color-primary);
+}
+
+.back-btn__arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* AI生成按钮：白底红字，与截图分享统一风格 */
+.ai-gen-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 18px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  border-radius: 999px;
+  background: var(--color-bg-card);
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background .18s ease,
+    border-color .18s ease,
+    color .18s ease;
+  white-space: nowrap;
+}
+
+.ai-gen-btn:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+/* 暗色模式 */
+:root.dark .back-btn {
+  border-color: color-mix(in srgb, var(--color-primary) 20%, rgba(255,255,255,.1));
+  background: transparent;
+}
+:root.dark .back-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
 .news-detail-card__header {
   display: flex;
   align-items: center;
@@ -537,9 +611,23 @@ onMounted(() => {
 
 .news-detail-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding-top: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.news-detail-actions__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.news-detail-actions__views {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .news-detail-section-title {
@@ -584,13 +672,18 @@ onMounted(() => {
     width: 100%;
   }
 
-  .news-detail-card__header-actions :deep(.el-button),
-  .news-detail-actions :deep(.el-button) {
+  .news-detail-actions {
+    flex-wrap: wrap;
+  }
+
+  .news-detail-actions__left {
     width: 100%;
   }
 
-  .news-detail-actions {
-    flex-direction: column;
+  .back-btn,
+  .ai-gen-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

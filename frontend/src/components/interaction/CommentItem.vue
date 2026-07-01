@@ -659,6 +659,25 @@ function handleReloadComments() {
   color: var(--color-text-secondary);
 }
 
+/* 消除 Element Plus text 按钮的蓝色 hover */
+.comment-item__actions :deep(.el-button:hover) {
+  color: var(--color-primary);
+}
+
+.comment-item__actions :deep(.el-button--primary:hover) {
+  color: var(--color-primary);
+}
+
+.comment-item__actions :deep(.el-button--danger) {
+  color: var(--el-color-danger);
+}
+
+/* 回复框内取消按钮 hover */
+.comment-item__reply-actions :deep(.el-button:hover) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
 .comment-item__action-divider {
   color: var(--color-text-secondary);
   opacity: 0.5;
@@ -669,8 +688,8 @@ function handleReloadComments() {
   gap: 10px;
   padding: 12px;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-bg-card));
-  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, var(--color-border));
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
 }
 
 .comment-item__reply-actions {
@@ -708,6 +727,10 @@ function handleReloadComments() {
 .comment-item__expand-btn :deep(.el-button) {
   color: var(--color-primary);
   font-size: 13px;
+}
+
+.comment-item__expand-btn :deep(.el-button:hover) {
+  color: #b91c1c;
 }
 
 @media (max-width: 640px) {

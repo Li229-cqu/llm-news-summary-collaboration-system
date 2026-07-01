@@ -121,7 +121,7 @@ function renderChart() {
       left: 'center',
       bottom: '0%',
       inRange: {
-        color: ['#f0f5ff', '#d6e4ff', '#91caff', '#4096ff', '#1677ff', '#0958d9'],
+        color: ['#fff1f0', '#fecaca', '#f87171', '#d92d20', '#b91c1c', '#991b1b'],
       },
       text: ['高', '低'],
       textStyle: {

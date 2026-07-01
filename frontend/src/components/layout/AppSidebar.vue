@@ -211,6 +211,10 @@ onMounted(loadCategories)
             description="暂无可订阅分类"
           />
           <template v-else>
+            <div class="subscription-panel__header">
+              <p class="subscription-panel__title">选择订阅</p>
+              <p class="subscription-panel__desc">勾选你关注的新闻频道，我们将优先为你推荐</p>
+            </div>
             <el-checkbox-group v-model="selectedSubscriptionIds" class="subscription-list">
               <el-checkbox
                 v-for="category in subscriptionCategories"
@@ -221,10 +225,18 @@ onMounted(loadCategories)
               </el-checkbox>
             </el-checkbox-group>
             <div class="app-sidebar__subscription-footer">
-              <el-button size="small" plain @click.stop="loadSubscriptionOptions">重置</el-button>
-              <el-button size="small" type="primary" :loading="savingSubscriptions" @click.stop="saveSubscriptions">
-                保存订阅
-              </el-button>
+              <button class="sub-btn sub-btn--cancel" type="button" @click.stop="loadSubscriptionOptions">
+                重置
+              </button>
+              <button
+                class="sub-btn sub-btn--save"
+                type="button"
+                :disabled="savingSubscriptions"
+                @click.stop="saveSubscriptions"
+              >
+                <span v-if="savingSubscriptions" class="sub-btn__spinner"></span>
+                {{ savingSubscriptions ? '保存中...' : '保存订阅' }}
+              </button>
             </div>
           </template>
         </div>
@@ -234,48 +246,128 @@ onMounted(loadCategories)
 </template>
 
 <style scoped>
+/* ========================================
+   侧边栏容器
+   ======================================== */
 .app-sidebar {
   width: 100%;
-  padding: 20px 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 10px;
+  background: var(--color-bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
 }
 
+/* ========================================
+   标题区：新闻频道
+   ======================================== */
 .app-sidebar__title {
-  padding: 0 20px 12px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
+  padding: 0 12px 6px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .02em;
 }
 
+.app-sidebar__title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 15px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  vertical-align: text-bottom;
+}
+
+/* title 下方副说明 */
+.app-sidebar__title::after {
+  content: '按频道快速浏览';
+  display: block;
+  margin-top: 4px;
+  padding-left: 11px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* ========================================
+   el-menu 重置
+   ======================================== */
 .app-sidebar__menu {
   width: 100%;
-  min-height: 160px;
+  min-height: 0;
   border-right: 0;
+  background: transparent;
+  margin-top: 10px;
 }
 
+/* 分类菜单项 —— 卡片式频道按钮 */
 .app-sidebar__menu :deep(.el-menu-item) {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 20px !important;
-  line-height: 44px;
+  height: 40px;
+  margin: 1px 0;
+  padding: 0 12px !important;
+  line-height: 40px;
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  transition:
+    background .2s ease,
+    color .2s ease,
+    padding-left .2s ease;
 }
 
-.app-sidebar__menu :deep(.el-menu-item.is-active) {
+/* hover：浅红底 + 轻微右移 */
+.app-sidebar__menu :deep(.el-menu-item:hover) {
   color: var(--color-primary);
-  background: var(--color-primary-soft);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-card));
+  padding-left: 16px !important;
 }
 
+/* active：红色强调背景 + 左侧红线 */
+.app-sidebar__menu :deep(.el-menu-item.is-active) {
+  color: #991b1b;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card));
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+  padding-left: 16px !important;
+}
+
+/* 分类圆点指示器 */
 .app-sidebar__dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--color-text-secondary);
+  flex-shrink: 0;
+  transition: background .2s ease, transform .2s ease;
+}
+
+.app-sidebar__menu :deep(.el-menu-item:hover) .app-sidebar__dot {
+  background: var(--color-primary);
+  transform: scale(1.3);
 }
 
 .app-sidebar__menu :deep(.el-menu-item.is-active) .app-sidebar__dot {
   background: var(--color-primary);
+  transform: scale(1.3);
 }
 
+/* ========================================
+   订阅区域
+   ======================================== */
 .app-sidebar__subscription {
-  padding: 0 12px;
+  margin-top: 14px;
+  padding: 0 2px;
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 8%, var(--color-border));
+  padding-top: 14px;
 }
 
 .app-sidebar__subscription-trigger {
@@ -283,56 +375,230 @@ onMounted(loadCategories)
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 44px;
-  padding: 0 8px;
+  height: 40px;
+  padding: 0 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
   color: var(--color-text-primary);
   font-size: 14px;
   text-align: left;
   cursor: pointer;
+  transition:
+    background .2s ease,
+    color .2s ease,
+    padding-left .2s ease;
 }
 
-.app-sidebar__subscription-trigger:hover,
-.app-sidebar__subscription-trigger.is-active {
+.app-sidebar__subscription-trigger:hover {
   color: var(--color-primary);
-  background: var(--color-primary-soft);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-card));
+  padding-left: 16px;
+}
+
+.app-sidebar__subscription-trigger.is-active {
+  color: #991b1b;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card));
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+  padding-left: 16px;
 }
 
 .app-sidebar__subscription-trigger.is-active .app-sidebar__dot {
   background: var(--color-primary);
 }
 
+.app-sidebar__subscription-trigger:hover .app-sidebar__dot {
+  background: var(--color-primary);
+  transform: scale(1.3);
+}
+
 .app-sidebar__subscription-action {
   margin-left: auto;
   color: var(--color-text-secondary);
   font-size: 12px;
+  transition: color .2s ease;
 }
 
+.app-sidebar__subscription-trigger:hover .app-sidebar__subscription-action,
+.app-sidebar__subscription-trigger.is-active .app-sidebar__subscription-action {
+  color: var(--color-primary);
+}
+
+/* ========================================
+   订阅展开面板
+   ======================================== */
 .app-sidebar__subscription-panel {
   margin: 8px 0 0;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 16px;
   background: var(--color-bg-card);
 }
 
-.app-sidebar__subscription-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+/* 面板标题区 */
+.subscription-panel__header {
+  margin-bottom: 14px;
 }
 
+.subscription-panel__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.subscription-panel__desc {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ========================================
+   订阅分类 checkbox —— 红白胶囊选项
+   ======================================== */
 .subscription-list {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .subscription-list :deep(.el-checkbox) {
   height: auto;
   margin-right: 0;
   white-space: normal;
+}
+
+/* 把 checkbox 伪装成胶囊标签 */
+.subscription-list :deep(.el-checkbox__label) {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  transition:
+    background .18s ease,
+    border-color .18s ease,
+    color .18s ease;
+  cursor: pointer;
+}
+
+/* 隐藏原生 checkbox 小方块 */
+.subscription-list :deep(.el-checkbox__input) {
+  display: none;
+}
+
+/* hover 时胶囊变浅红 */
+.subscription-list :deep(.el-checkbox:hover .el-checkbox__label) {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-card));
+  color: var(--color-primary);
+}
+
+/* 选中态：红底白字 */
+.subscription-list :deep(.el-checkbox.is-checked .el-checkbox__label) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 500;
+}
+
+/* ========================================
+   订阅按钮组
+   ======================================== */
+.app-sidebar__subscription-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.sub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background .18s ease,
+    border-color .18s ease,
+    color .18s ease;
+}
+
+/* 取消/重置按钮 */
+.sub-btn--cancel {
+  border-color: color-mix(in srgb, var(--color-primary) 25%, var(--color-border));
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.sub-btn--cancel:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-card));
+}
+
+/* 保存按钮：红底白字 */
+.sub-btn--save {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.sub-btn--save:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.sub-btn--save:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.sub-btn__spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sub-spin .7s linear infinite;
+}
+
+@keyframes sub-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 暗色模式适配 */
+:root.dark .app-sidebar__subscription-panel {
+  border-color: color-mix(in srgb, var(--color-primary) 16%, rgba(255,255,255,.08));
+}
+
+:root.dark .subscription-list :deep(.el-checkbox__label) {
+  border-color: rgba(255,255,255,.1);
+  background: transparent;
+}
+
+:root.dark .subscription-list :deep(.el-checkbox:hover .el-checkbox__label) {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, rgba(255,255,255,.15));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+:root.dark .sub-btn--cancel {
+  border-color: rgba(255,255,255,.12);
+  color: #aeb8c4;
+}
+
+:root.dark .sub-btn--cancel:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 </style>

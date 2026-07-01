@@ -7,6 +7,7 @@
         v-for="item in list"
         :key="item.id"
         :news="item"
+        :compact-home="compactHome"
         @click="handleCardClick"
       />
     </div>
@@ -41,6 +42,8 @@ defineProps<{
   list: NewsListItem[]
   loading?: boolean
   emptyText?: string
+  /** 首页精简模式：传递给 NewsCard */
+  compactHome?: boolean
 }>()
 
 const router = useRouter()

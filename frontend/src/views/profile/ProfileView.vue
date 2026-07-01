@@ -46,7 +46,7 @@ import { useUserStore } from '@/stores/user'
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('insights')
+const activeTab = ref('history')
 const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
@@ -119,7 +119,7 @@ async function loadWeeklyReport() {
 }
 
 // ===== 阅读报告辅助 computed =====
-const topicBarColors = ['#6366f1', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#94a3b8']
+const topicBarColors = ['#d92d20', '#e53935', '#c62828', '#ef5350', '#b71c1c', '#94a3b8']
 
 const maxDailyCount = computed(() => {
   if (!weeklyReport.value) return 1
@@ -168,10 +168,10 @@ const radarLegend = computed(() => {
   if (!weeklyReport.value) return []
   const s = weeklyReport.value.behavior_scores
   return [
-    { key: 'reading', label: '阅读探索', score: s.reading, color: '#6366f1' },
+    { key: 'reading', label: '阅读探索', score: s.reading, color: '#d92d20' },
     { key: 'collecting', label: '内容沉淀', score: s.collecting, color: '#f59e0b' },
     { key: 'interaction', label: '社区互动', score: s.interaction, color: '#10b981' },
-    { key: 'ai_usage', label: 'AI 使用', score: s.ai_usage, color: '#8b5cf6' },
+    { key: 'ai_usage', label: 'AI 使用', score: s.ai_usage, color: '#e53935' },
   ]
 })
 
@@ -291,11 +291,11 @@ const categoryDescs: Record<string, string> = {
 }
 
 const profileNavItems = [
-  { key: 'insights', label: '阅读洞察', icon: Grid, desc: '活跃、行为与主题脉络' },
   { key: 'history', label: '浏览记录', icon: Clock, desc: '新闻与帖子足迹' },
   { key: 'favorites', label: '收藏记录', icon: Star, desc: '保存的新闻与帖子' },
   { key: 'comments', label: '评论记录', icon: ChatDotRound, desc: '你的互动发言' },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick, desc: '标题摘要历史' },
+  { key: 'insights', label: '阅读洞察', icon: Grid, desc: '活跃、行为与主题脉络' },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -312,22 +312,14 @@ const filteredBrowseHistory = computed(() => {
 // ===== 浏览分类胶囊比例条 =====
 interface CategorySegment { name: string; count: number; pct: number; gradient: string; tooltip: string }
 // 新闻胶囊条：蓝紫科技色系渐变
-const NEWS_CAPSULE_GRADIENTS = [
-  'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-  'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
-  'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)',
-  'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)',
-  'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)',
-  'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',  // "其他"
-]
-// 帖子胶囊条：青绿社区色系渐变
-const POST_CAPSULE_GRADIENTS = [
-  'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-  'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-  'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
-  'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-  'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)',
-  'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',  // "其他"
+// 新闻 & 帖子胶囊条：统一马卡龙配色
+const CAPSULE_GRADIENTS = [
+  'linear-gradient(135deg, #f8a4c8 0%, #f472b6 100%)',  // 柔粉
+  'linear-gradient(135deg, #fbbf8c 0%, #f8966e 100%)',  // 蜜桃
+  'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)',  // 薰衣草
+  'linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%)',  // 薄荷
+  'linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%)',  // 天空
+  'linear-gradient(135deg, #e5e7eb 0%, #9ca3af 100%)',  // "其他"
 ]
 const browseCapsuleLoading = ref(false)
 const newsCapsuleItems = ref<BrowseHistoryItem[]>([])
@@ -365,8 +357,8 @@ function buildCategorySegments(items: BrowseHistoryItem[], defaultLabel: string,
   return result
 }
 
-const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻', NEWS_CAPSULE_GRADIENTS))
-const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览', POST_CAPSULE_GRADIENTS))
+const newsCategorySegments = computed(() => buildCategorySegments(newsCapsuleItems.value, '未分类新闻', CAPSULE_GRADIENTS))
+const postCategorySegments = computed(() => buildCategorySegments(postCapsuleItems.value, '帖子浏览', CAPSULE_GRADIENTS))
 const newsCapsuleTotal = computed(() => newsCategorySegments.value.reduce((s, seg) => s + seg.count, 0))
 const postCapsuleTotal = computed(() => postCategorySegments.value.reduce((s, seg) => s + seg.count, 0))
 
@@ -969,6 +961,7 @@ onMounted(async () => {
   // Auto-load default tab data so browse history shows immediately
   if (activeTab.value === 'history') {
     await loadBrowseHistory()
+    loadBrowseCapsuleData()
   }
   // Load weekly report (non-blocking)
   loadWeeklyReport()
@@ -1095,7 +1088,7 @@ onMounted(async () => {
                     <!-- 画像综合区：左侧文字 + 右侧雷达图 -->
                     <div class="overview-integrated">
                       <div class="overview-integrated__text">
-                        <h2 class="overview-integrated__title">🧑 本周画像</h2>
+                        <h2 class="overview-integrated__title">本周画像</h2>
                         <p class="overview-integrated__desc">{{ weeklyReport.ai_analysis?.page_analyses?.overview || weeklyReport.analysis_texts?.profile_analysis || weeklyReport.persona.description }}</p>
                         <p v-if="weeklyReport.ai_analysis?.reading_style" class="overview-integrated__style">「{{ weeklyReport.ai_analysis.reading_style }}」</p>
                         <div class="overview-integrated__dimensions">
@@ -1110,14 +1103,14 @@ onMounted(async () => {
                         <svg viewBox="-20 -20 340 340" class="radar-svg radar-svg--large">
                           <polygon v-for="level in 4" :key="'grid-'+level" :points="radarPointsLg(55 + level * 22).join(' ')" fill="none" :stroke="level===4?'#cbd5e1':'#e5e7eb'" stroke-width="1.5"/>
                           <line v-for="(axis,ai) in radarAxesLg" :key="'ax-'+ai" :x1="150" :y1="150" :x2="axis.x" :y2="axis.y" stroke="#e5e7eb" stroke-width="1.5"/>
-                          <polygon :points="radarDataPointsLg.join(' ')" fill="rgba(99,102,241,0.12)" stroke="#6366f1" stroke-width="2.5"/>
-                          <circle v-for="(pt,pi) in radarDataPointsLg" :key="'pt-'+pi" :cx="pt[0]" :cy="pt[1]" r="6" fill="#6366f1"/>
+                          <polygon :points="radarDataPointsLg.join(' ')" fill="rgba(217,45,32,0.12)" stroke="var(--color-primary)" stroke-width="2.5"/>
+                          <circle v-for="(pt,pi) in radarDataPointsLg" :key="'pt-'+pi" :cx="pt[0]" :cy="pt[1]" r="6" fill="var(--color-primary)"/>
                           <text v-for="(axis,ai) in radarAxesLg" :key="'lbl-'+ai" :x="axis.labelX" :y="axis.labelY" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">{{ axis.label }}</text>
                         </svg>
                       </div>
                     </div>
                     <div v-if="weeklyReport.analysis_texts?.behavior_analysis" class="overview-behavior-bar">
-                      <span class="overview-behavior-bar__title">📊 行为画像解读</span>
+                      <span class="overview-behavior-bar__title">行为画像解读</span>
                       <p class="overview-behavior-bar__text">{{ weeklyReport.analysis_texts.behavior_analysis }}</p>
                     </div>
                   </div>
@@ -1129,7 +1122,7 @@ onMounted(async () => {
                     <p class="page2-intro">{{ weeklyReport.ai_analysis?.page_analyses?.trajectory || ('这一周，你的阅读节奏整体较稳定，兴趣主要集中在' + (weeklyReport.topic_rank.slice(0,3).filter(t=>t.name!=='其他').map(t=>t.name).join('、') || '多个领域') + '，说明你更关注现实议题、产业变化与技术趋势。') }}</p>
                     <!-- 阅读足迹：时间轴节点图 -->
                     <div class="report-card report-card--footprint">
-                      <div class="report-card__header"><span class="report-card__title">📅 阅读足迹</span><span class="report-card__subtitle">近 7 天每日浏览次数</span></div>
+                      <div class="report-card__header"><span class="report-card__title">阅读足迹</span><span class="report-card__subtitle">近 7 天每日浏览次数</span></div>
                       <div class="report-card__body">
                         <div class="footprint-timeline">
                           <div class="footprint-line"></div>
@@ -1146,7 +1139,7 @@ onMounted(async () => {
                     </div>
                     <!-- 兴趣主题：气泡标签图 -->
                     <div class="report-card report-card--bubbles">
-                      <div class="report-card__header"><span class="report-card__title">🏷️ 兴趣主题</span><span class="report-card__subtitle">近 7 天浏览内容分类分布</span></div>
+                      <div class="report-card__header"><span class="report-card__title">兴趣主题</span><span class="report-card__subtitle">近 7 天浏览内容分类分布</span></div>
                       <div class="report-card__body">
                         <div v-if="weeklyReport.topic_rank.length===0" class="report-card__empty">暂无数据</div>
                         <div v-else class="topic-list">
@@ -1170,7 +1163,7 @@ onMounted(async () => {
                     <p class="page3-intro">{{ weeklyReport.ai_analysis?.page_analyses?.conclusion || '这一周，你留下了这些阅读痕迹。从行为来看，你保持了稳定的信息获取节奏，也在积极使用 AI 工具提升效率。' }}</p>
                     <!-- 高光叙事 -->
                     <div class="report-card report-card--highlights">
-                      <div class="report-card__header"><span class="report-card__title">✨ 本周高光</span></div>
+                      <div class="report-card__header"><span class="report-card__title">本周高光</span></div>
                       <div class="report-card__body">
                         <div v-if="weeklyReport.highlights.length===0" class="report-card__empty">暂无数据</div>
                         <div v-else class="highlight-narrative-list">
@@ -1180,7 +1173,7 @@ onMounted(async () => {
                     </div>
                     <!-- AI 洞察 + 建议 合并卡 -->
                     <div v-if="weeklyReport.ai_analysis?.enabled" class="report-card report-card--ai-merged">
-                      <div class="report-card__header"><span class="report-card__title">🤖 AI 给你的阅读回顾</span></div>
+                      <div class="report-card__header"><span class="report-card__title">AI 给你的阅读回顾</span></div>
                       <div class="report-card__body">
                         <div class="ai-merged-grid">
                           <div class="ai-merged-col">
@@ -1791,9 +1784,9 @@ onMounted(async () => {
   align-items: center;
   text-align: center;
   padding: 28px 16px 20px;
-  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 50%, #fff 100%);
+  background: linear-gradient(180deg, #fff1f0 0%, #fafafa 50%, #fff 100%);
   border-radius: 18px;
-  border: 1px solid #e0e7ff;
+  border: 1px solid #f1d4d4;
   gap: 12px;
 }
 
@@ -1803,7 +1796,7 @@ onMounted(async () => {
 
 .sidebar-avatar {
   border: 4px solid #fff;
-  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.2), 0 0 0 2px #bfdbfe;
+  box-shadow: 0 4px 20px rgba(217, 45, 32, 0.2), 0 0 0 2px #f1d4d4;
 }
 
 .sidebar-user-name {
@@ -1855,13 +1848,13 @@ onMounted(async () => {
 }
 
 .sidebar-stat-item:hover {
-  background: #eff6ff;
+  background: #fff1f0;
 }
 
 .sidebar-stat-num {
   font-size: 18px;
   font-weight: 700;
-  color: #2563eb;
+  color: var(--color-primary);
   line-height: 1.2;
 }
 
@@ -1905,15 +1898,15 @@ onMounted(async () => {
 }
 
 .sidebar-nav-item:hover {
-  background: #f1f5f9;
-  color: #2563eb;
+  background: #fff1f0;
+  color: var(--color-primary);
 }
 
 .sidebar-nav-item--active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f0;
+  color: var(--color-primary);
   font-weight: 600;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #f1d4d4;
 }
 
 .sidebar-nav-label {
@@ -1979,21 +1972,21 @@ onMounted(async () => {
 }
 
 .module-stat-card:hover {
-  background: #f0f5ff;
-  border-color: #bfdbfe;
+  background: #fff1f0;
+  border-color: #f1d4d4;
 }
 
 .module-stat-card--active {
-  background: #eff6ff;
-  border-color: #2563eb;
+  background: #fff1f0;
+  border-color: var(--color-primary);
 }
 
 .module-stat-card__icon {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f0;
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2066,15 +2059,15 @@ onMounted(async () => {
 }
 
 .portrait-skeleton-card:hover {
-  background: #f0f5ff;
+  background: #fff1f0;
 }
 
 .skeleton-icon-wrapper {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #eff6ff;
-  color: #93c5fd;
+  background: #fff1f0;
+  color: #fca5a5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2229,13 +2222,13 @@ onMounted(async () => {
 }
 
 .heatmap-cell:hover {
-  outline: 2px solid #6366f1;
+  outline: 2px solid #d92d20;
   transform: scale(1.1);
   z-index: 1;
 }
 
 .heat-selected {
-  outline: 2.5px solid #4338ca !important;
+  outline: 2.5px solid #991b1b !important;
 }
 
 .heat-empty { background: transparent; outline: none; cursor: default; }
@@ -2253,7 +2246,7 @@ onMounted(async () => {
 
 .heatmap-selected-info {
   font-size: 12px;
-  color: #4338ca;
+  color: #991b1b;
   font-weight: 500;
 }
 
@@ -2281,10 +2274,10 @@ onMounted(async () => {
 }
 
 .legend-dot.heat-0 { background: #f1f5f9; }
-.legend-dot.heat-1 { background: #e0e7ff; }
-.legend-dot.heat-2 { background: #a5b4fc; }
-.legend-dot.heat-3 { background: #6366f1; }
-.legend-dot.heat-4 { background: #4338ca; }
+.legend-dot.heat-1 { background: #fecaca; }
+.legend-dot.heat-2 { background: #fca5a5; }
+.legend-dot.heat-3 { background: #d92d20; }
+.legend-dot.heat-4 { background: #991b1b; }
 
 /* -- 兴趣雷达 -- */
 .radar-chart {
@@ -2405,7 +2398,7 @@ onMounted(async () => {
 .ai-insight__big-num {
   font-size: 32px;
   font-weight: 700;
-  color: #8b5cf6;
+  color: #e53935;
 }
 
 .ai-insight__big-label {
@@ -2446,8 +2439,8 @@ onMounted(async () => {
   transition: width 0.6s ease;
 }
 
-.ai-bar-fill.news { background: #3b82f6; }
-.ai-bar-fill.manual { background: #8b5cf6; }
+.ai-bar-fill.news { background: #d92d20; }
+.ai-bar-fill.manual { background: #e53935; }
 
 .ai-bar-val {
   font-size: 13px;
@@ -2513,11 +2506,9 @@ onMounted(async () => {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
   transform: translateY(-1px);
 }
-.capsule-card--news {
-  border-left: 3px solid #818cf8;
-}
+.capsule-card--news,
 .capsule-card--post {
-  border-left: 3px solid #34d399;
+  border-left: none;
 }
 .capsule-card__skeleton {
   padding: 4px 0;
@@ -2542,10 +2533,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .capsule-card__icon--news {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #f472b6, #f8a4c8);
 }
 .capsule-card__icon--post {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #7dd3fc, #bae6fd);
 }
 .capsule-card__title {
   font-size: 14px;
@@ -2685,12 +2676,12 @@ onMounted(async () => {
 .report-book-header__left { display: flex; align-items: baseline; gap: 10px; }
 .report-book-header__title { font-size: 30px; font-weight: 850; color: #1e293b; letter-spacing: -0.5px; }
 .report-book-header__subtitle { font-size: 16px; color: #64748b; font-weight: 400; }
-.report-book-header__count { font-size: 13px; color: #6366f1; font-weight: 650; background: #eef2ff; padding: 4px 14px; border-radius: 14px; white-space: nowrap; }
+.report-book-header__count { font-size: 13px; color: var(--color-primary); font-weight: 650; background: #fff1f0; padding: 4px 14px; border-radius: 14px; white-space: nowrap; }
 .report-page { min-height: 560px; }
 .report-page__body { padding: 24px 30px; display: flex; flex-direction: column; gap: 20px; }
 .report-page__body--overview { padding: 0 30px 24px; }
 .report-page__body--insights { gap: 18px; }
-.report-page-summary { font-size: 15px; color: #64748b; line-height: 1.7; margin: 0; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; }
+.report-page-summary { font-size: 15px; color: #64748b; line-height: 1.7; margin: 0; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #d92d20; }
 .report-closing { font-size: 14px; color: #94a3b8; text-align: center; padding: 18px 12px 4px; margin: 0; line-height: 1.7; }
 
 /* 第 2 页 intro */
@@ -2698,30 +2689,30 @@ onMounted(async () => {
 .page3-intro { font-size: 17px; color: #334155; line-height: 1.8; margin: 0 0 4px; }
 
 /* 行为分析宽卡片 */
-.overview-behavior-bar { margin-top: 8px; padding: 16px 20px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #6366f1; }
+.overview-behavior-bar { margin-top: 8px; padding: 16px 20px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #d92d20; }
 .overview-behavior-bar__title { font-size: 15px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px; }
 .overview-behavior-bar__text { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; }
 
 /* 翻页控件 */
 .report-book-controls { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px 18px; border-top: 1px solid #f1f5f9; }
 .report-book-btn { padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 20px; background: #fff; color: #475569; font-size: 13px; cursor: pointer; transition: all 0.2s ease; }
-.report-book-btn:hover:not(:disabled) { background: #f8fafc; border-color: #6366f1; color: #6366f1; }
+.report-book-btn:hover:not(:disabled) { background: #fff1f0; border-color: var(--color-primary); color: var(--color-primary); }
 .report-book-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .report-book-dots { display: flex; gap: 8px; }
 .report-book-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5e7eb; cursor: pointer; transition: all 0.25s ease; }
-.report-book-dot--active { background: #6366f1; transform: scale(1.3); }
+.report-book-dot--active { background: #d92d20; transform: scale(1.3); }
 .report-fade-enter-active, .report-fade-leave-active { transition: opacity 0.22s ease; }
 .report-fade-enter-from, .report-fade-leave-to { opacity: 0; }
 
 /* 封面卡 — 浅色报告风格 */
-.report-cover { position: relative; border-radius: 22px; overflow: hidden; margin-bottom: 0; background: linear-gradient(135deg, #fafbff 0%, #f0f3ff 50%, #f8fafc 100%); border: 1px solid #eef2ff; }
+.report-cover { position: relative; border-radius: 22px; overflow: hidden; margin-bottom: 0; background: #fff; border: 1px solid var(--color-border); }
 .report-cover__bg { display: none; }
 .report-cover__content { position: relative; padding: 32px 30px 28px; color: #1e293b; }
 .report-cover__title { font-size: 24px; font-weight: 750; margin: 0 0 4px; letter-spacing: -0.3px; color: #1e293b; }
 .report-cover__subtitle { font-size: 14px; color: #64748b; margin: 0 0 16px; }
 .report-cover__persona { margin-bottom: 12px; }
-.report-cover__persona-badge { display: inline-block; padding: 6px 20px; background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-radius: 24px; font-size: 16px; font-weight: 700; color: #4f46e5; }
-.report-cover__ai-tag { display: inline-block; font-size: 11px; padding: 3px 10px; background: #eef2ff; color: #6366f1; border-radius: 12px; margin-left: 10px; vertical-align: middle; }
+.report-cover__persona-badge { display: inline-block; padding: 6px 20px; background: linear-gradient(135deg, #fff1f0, #f1d4d4); border-radius: 24px; font-size: 16px; font-weight: 700; color: #991b1b; }
+.report-cover__ai-tag { display: inline-block; font-size: 11px; padding: 3px 10px; background: #fff1f0; color: var(--color-primary); border-radius: 12px; margin-left: 10px; vertical-align: middle; }
 .report-cover__summary { font-size: 17px; line-height: 1.8; color: #475569; margin: 0; }
 
 /* 第 1 页：画像综合区 */
@@ -2729,13 +2720,13 @@ onMounted(async () => {
 .overview-integrated__text { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .overview-integrated__title { font-size: 24px; font-weight: 750; color: #1e293b; margin: 0; }
 .overview-integrated__desc { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; }
-.overview-integrated__style { font-size: 16px; color: #6366f1; font-weight: 600; line-height: 1.7; margin: 0; padding: 8px 0; font-style: italic; }
+.overview-integrated__style { font-size: 16px; color: var(--color-primary); font-weight: 600; line-height: 1.7; margin: 0; padding: 8px 0; font-style: italic; }
 .overview-integrated__dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
 .ov-dim-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #64748b; padding: 6px 10px; background: #fafbfc; border-radius: 8px; }
 .ov-dim-item__dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .ov-dim-item__label { flex: 1; }
 .ov-dim-item__score { font-weight: 700; color: #334155; font-size: 16px; }
-.overview-integrated__insight { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; }
+.overview-integrated__insight { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #d92d20; }
 .overview-integrated__radar { display: flex; align-items: flex-start; justify-content: center; padding-top: 24px; overflow: visible; }
 .radar-svg--large { width: 340px; height: 340px; overflow: visible; }
 
@@ -2763,8 +2754,8 @@ onMounted(async () => {
 .footprint-timeline { display: flex; align-items: flex-end; justify-content: space-between; padding: 16px 8px 8px; position: relative; min-height: 90px; }
 .footprint-line { position: absolute; top: 50%; left: 8%; right: 8%; height: 2px; background: #e5e7eb; transform: translateY(-50%); }
 .footprint-node-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 1; }
-.footprint-node { border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; background: #e0e7ff; border: 2px solid #c7d2fe; min-width: 18px; min-height: 18px; }
-.footprint-node--peak { background: #6366f1; border-color: #4f46e5; box-shadow: 0 0 14px rgba(99,102,241,0.35); }
+.footprint-node { border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; background: #f1d4d4; border: 2px solid #fecaca; min-width: 18px; min-height: 18px; }
+.footprint-node--peak { background: #d92d20; border-color: #991b1b; box-shadow: 0 0 14px rgba(217,45,32,0.35); }
 .footprint-node--zero { background: #f1f5f9; border-color: #e5e7eb; }
 .footprint-node__count { font-size: 13px; font-weight: 700; color: #fff; }
 .footprint-node--zero .footprint-node__count { color: transparent; }
@@ -2775,7 +2766,7 @@ onMounted(async () => {
 .topic-list { display: flex; flex-direction: column; gap: 10px; }
 .topic-item { display: flex; align-items: center; gap: 10px; }
 .topic-item__rank { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #94a3b8; flex-shrink: 0; }
-.topic-item__rank--top3 { background: #eef2ff; color: #6366f1; }
+.topic-item__rank--top3 { background: #fff1f0; color: var(--color-primary); }
 .topic-item__name { font-size: 13px; color: #475569; width: 52px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-item__bar-track { flex: 1; height: 12px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
 .topic-item__bar-fill { height: 100%; border-radius: 6px; min-width: 2px; transition: width 0.5s ease; }
@@ -2790,16 +2781,16 @@ onMounted(async () => {
 /* 高光编号式列表 */
 .highlight-narrative-list { display: flex; flex-direction: column; gap: 12px; }
 .highlight-narrative-item { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; background: #fafbfc; border-radius: 12px; border: 1px solid #f1f5f9; }
-.highlight-narrative-item__icon { font-size: 13px; font-weight: 800; color: #6366f1; background: #eef2ff; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.highlight-narrative-item__icon { font-size: 13px; font-weight: 800; color: var(--color-primary); background: #fff1f0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 .highlight-narrative-item__text { font-size: 15px; color: #334155; line-height: 1.65; }
 
 /* 图表解读 */
-.chart-insight { margin-top: 12px; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #6366f1; font-size: 16px; color: #475569; line-height: 1.8; }
+.chart-insight { margin-top: 12px; padding: 14px 18px; background: #f8fafc; border-radius: 10px; border-left: 4px solid #d92d20; font-size: 16px; color: #475569; line-height: 1.8; }
 
 /* AI 洞察列表 */
 .ai-insight-list { display: flex; flex-direction: column; gap: 10px; }
 .ai-insight-item { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; color: #475569; line-height: 1.7; }
-.ai-insight-item__dot { width: 6px; height: 6px; border-radius: 50%; background: #8b5cf6; flex-shrink: 0; margin-top: 6px; }
+.ai-insight-item__dot { width: 6px; height: 6px; border-radius: 50%; background: #e53935; flex-shrink: 0; margin-top: 6px; }
 .ai-insight-item__dot--suggestion { background: #10b981; }
 
 /* 响应式 */
@@ -2903,12 +2894,12 @@ onMounted(async () => {
 
 .segmented-control :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
   background: #ffffff;
-  color: #2563eb;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.16);
+  color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.16);
 }
 
 .segmented-control :deep(.el-radio-button__inner:hover) {
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
 .record-list {
@@ -2930,9 +2921,9 @@ onMounted(async () => {
 }
 
 .record-item:hover {
-  background: #f8fafc;
-  border-color: #2563eb;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.10);
+  background: #fff5f5;
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px rgba(217, 45, 32, 0.10);
   transform: translateY(-2px);
 }
 
@@ -3009,7 +3000,7 @@ onMounted(async () => {
 
 .record-item:hover .record-arrow {
   transform: translateX(4px);
-  color: #2563eb;
+  color: var(--color-primary);
 }
 
 .comment-box {
@@ -3042,8 +3033,8 @@ onMounted(async () => {
 }
 
 .ai-record-item:hover {
-  border-color: #2563eb;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.10);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px rgba(217, 45, 32, 0.10);
   transform: translateY(-2px);
 }
 
@@ -3151,16 +3142,16 @@ onMounted(async () => {
 
 .profile-pagination .page-btn:hover:not(:disabled):not(.active) {
   background: #f3f4f6;
-  border-color: #2563eb;
-  color: #2563eb;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .profile-pagination .page-btn.active {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #d92d20;
+  border-color: var(--color-primary);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.25);
 }
 
 .profile-pagination .page-btn:disabled {

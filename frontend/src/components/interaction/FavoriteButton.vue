@@ -8,6 +8,7 @@
     :loading="loading"
     @click="handleToggle"
   >
+    <span class="interaction-button__icon">{{ isFavorited ? '⭐' : '☆' }}</span>
     <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
     <span class="interaction-button__count">{{ count }}</span>
   </el-button>
@@ -57,7 +58,7 @@ function handleToggle() {
 }
 
 .interaction-button.is-active {
-  box-shadow: 0 6px 14px rgb(37 99 235 / 14%);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 @media (max-width: 640px) {
