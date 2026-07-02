@@ -69,6 +69,13 @@ export interface AIGenerateResponse {
   evidence_coverage?: number
 }
 
+export interface AIAsyncTaskResult {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  result?: AIGenerateResponse
+  error?: string
+}
+
 /** 调用 AI 生成标题和摘要（同步模式）。 */
 export function generateTitleSummary(data: AIGenerateRequest) {
   return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(
@@ -89,7 +96,7 @@ export function generateTitleSummaryAsync(data: AIGenerateRequest) {
 
 /** 查询异步任务结果。 */
 export function getAsyncTaskResult(taskId: string) {
-  return request.get<{ task_id: string; status: string; result?: AIGenerateResponse; error?: string }>(
+  return request.get<AIAsyncTaskResult, AIAsyncTaskResult>(
     `/api/ai/generate/async/${taskId}`,
     { timeout: 5000 }
   )

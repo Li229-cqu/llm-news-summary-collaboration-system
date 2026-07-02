@@ -370,9 +370,9 @@ async def review_pending_item_endpoint(
     item_type: str,
     item_id: int,
     request: ReviewActionRequest = Body(...),
-    _: UserInfo = Depends(require_editor_or_admin),
+    current_user: UserInfo = Depends(require_editor_or_admin),
 ) -> ApiResponse[ReviewActionResult]:
-    data = review_pending_item(item_type, item_id, request)
+    data = review_pending_item(item_type, item_id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -409,20 +409,20 @@ async def admin_news_detail(news_id: int, _: UserInfo = Depends(require_editor_o
 
 
 @router.put('/news/{news_id}', response_model=ApiResponse[AdminNewsDetail])
-async def admin_news_update(news_id: int, request: AdminNewsUpdateRequest = Body(...), _: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsDetail]:
-    data = update_admin_news(news_id, request)
+async def admin_news_update(news_id: int, request: AdminNewsUpdateRequest = Body(...), current_user: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsDetail]:
+    data = update_admin_news(news_id, request, current_user=current_user)
     return success_response(data)
 
 
 @router.post('/news/{news_id}/review', response_model=ApiResponse[AdminNewsActionResult])
-async def admin_news_review(news_id: int, request: ReviewActionRequest = Body(...), _: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsActionResult]:
-    data = review_admin_news(news_id, request)
+async def admin_news_review(news_id: int, request: ReviewActionRequest = Body(...), current_user: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsActionResult]:
+    data = review_admin_news(news_id, request, current_user=current_user)
     return success_response(data)
 
 
 @router.post('/news/{news_id}/topic', response_model=ApiResponse[AdminNewsDetail])
-async def admin_news_topic(news_id: int, request: AdminNewsTopicRequest = Body(...), _: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsDetail]:
-    data = update_admin_news_topic(news_id, request)
+async def admin_news_topic(news_id: int, request: AdminNewsTopicRequest = Body(...), current_user: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminNewsDetail]:
+    data = update_admin_news_topic(news_id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -476,8 +476,8 @@ async def admin_post_detail(post_id: int, _: UserInfo = Depends(require_editor_o
 
 
 @router.post('/posts/{post_id}/review', response_model=ApiResponse[AdminPostActionResult])
-async def admin_post_review(post_id: int, request: ReviewActionRequest = Body(...), _: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminPostActionResult]:
-    data = review_admin_post(post_id, request)
+async def admin_post_review(post_id: int, request: ReviewActionRequest = Body(...), current_user: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminPostActionResult]:
+    data = review_admin_post(post_id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -532,8 +532,8 @@ async def admin_comment_detail(comment_type: str, comment_id: int, _: UserInfo =
 
 
 @router.post('/comments/{comment_type}/{comment_id}/review', response_model=ApiResponse[AdminCommentActionResult])
-async def admin_comment_review(comment_type: str, comment_id: int, request: ReviewActionRequest = Body(...), _: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminCommentActionResult]:
-    data = review_admin_comment(comment_type, comment_id, request)
+async def admin_comment_review(comment_type: str, comment_id: int, request: ReviewActionRequest = Body(...), current_user: UserInfo = Depends(require_editor_or_admin)) -> ApiResponse[AdminCommentActionResult]:
+    data = review_admin_comment(comment_type, comment_id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -577,7 +577,7 @@ async def user_change_role(
     current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[AdminUserActionResult]:
     """Change user role. Cannot change own role or remove the last admin."""
-    data = change_user_role(user_id, current_user.id, request)
+    data = change_user_role(user_id, current_user.id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -588,7 +588,7 @@ async def user_change_status(
     current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[AdminUserActionResult]:
     """Enable or disable user account. Cannot disable self or the last admin."""
-    data = change_user_status(user_id, current_user.id, request)
+    data = change_user_status(user_id, current_user.id, request, current_user=current_user)
     return success_response(data)
 
 
@@ -627,10 +627,10 @@ async def system_config_list(
 @router.put('/system-config', response_model=ApiResponse[dict])
 async def system_config_update(
     request: SystemConfigUpdateRequest,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[dict]:
     """M10: Update system config items."""
-    data = update_system_config(request)
+    data = update_system_config(request, current_user=current_user)
     return success_response(data)
 
 
@@ -646,10 +646,10 @@ async def ai_config(
 @router.put('/ai-config', response_model=ApiResponse[dict])
 async def ai_config_update(
     request: AIConfigUpdateRequest,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[dict]:
     """M10: Update AI configuration."""
-    data = update_ai_config(request)
+    data = update_ai_config(request, current_user=current_user)
     return success_response(data)
 
 
@@ -704,10 +704,10 @@ async def prompt_template_detail(
 @router.post('/prompt-templates', response_model=ApiResponse[PromptTemplateItem])
 async def prompt_template_create(
     payload: PromptTemplatePayload,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[PromptTemplateItem]:
     """M10: Create a prompt template."""
-    data = create_prompt_template(payload)
+    data = create_prompt_template(payload, current_user=current_user)
     return success_response(data)
 
 
@@ -715,10 +715,10 @@ async def prompt_template_create(
 async def prompt_template_update(
     template_id: int,
     payload: PromptTemplatePayload,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[PromptTemplateItem]:
     """M10: Update a prompt template."""
-    data = update_prompt_template(template_id, payload)
+    data = update_prompt_template(template_id, payload, current_user=current_user)
     return success_response(data)
 
 
@@ -726,20 +726,20 @@ async def prompt_template_update(
 async def prompt_template_status(
     template_id: int,
     request: PromptTemplateStatusRequest,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[dict]:
     """M10: Enable/disable a prompt template."""
-    data = update_prompt_template_status(template_id, request)
+    data = update_prompt_template_status(template_id, request, current_user=current_user)
     return success_response(data)
 
 
 @router.post('/prompt-templates/{template_id}/default', response_model=ApiResponse[dict])
 async def prompt_template_default(
     template_id: int,
-    _: UserInfo = Depends(require_admin),
+    current_user: UserInfo = Depends(require_admin),
 ) -> ApiResponse[dict]:
     """M10: Set prompt template as default."""
-    data = set_prompt_template_default(template_id)
+    data = set_prompt_template_default(template_id, current_user=current_user)
     return success_response(data)
 
 

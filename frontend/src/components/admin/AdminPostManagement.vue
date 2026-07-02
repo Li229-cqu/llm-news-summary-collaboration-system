@@ -2,12 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  featureAdminPost,
   getAdminPostDetail,
   getAdminPostList,
   getAdminPostOptions,
   reviewAdminPost,
-  unfeatureAdminPost,
   type AdminPostDetail,
   type AdminPostItem,
   type AdminPostListResponse,
@@ -37,7 +35,6 @@ const filters = reactive({
   status: null as number | null,
   tag: '',
   related_news_id: null as number | null,
-  is_featured: null as boolean | null,
   date_range: [] as string[],
 })
 
@@ -74,7 +71,6 @@ async function loadPosts(targetPage = page.value) {
       status: filters.status,
       tag: filters.tag,
       related_news_id: filters.related_news_id,
-      is_featured: options.value.feature_supported ? filters.is_featured : null,
       start_time: start,
       end_time: end,
       page: page.value,
@@ -101,7 +97,6 @@ function handleReset() {
   filters.status = null
   filters.tag = ''
   filters.related_news_id = null
-  filters.is_featured = null
   filters.date_range = []
   void loadPosts(1)
 }
@@ -148,24 +143,6 @@ async function runStatusAction(row: AdminPostItem, action: AdminReviewAction) {
   }
 }
 
-async function toggleFeature(row: AdminPostItem, featured: boolean) {
-  if (!options.value.feature_supported) {
-    ElMessage.warning('\u5f53\u524d community_post \u8868\u6682\u4e0d\u652f\u6301\u5e16\u5b50\u7cbe\u9009\u5b57\u6bb5')
-    return
-  }
-  actionLoading.value = true
-  try {
-    if (featured) await featureAdminPost(row.id)
-    else await unfeatureAdminPost(row.id)
-    ElMessage.success('\u5904\u7406\u6210\u529f')
-    await loadPosts(page.value)
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '\u5904\u7406\u5931\u8d25')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
 function availableActions(row: AdminPostItem) {
   if (row.status === 3) return ['approve', 'fold', 'delete'] as AdminReviewAction[]
   if (row.status === 1) return ['fold', 'delete'] as AdminReviewAction[]
@@ -203,40 +180,32 @@ onMounted(async () => {
         </article>
       </div>
 
-      <el-alert
-        v-if="!options.feature_supported"
-        class="feature-alert"
-        type="info"
-        show-icon
-        :closable="false"
-        title="&#24403;&#21069; community_post &#34920;&#26242;&#19981;&#25903;&#25345;&#24086;&#23376;&#31934;&#36873;&#23383;&#27573;&#65292;&#31934;&#36873;&#25805;&#20316;&#24050;&#31105;&#29992;&#12290;"
-      />
 
       <div class="filter-bar">
-        <el-input v-model="filters.keyword" clearable placeholder="&#25628;&#32034;&#26631;&#39064;&#12289;&#27491;&#25991;&#25110;&#26631;&#31614;" />
-        <el-input-number v-model="filters.user_id" :min="1" controls-position="right" placeholder="User ID" />
-        <el-input v-model="filters.username" clearable placeholder="&#21457;&#24086;&#29992;&#25143;" />
-        <el-select v-model="filters.status" clearable placeholder="&#29366;&#24577;">
-          <el-option v-for="item in options.statuses" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.tag" clearable filterable allow-create placeholder="&#26631;&#31614;">
-          <el-option v-for="item in options.tags" :key="item" :label="item" :value="item" />
-        </el-select>
-        <el-input-number v-model="filters.related_news_id" :min="1" controls-position="right" placeholder="Related News ID" />
-        <el-select v-model="filters.is_featured" clearable :disabled="!options.feature_supported" placeholder="&#31934;&#36873;">
-          <el-option label="&#24050;&#31934;&#36873;" :value="true" />
-          <el-option label="&#26410;&#31934;&#36873;" :value="false" />
-        </el-select>
-        <el-date-picker
-          v-model="filters.date_range"
-          type="datetimerange"
-          value-format="YYYY-MM-DD HH:mm:ss"
-          start-placeholder="&#24320;&#22987;&#26102;&#38388;"
-          end-placeholder="&#32467;&#26463;&#26102;&#38388;"
-        />
-        <div class="filter-actions">
-          <el-button type="primary" @click="handleSearch">&#26597;&#35810;</el-button>
-          <el-button @click="handleReset">&#37325;&#32622;</el-button>
+        <div class="filter-row-1">
+          <el-input v-model="filters.keyword" clearable placeholder="&#25628;&#32034;&#26631;&#39064;&#12289;&#27491;&#25991;&#25110;&#26631;&#31614;" class="filter-keyword" />
+          <el-input v-model="filters.username" clearable placeholder="&#21457;&#24086;&#29992;&#25143;" class="filter-input" />
+          <el-select v-model="filters.status" clearable placeholder="&#29366;&#24577;" class="filter-select">
+            <el-option v-for="item in options.statuses" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-select v-model="filters.tag" clearable filterable allow-create placeholder="&#26631;&#31614;" class="filter-select">
+            <el-option v-for="item in options.tags" :key="item" :label="item" :value="item" />
+          </el-select>
+        </div>
+        <div class="filter-row-2">
+          <el-input v-model="filters.related_news_id" clearable placeholder="&#20851;&#32852;&#26032;&#38395;" class="filter-input" />
+          <el-date-picker
+            v-model="filters.date_range"
+            type="datetimerange"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            start-placeholder="&#24320;&#22987;&#26102;&#38388;"
+            end-placeholder="&#32467;&#26463;&#26102;&#38388;"
+            class="filter-date-range"
+          />
+          <div class="filter-actions">
+            <el-button type="primary" @click="handleSearch">&#26597;&#35810;</el-button>
+            <el-button @click="handleReset">&#37325;&#32622;</el-button>
+          </div>
         </div>
       </div>
 
@@ -263,14 +232,6 @@ onMounted(async () => {
             <el-tag :type="statusTagType(scope.row.status)" effect="plain">{{ scope.row.status_label }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="&#31934;&#36873;" width="100">
-          <template #default="scope">
-            <el-tag v-if="options.feature_supported" :type="scope.row.is_featured ? 'success' : 'info'" effect="plain">
-              {{ scope.row.is_featured ? '\u662f' : '\u5426' }}
-            </el-tag>
-            <el-tag v-else type="info" effect="plain">&#19981;&#25903;&#25345;</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="create_time" label="&#21457;&#24067;&#26102;&#38388;" width="170" />
         <el-table-column label="&#25805;&#20316;" width="310" fixed="right">
           <template #default="scope">
@@ -285,9 +246,6 @@ onMounted(async () => {
               @click="runStatusAction(scope.row, action)"
             >
               {{ action === 'approve' ? '\u901a\u8fc7' : action === 'fold' ? '\u6298\u53e0' : action === 'delete' ? '\u5220\u9664' : action === 'restore' ? '\u6062\u590d' : '\u9000\u56de' }}
-            </el-button>
-            <el-button size="small" text :disabled="!options.feature_supported" @click="toggleFeature(scope.row, !scope.row.is_featured)">
-              {{ scope.row.is_featured ? '\u53d6\u6d88\u7cbe\u9009' : '\u8bbe\u4e3a\u7cbe\u9009' }}
             </el-button>
           </template>
         </el-table-column>
@@ -356,9 +314,32 @@ onMounted(async () => {
 .summary-card { padding: 14px; border: 1px solid var(--color-border-light); border-radius: 12px; background: var(--color-bg-page); }
 .summary-card span { display: block; color: var(--color-text-secondary); font-size: 13px; }
 .summary-card strong { display: block; margin-top: 6px; font-size: 22px; color: var(--color-text-primary); }
-.feature-alert, .error-alert { margin-bottom: 16px; }
-.filter-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-.filter-actions { display: flex; gap: 8px; }
+.error-alert { margin-bottom: 16px; }
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.filter-row-1, .filter-row-2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.filter-keyword { width: 320px; }
+.filter-input { width: 200px; }
+.filter-select { width: 200px; }
+.filter-date-range { width: 400px; }
+.filter-row-2 .filter-actions {
+  display: flex;
+  gap: 8px;
+}
+.filter-actions .el-button:first-child {
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  color: #fff;
+}
 .post-table { width: 100%; }
 .tag-item { margin: 0 4px 4px 0; }
 .pagination-row { display: flex; justify-content: flex-end; margin-top: 16px; }

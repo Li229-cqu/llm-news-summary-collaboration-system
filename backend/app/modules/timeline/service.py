@@ -533,7 +533,16 @@ def _build_local_timeline(topic: dict[str, Any], news_rows: list[dict[str, Any]]
                 tags = json.loads(tags)
             except (json.JSONDecodeError, TypeError):
                 tags = []
-        keywords = list(tags[:4]) if isinstance(tags, list) and tags else []
+        # 优先使用清洗后的 tags；如果 tags 为空，fallback 到 topic_name，再 fallback 到 category_name
+        if isinstance(tags, list) and tags:
+            keywords = list(tags[:4])
+        else:
+            topic_name = normalize_text(row.get("topic_name") or "")
+            if topic_name:
+                keywords = [topic_name]
+            else:
+                cat_name = normalize_text(row.get("category_name") or "")
+                keywords = [cat_name] if cat_name else []
 
         # Varied event type
         event_type = _event_types[min(index - 1, len(_event_types) - 1)]

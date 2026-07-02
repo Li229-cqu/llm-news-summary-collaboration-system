@@ -3,6 +3,13 @@
     <!-- 标题优先展示 -->
     <h1 class="news-detail-content__title">{{ news.title }}</h1>
 
+    <!-- 分类 + 话题 + 标签 -->
+    <div v-if="hasMeta" class="news-detail-content__meta">
+      <el-tag v-if="news.category_name" size="small" effect="plain">{{ news.category_name }}</el-tag>
+      <el-tag v-if="news.topic_name" size="small" type="success" effect="light">{{ news.topic_name }}</el-tag>
+      <el-tag v-for="tag in displayTags" :key="tag" size="small" type="info" effect="light">{{ tag }}</el-tag>
+    </div>
+
     <!-- 摘要卡片（标题之后） -->
     <div v-if="news.summary" class="news-detail-content__summary-block">
       <p class="news-detail-content__summary-label">摘要</p>
@@ -36,6 +43,9 @@ export interface NewsDetailContentItem {
   content: string
   cover_image?: string
   view_count?: number
+  category_name?: string
+  topic_name?: string | null
+  tags?: string[]
 }
 
 const props = defineProps<{
@@ -57,6 +67,17 @@ const paragraphs = computed(() =>
     .map((paragraph) => paragraph.trim())
     .filter(Boolean),
 )
+
+const displayTags = computed(() => {
+  if (!props.news.tags?.length) return []
+  const categoryName = props.news.category_name
+  const topicName = props.news.topic_name
+  return props.news.tags.filter(t => t !== categoryName && t !== topicName && t.length >= 2)
+})
+
+const hasMeta = computed(() =>
+  props.news.category_name || props.news.topic_name || displayTags.value.length > 0
+)
 </script>
 
 <style scoped>
@@ -66,7 +87,6 @@ const paragraphs = computed(() =>
   width: 100%;
 }
 
-/* 标题 */
 .news-detail-content__title {
   margin: 0;
   color: var(--color-text-primary);
@@ -74,7 +94,13 @@ const paragraphs = computed(() =>
   line-height: 1.35;
 }
 
-/* 摘要卡片（标题之后，左侧红色竖线） */
+/* 分类/话题/标签 */
+.news-detail-content__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .news-detail-content__summary-block {
   display: grid;
   gap: 8px;
@@ -99,7 +125,6 @@ const paragraphs = computed(() =>
   line-height: 1.85;
 }
 
-/* 封面图 */
 .news-detail-content__cover {
   width: 100%;
   max-height: 420px;
@@ -108,7 +133,6 @@ const paragraphs = computed(() =>
   background: var(--color-bg);
 }
 
-/* 正文：自然占满卡片 */
 .news-detail-content__body {
   display: grid;
   gap: 20px;
@@ -123,7 +147,6 @@ const paragraphs = computed(() =>
   text-indent: 2em;
 }
 
-/* 暗色模式 */
 :root.dark .news-detail-content__summary-block {
   background: color-mix(in srgb, var(--color-primary) 15%, #1f2933);
 }
@@ -133,12 +156,7 @@ const paragraphs = computed(() =>
 }
 
 @media (max-width: 768px) {
-  .news-detail-content__title {
-    font-size: 24px;
-  }
-
-  .news-detail-content__body p {
-    font-size: 15px;
-  }
+  .news-detail-content__title { font-size: 24px; }
+  .news-detail-content__body p { font-size: 15px; }
 }
 </style>

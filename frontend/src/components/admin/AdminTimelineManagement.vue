@@ -54,7 +54,7 @@ const jsonText = ref('')
 const summaryCards = computed(() => {
   const s = timelineData.value?.summary
   return [
-    { key: 'topic_count', label: '全部话题', value: s?.topic_count ?? '--' },
+    { key: 'topic_count', label: '全部主题', value: s?.topic_count ?? '--' },
     { key: 'generated', label: '已生成 Timeline', value: s?.generated_count ?? '--' },
     { key: 'not_generated', label: '未生成 Timeline', value: s?.not_generated_count ?? '--' },
     { key: 'failed', label: '生成失败', value: s?.failed_count ?? '--' },
@@ -210,7 +210,7 @@ onMounted(async () => {
 
     <!-- filters -->
     <div class="filter-row">
-      <el-input v-model="query.keyword" placeholder="话题名称或关键词" clearable style="width:200px" />
+      <el-input v-model="query.keyword" placeholder="主题名称或关键词" clearable style="width:200px" />
       <el-select v-model="query.generate_status" placeholder="生成状态" clearable style="width:160px">
         <el-option v-for="o in timelineOptions?.status_options || []" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
@@ -231,7 +231,7 @@ onMounted(async () => {
 
     <!-- table -->
     <el-table v-loading="loading" :data="timelineData?.items || []" border>
-      <el-table-column prop="topic_name" label="话题名称" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="topic_name" label="事件主题" min-width="200" show-overflow-tooltip />
       <el-table-column label="关键词" min-width="200">
         <template #default="scope">
           <el-tag v-for="tag in scope.row.keyword_list" :key="tag" size="small" effect="plain" class="tag-item">{{ tag }}</el-tag>
@@ -278,7 +278,7 @@ onMounted(async () => {
       <div v-if="loadingDetail" v-loading="loadingDetail" style="min-height:200px" />
       <template v-else-if="detailData">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="话题名称">{{ detailData.topic_name }}</el-descriptions-item>
+          <el-descriptions-item label="事件主题">{{ detailData.topic_name }}</el-descriptions-item>
           <el-descriptions-item label="生成状态">
             <el-tag :type="statusTagType(detailData.generate_status)" size="small">{{ detailData.generate_status_label }}</el-tag>
           </el-descriptions-item>

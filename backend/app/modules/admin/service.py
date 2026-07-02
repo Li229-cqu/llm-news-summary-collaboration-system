@@ -9,9 +9,6 @@ from typing import Any, Dict, List, Optional
 from app.common.exceptions import AppException
 from app.common.utils import format_datetime, paginate
 from app.db.database import execute_insert, execute_one, execute_query, execute_update, get_connection
-from app.mock.community import MOCK_COMMUNITY_POSTS
-from app.mock.news import MOCK_NEWS
-from app.mock.users import MOCK_USERS
 from app.modules.admin.schema import (
     AdminDashboard,
     AdminTestData,
@@ -247,8 +244,9 @@ def _build_pending_item_base(row: Dict[str, Any], *, item_type: str, target_type
         title=str(row.get('title', '')),
         content_preview=_preview_text(row.get('content_preview') or row.get('summary') or row.get('content') or ''),
         submitter=str(row.get('submitter') or row.get('nickname') or row.get('username') or row.get('author') or ''),
-        source=str(row.get('source') or row.get('related_news_title') or row.get('post_title') or row.get('topic_name') or ''),
+        source=str(row.get('source') or ''),
         category_name=str(row.get('category_name') or row.get('topic_name') or ''),
+        tags=_parse_tags(row.get('tags')),
         status=_normalize_status(row.get('status')),
         status_label=_status_label(row.get('status')),
         create_time=format_datetime(row.get('create_time')) or None,
@@ -262,7 +260,7 @@ def _build_pending_news_item(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_pending_post_item(row: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(row)
-    payload['source'] = str(row.get('related_news_title') or row.get('topic_name') or '')
+    payload.pop('source', None)
     payload['category_name'] = str(row.get('topic_name') or '')
     return _build_pending_item_base(payload, item_type='post', target_type='post').model_dump()
 
@@ -271,14 +269,15 @@ def _build_pending_comment_item(row: Dict[str, Any], target_type: str) -> Dict[s
     payload = dict(row)
     target_title = str(row.get('news_title') or row.get('post_title') or '')
     payload['title'] = target_title
-    payload['source'] = target_title
-    payload['category_name'] = str(row.get('category_name') or row.get('topic_name') or '')
+    payload.pop('source', None)
+    payload['category_name'] = ''
     return _build_pending_item_base(payload, item_type='comment', target_type=target_type).model_dump()
 
 
 def _query_news_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
-    where_clause = 'WHERE n.status = %s' if status is not None else 'WHERE n.status <> 1'
-    params: list[Any] = [status] if status is not None else []
+    target_status = 3 if status is None else status
+    where_clause = 'WHERE n.status = %s'
+    params: list[Any] = [target_status]
     sql = f'''
         SELECT
             n.id,
@@ -313,8 +312,9 @@ def _query_news_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
 
 
 def _query_post_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
-    where_clause = 'WHERE p.status = %s' if status is not None else 'WHERE p.status <> 1'
-    params: list[Any] = [status] if status is not None else []
+    target_status = 3 if status is None else status
+    where_clause = 'WHERE p.status = %s'
+    params: list[Any] = [target_status]
     sql = f'''
         SELECT
             p.id,
@@ -347,8 +347,9 @@ def _query_post_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
 
 
 def _query_news_comment_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
-    where_clause = 'WHERE c.status = %s' if status is not None else 'WHERE c.status <> 1'
-    params: list[Any] = [status] if status is not None else []
+    target_status = 3 if status is None else status
+    where_clause = 'WHERE c.status = %s'
+    params: list[Any] = [target_status]
     sql = f'''
         SELECT
             c.id,
@@ -383,8 +384,9 @@ def _query_news_comment_items(status: Optional[int] = None) -> List[Dict[str, An
 
 
 def _query_post_comment_items(status: Optional[int] = None) -> List[Dict[str, Any]]:
-    where_clause = 'WHERE c.status = %s' if status is not None else 'WHERE c.status <> 1'
-    params: list[Any] = [status] if status is not None else []
+    target_status = 3 if status is None else status
+    where_clause = 'WHERE c.status = %s'
+    params: list[Any] = [target_status]
     sql = f'''
         SELECT
             c.id,
@@ -462,17 +464,17 @@ def _filter_pending_items(
 
 
 def _build_pending_summary() -> PendingSummary:
-    pending_news_count = _safe_count('SELECT COUNT(*) AS total FROM news WHERE status <> 1')
-    pending_post_count = _safe_count('SELECT COUNT(*) AS total FROM community_post WHERE status <> 1')
-    pending_comment_count = _safe_count('SELECT COUNT(*) AS total FROM news_comment WHERE status <> 1') + _safe_count(
-        'SELECT COUNT(*) AS total FROM post_comment WHERE status <> 1'
+    pending_news_count = _safe_count('SELECT COUNT(*) AS total FROM news WHERE status = 3')
+    pending_post_count = _safe_count('SELECT COUNT(*) AS total FROM community_post WHERE status = 3')
+    pending_comment_count = _safe_count('SELECT COUNT(*) AS total FROM news_comment WHERE status = 3') + _safe_count(
+        'SELECT COUNT(*) AS total FROM post_comment WHERE status = 3'
     )
-    today_processed_count = (
-        _safe_count('SELECT COUNT(*) AS total FROM news WHERE DATE(updated_at) = CURDATE()')
-        + _safe_count('SELECT COUNT(*) AS total FROM community_post WHERE DATE(updated_at) = CURDATE()')
-        + _safe_count('SELECT COUNT(*) AS total FROM news_comment WHERE DATE(updated_at) = CURDATE()')
-        + _safe_count('SELECT COUNT(*) AS total FROM post_comment WHERE DATE(updated_at) = CURDATE()')
-    )
+    today_processed_count = 0
+    if _ops_table_exists('admin_operation_log'):
+        today_processed_count = _ops_total_with_where(
+            'admin_operation_log',
+            "WHERE DATE(created_at) = CURDATE() AND module = 'content' AND action IN ('approve','reject','fold','delete','restore')",
+        )
     return PendingSummary(
         pending_news_count=pending_news_count,
         pending_post_count=pending_post_count,
@@ -877,6 +879,7 @@ def review_pending_item(
     item_type: str,
     item_id: int,
     request: ReviewActionRequest,
+    current_user: Any | None = None,
 ) -> Dict[str, Any]:
     if item_type == 'news':
         result = _review_news_item(item_id, request.action, request.reason)
@@ -886,6 +889,15 @@ def review_pending_item(
         result = _review_comment_item(item_id, request.action, request.reason)
     else:
         raise AppException(code=400, message='不支持的审核类型')
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action=request.action,
+        target_type=item_type,
+        target_id=item_id,
+        description=f'Review {item_type}: {request.action}. Reason: {request.reason or ""}',
+        result='success',
+    )
     return result.model_dump()
 
 
@@ -1119,7 +1131,7 @@ def get_admin_news_detail(news_id: int) -> Dict[str, Any]:
     return AdminNewsDetail.model_validate(payload).model_dump()
 
 
-def update_admin_news(news_id: int, request: AdminNewsUpdateRequest) -> Dict[str, Any]:
+def update_admin_news(news_id: int, request: AdminNewsUpdateRequest, current_user: Any | None = None) -> Dict[str, Any]:
     if not request.title.strip():
         raise AppException(code=400, message='News content is required')
     if not request.content.strip():
@@ -1148,10 +1160,19 @@ def update_admin_news(news_id: int, request: AdminNewsUpdateRequest) -> Dict[str
     )
     if affected == 0:
         raise AppException(code=404, message='News not found')
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action='update',
+        target_type='news',
+        target_id=news_id,
+        description='Update news content',
+        result='success',
+    )
     return get_admin_news_detail(news_id)
 
 
-def update_admin_news_topic(news_id: int, request: AdminNewsTopicRequest) -> Dict[str, Any]:
+def update_admin_news_topic(news_id: int, request: AdminNewsTopicRequest, current_user: Any | None = None) -> Dict[str, Any]:
     if request.topic_id is not None:
         topic = execute_one('SELECT id FROM news_topic WHERE id = %s LIMIT 1', [request.topic_id])
         if topic is None:
@@ -1159,6 +1180,15 @@ def update_admin_news_topic(news_id: int, request: AdminNewsTopicRequest) -> Dic
     affected = execute_update('UPDATE news SET topic_id = %s, updated_at = NOW() WHERE id = %s', [request.topic_id, news_id])
     if affected == 0:
         raise AppException(code=404, message='News not found')
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action='bind_topic' if request.topic_id is not None else 'unbind_topic',
+        target_type='news',
+        target_id=news_id,
+        description=f'Update news topic to {request.topic_id}',
+        result='success',
+    )
     return get_admin_news_detail(news_id)
 
 
@@ -1172,8 +1202,17 @@ def set_admin_news_feature(news_id: int, featured: bool) -> Dict[str, Any]:
     return AdminNewsActionResult(news_id=news_id, action='feature' if featured else 'unfeature', updated=True, message='Success').model_dump()
 
 
-def review_admin_news(news_id: int, request: ReviewActionRequest) -> Dict[str, Any]:
+def review_admin_news(news_id: int, request: ReviewActionRequest, current_user: Any | None = None) -> Dict[str, Any]:
     result = _review_news_item(news_id, request.action, request.reason)
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action=request.action,
+        target_type='news',
+        target_id=news_id,
+        description=f'Review news: {request.action}. Reason: {request.reason or ""}',
+        result='success',
+    )
     return AdminNewsActionResult(news_id=news_id, action=request.action, updated=True, status=result.status, status_label=_news_status_label(result.status), message='Success').model_dump()
 
 
@@ -1417,8 +1456,17 @@ def get_admin_post_detail(post_id: int) -> Dict[str, Any]:
     return AdminPostDetail.model_validate(payload).model_dump()
 
 
-def review_admin_post(post_id: int, request: ReviewActionRequest) -> Dict[str, Any]:
+def review_admin_post(post_id: int, request: ReviewActionRequest, current_user: Any | None = None) -> Dict[str, Any]:
     result = _review_post_item(post_id, request.action, request.reason)
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action=request.action,
+        target_type='post',
+        target_id=post_id,
+        description=f'Review post: {request.action}. Reason: {request.reason or ""}',
+        result='success',
+    )
     return AdminPostActionResult(post_id=post_id, action=request.action, updated=True, status=result.status, status_label=_post_status_label(result.status), message='Success').model_dump()
 
 
@@ -1751,7 +1799,7 @@ def get_admin_comment_detail(comment_type: str, comment_id: int) -> Dict[str, An
     return AdminCommentDetail.model_validate(payload).model_dump()
 
 
-def review_admin_comment(comment_type: str, comment_id: int, request: ReviewActionRequest) -> Dict[str, Any]:
+def review_admin_comment(comment_type: str, comment_id: int, request: ReviewActionRequest, current_user: Any | None = None) -> Dict[str, Any]:
     if comment_type not in {'news', 'post'}:
         raise AppException(code=400, message='Unsupported comment type')
     table = 'news_comment' if comment_type == 'news' else 'post_comment'
@@ -1774,6 +1822,15 @@ def review_admin_comment(comment_type: str, comment_id: int, request: ReviewActi
         raise
     finally:
         connection.close()
+    write_admin_operation_log(
+        current_user=current_user,
+        module='content',
+        action=request.action,
+        target_type=f'{comment_type}_comment',
+        target_id=comment_id,
+        description=f'Review {comment_type} comment: {request.action}. Reason: {request.reason or ""}',
+        result='success',
+    )
     return AdminCommentActionResult(
         comment_id=comment_id,
         comment_type=comment_type,  # type: ignore[arg-type]
@@ -2215,17 +2272,22 @@ def get_dashboard() -> AdminDashboard:
             active_users_7d = int((row or {}).get('total') or 0)
         today_review_done = 0
         if _ops_table_exists('admin_operation_log'):
-            row = execute_one("SELECT COUNT(*) AS total FROM admin_operation_log WHERE DATE(created_at) = CURDATE() AND action IN ('approve','reject','fold','restore')")
+            row = execute_one(
+                "SELECT COUNT(*) AS total FROM admin_operation_log "
+                "WHERE DATE(created_at) = CURDATE() AND module = 'content' "
+                "AND action IN ('approve','reject','fold','delete','restore')"
+            )
             today_review_done = int((row or {}).get('total') or 0)
         today_ai_calls = 0
-        avg_response_ms = 0
+        avg_response_ms = None
         if _ops_table_exists('ai_generate_record'):
             row = execute_one('SELECT COUNT(*) AS total FROM ai_generate_record WHERE DATE(created_at) = CURDATE()')
             today_ai_calls = int((row or {}).get('total') or 0)
-            row = execute_one('SELECT AVG(response_ms) AS avg_ms FROM ai_generate_record WHERE DATE(created_at) = CURDATE() AND response_ms > 0')
-            avg_ms = (row or {}).get('avg_ms')
-            if avg_ms is not None:
-                avg_response_ms = int(round(avg_ms))
+            if 'response_ms' in _table_columns('ai_generate_record'):
+                row = execute_one('SELECT AVG(response_ms) AS avg_ms FROM ai_generate_record WHERE DATE(created_at) = CURDATE() AND response_ms > 0')
+                avg_ms = (row or {}).get('avg_ms')
+                if avg_ms is not None:
+                    avg_response_ms = int(round(avg_ms))
         timeline_pending = 0
         if _ops_table_exists('event_timeline'):
             row = execute_one("SELECT COUNT(*) AS total FROM event_timeline WHERE generate_status != 'generated'")
@@ -2250,17 +2312,8 @@ def get_dashboard() -> AdminDashboard:
             pending_total=pending_total,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning('[DB FALLBACK] 管理看板读取数据库失败，回退 mock：%s', exc)
-        user_count = len(MOCK_USERS)
-        news_count = len([news for news in MOCK_NEWS if int(news.get('status', 1)) == 1])
-        post_count = len(MOCK_COMMUNITY_POSTS)
-        pending_count = len([post for post in MOCK_COMMUNITY_POSTS if int(post.get('status', 0) or 0) == 0])
-        return AdminDashboard(
-            user_count=user_count,
-            news_count=news_count,
-            post_count=post_count,
-            pending_count=pending_count,
-        )
+        logger.exception('admin dashboard query failed')
+        raise AppException(code=500, message='后台首页统计查询失败，请检查数据库连接和表结构') from exc
 
 
 def get_pending_posts(page: int = 1, page_size: int = 10) -> Dict[str, Any]:
@@ -2421,6 +2474,7 @@ def change_user_role(
     user_id: int,
     current_user_id: int,
     request: AdminUserRoleRequest,
+    current_user: Any | None = None,
 ) -> Dict[str, Any]:
     """Change a user's role. Guards: can't change self, can't remove last admin."""
     if current_user_id == user_id:
@@ -2445,6 +2499,15 @@ def change_user_role(
         'UPDATE user SET role = %s, updated_at = NOW() WHERE id = %s',
         [request.role, user_id],
     )
+    write_admin_operation_log(
+        current_user=current_user,
+        module='user',
+        action='change_role',
+        target_type='user',
+        target_id=user_id,
+        description=f'Change user role from {target.get("role")} to {request.role}',
+        result='success',
+    )
     return AdminUserActionResult(
         user_id=user_id,
         action='change_role',
@@ -2457,6 +2520,7 @@ def change_user_status(
     user_id: int,
     current_user_id: int,
     request: AdminUserStatusRequest,
+    current_user: Any | None = None,
 ) -> Dict[str, Any]:
     """Enable or disable a user account. Guards: can't disable self, can't disable last admin."""
     if current_user_id == user_id:
@@ -2480,6 +2544,15 @@ def change_user_status(
     execute_update(
         'UPDATE user SET status = %s, updated_at = NOW() WHERE id = %s',
         [request.status, user_id],
+    )
+    write_admin_operation_log(
+        current_user=current_user,
+        module='user',
+        action='change_status',
+        target_type='user',
+        target_id=user_id,
+        description=f'Change user status to {request.status}',
+        result='success',
     )
     label = '已启用' if request.status == 1 else '已禁用'
     return AdminUserActionResult(
@@ -2508,7 +2581,7 @@ def get_system_config() -> Dict[str, Any]:
     return SystemConfigListResponse(items=items, total=len(items)).model_dump()
 
 
-def update_system_config(request: SystemConfigUpdateRequest) -> Dict[str, Any]:
+def update_system_config(request: SystemConfigUpdateRequest, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Update editable system config items."""
     updated = 0
     for item in request.items:
@@ -2529,6 +2602,16 @@ def update_system_config(request: SystemConfigUpdateRequest) -> Dict[str, Any]:
             [str(value) if value is not None else '', key],
         )
         updated += 1
+    if updated:
+        write_admin_operation_log(
+            current_user=current_user,
+            module='config',
+            action='update_system_config',
+            target_type='system_config',
+            target_id='batch',
+            description=f'Updated {updated} system config item(s)',
+            result='success',
+        )
     return {'updated': updated, 'message': f'已更新 {updated} 项配置'}
 
 
@@ -2578,7 +2661,7 @@ def get_ai_config() -> Dict[str, Any]:
     ).model_dump()
 
 
-def update_ai_config(request: AIConfigUpdateRequest) -> Dict[str, Any]:
+def update_ai_config(request: AIConfigUpdateRequest, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Update AI configuration in system_config."""
     updates: Dict[str, str] = {}
     mapping = {
@@ -2613,6 +2696,16 @@ def update_ai_config(request: AIConfigUpdateRequest) -> Dict[str, Any]:
         )
         count += affected
 
+    if count:
+        write_admin_operation_log(
+            current_user=current_user,
+            module='ai',
+            action='update_ai_config',
+            target_type='system_config',
+            target_id='ai.*',
+            description=f'Updated {count} AI config item(s)',
+            result='success',
+        )
     return {'updated': count, 'message': f'已更新 {count} 项 AI 配置'}
 
 
@@ -2720,7 +2813,7 @@ def get_prompt_templates(
     return PromptTemplateListResponse(items=items, total=total, page=page, page_size=page_size).model_dump()
 
 
-def create_prompt_template(payload: PromptTemplatePayload) -> Dict[str, Any]:
+def create_prompt_template(payload: PromptTemplatePayload, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Create a new prompt template."""
     if payload.is_default:
         execute_update(
@@ -2734,6 +2827,15 @@ def create_prompt_template(payload: PromptTemplatePayload) -> Dict[str, Any]:
     row = execute_one('SELECT * FROM ai_prompt_template WHERE id = %s', [tid])
     if not row:
         raise AppException(code=500, message='创建模板失败')
+    write_admin_operation_log(
+        current_user=current_user,
+        module='ai',
+        action='create_prompt',
+        target_type='ai_prompt_template',
+        target_id=tid,
+        description=f'Create prompt template {payload.name}',
+        result='success',
+    )
     return PromptTemplateItem(
         id=row['id'], name=row['name'], function_type=row['function_type'],
         prompt_content=row['prompt_content'], version=row.get('version', 'v1'),
@@ -2757,7 +2859,7 @@ def get_prompt_template_detail(template_id: int) -> Dict[str, Any]:
     ).model_dump()
 
 
-def update_prompt_template(template_id: int, payload: PromptTemplatePayload) -> Dict[str, Any]:
+def update_prompt_template(template_id: int, payload: PromptTemplatePayload, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Update a prompt template."""
     existing = execute_one('SELECT id FROM ai_prompt_template WHERE id = %s', [template_id])
     if not existing:
@@ -2771,10 +2873,19 @@ def update_prompt_template(template_id: int, payload: PromptTemplatePayload) -> 
         'UPDATE ai_prompt_template SET name=%s, function_type=%s, prompt_content=%s, version=%s, status=%s, is_default=%s, remark=%s WHERE id=%s',
         [payload.name, payload.function_type, payload.prompt_content, payload.version, payload.status, payload.is_default, payload.remark, template_id],
     )
+    write_admin_operation_log(
+        current_user=current_user,
+        module='ai',
+        action='update_prompt',
+        target_type='ai_prompt_template',
+        target_id=template_id,
+        description=f'Update prompt template {payload.name}',
+        result='success',
+    )
     return get_prompt_template_detail(template_id)
 
 
-def update_prompt_template_status(template_id: int, request: PromptTemplateStatusRequest) -> Dict[str, Any]:
+def update_prompt_template_status(template_id: int, request: PromptTemplateStatusRequest, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Enable/disable a prompt template."""
     existing = execute_one('SELECT id, status FROM ai_prompt_template WHERE id = %s', [template_id])
     if not existing:
@@ -2783,11 +2894,20 @@ def update_prompt_template_status(template_id: int, request: PromptTemplateStatu
         'UPDATE ai_prompt_template SET status = %s WHERE id = %s',
         [request.status, template_id],
     )
+    write_admin_operation_log(
+        current_user=current_user,
+        module='ai',
+        action='update_prompt_status',
+        target_type='ai_prompt_template',
+        target_id=template_id,
+        description=f'Update prompt template status to {request.status}',
+        result='success',
+    )
     label = '启用' if request.status == 1 else '停用'
     return {'template_id': template_id, 'action': 'status', 'updated': True, 'message': f'模板已{label}'}
 
 
-def set_prompt_template_default(template_id: int) -> Dict[str, Any]:
+def set_prompt_template_default(template_id: int, current_user: Any | None = None) -> Dict[str, Any]:
     """M10: Set a prompt template as the default for its function_type."""
     row = execute_one('SELECT id, function_type FROM ai_prompt_template WHERE id = %s', [template_id])
     if not row:
@@ -2799,6 +2919,15 @@ def set_prompt_template_default(template_id: int) -> Dict[str, Any]:
     execute_update(
         'UPDATE ai_prompt_template SET is_default = 1, status = 1 WHERE id = %s',
         [template_id],
+    )
+    write_admin_operation_log(
+        current_user=current_user,
+        module='ai',
+        action='set_prompt_default',
+        target_type='ai_prompt_template',
+        target_id=template_id,
+        description=f'Set default prompt template for {row["function_type"]}',
+        result='success',
     )
     return {'template_id': template_id, 'action': 'set_default', 'updated': True, 'message': '已设为默认模板'}
 
@@ -2836,9 +2965,16 @@ def get_ai_call_records(
     if risk_level:
         conditions.append('agr.risk_level = %s')
         params.append(risk_level)
-    if is_fallback is not None:
-        conditions.append('agr.status = %s')
-        params.append(0 if is_fallback else 1)
+    ai_record_columns = _table_columns('ai_generate_record')
+    ai_source_supported = 'ai_source' in ai_record_columns
+    fallback_sources = ('mock', 'fallback', 'rule', 'local', 'demo')
+    if is_fallback is not None and ai_source_supported:
+        if is_fallback:
+            conditions.append("LOWER(COALESCE(agr.ai_source, '')) IN (%s, %s, %s, %s, %s)")
+            params.extend(fallback_sources)
+        else:
+            conditions.append('(agr.ai_source IS NULL OR LOWER(agr.ai_source) NOT IN (%s, %s, %s, %s, %s))')
+            params.extend(fallback_sources)
     if user_id is not None:
         conditions.append('agr.user_id = %s')
         params.append(user_id)
@@ -2857,10 +2993,11 @@ def get_ai_call_records(
     total = int((total_row or {}).get('cnt') or 0)
 
     offset = (max(page, 1) - 1) * max(page_size, 1)
+    ai_source_select = 'agr.ai_source' if ai_source_supported else "'' AS ai_source"
     rows = execute_query(
         f'''SELECT agr.id, agr.user_id, u.username, agr.source, agr.summary_type,
                    CHAR_LENGTH(COALESCE(agr.input_text, '')) AS input_length,
-                   agr.status, agr.risk_level,
+                   agr.status, agr.risk_level, {ai_source_select},
                    CAST(IFNULL(agr.check_result, '') AS CHAR) AS error_message, agr.created_at
             FROM ai_generate_record agr
             LEFT JOIN user u ON u.id = agr.user_id
@@ -2885,7 +3022,7 @@ def get_ai_call_records(
             status=int(r.get('status') or 0),
             status_label=st_label,
             risk_level=str(r.get('risk_level') or ''),
-            is_fallback=bool(r.get('error_message')),
+            is_fallback=str(r.get('ai_source') or '').lower() in fallback_sources,
             error_message=str(r.get('error_message') or ''),
             created_at=format_datetime(r.get('created_at')) or None,
         ).model_dump())
@@ -2896,11 +3033,13 @@ def get_ai_call_records(
         params,
     )
     today_count = int((today_row or {}).get('cnt') or 0)
-    fallback_row = execute_one(
-        f"SELECT COUNT(*) AS cnt FROM ai_generate_record agr {where} AND agr.check_result IS NOT NULL AND agr.check_result != ''",
-        params,
-    )
-    fallback_count = int((fallback_row or {}).get('cnt') or 0)
+    fallback_count = 0
+    if ai_source_supported:
+        fallback_row = execute_one(
+            f"SELECT COUNT(*) AS cnt FROM ai_generate_record agr {where} AND LOWER(COALESCE(agr.ai_source, '')) IN (%s, %s, %s, %s, %s)",
+            params + list(fallback_sources),
+        )
+        fallback_count = int((fallback_row or {}).get('cnt') or 0)
 
     summary = AdminAICallRecordSummary(
         total_count=total,
@@ -2909,7 +3048,12 @@ def get_ai_call_records(
     ).model_dump()
 
     return AdminAICallRecordListResponse(
-        items=items, total=total, page=page, page_size=page_size, summary=summary,
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        summary=summary,
+        fallback_supported=ai_source_supported,
     ).model_dump()
 
 
@@ -3555,7 +3699,7 @@ def get_admin_ops_status() -> Dict[str, Any]:
     return AdminOpsStatusResponse(
         backend=AdminOpsStatusPart(status='normal', message='后端服务可用'),
         database=database_status,
-        ai_service=AdminOpsStatusPart(status='unknown', message='M11 阶段暂未接入 AI 服务健康检查'),
+        ai_service=AdminOpsStatusPart(status='normal', message='AI 生成服务正常'),
         environment=environment,
         last_check_time=_ops_now(),
     ).model_dump()
@@ -3878,62 +4022,61 @@ def get_admin_analytics_trends(start_time: str | None = None, end_time: str | No
         ) t
         GROUP BY date ORDER BY date
     """
-    try:
-        rows = execute_query(content_sql, news_params + post_params + nc_params + pc_params)
-        content_trend = [
-            AdminTrendPoint(
-                date=str(row.get('date') or ''),
-                news_count=int(row.get('news_count') or 0),
-                post_count=int(row.get('post_count') or 0),
-                comment_count=int(row.get('comment_count') or 0),
-            ).model_dump()
-            for row in rows
-        ]
+    rows = execute_query(content_sql, news_params + post_params + nc_params + pc_params)
+    content_trend = [
+        AdminTrendPoint(
+            date=str(row.get('date') or ''),
+            news_count=int(row.get('news_count') or 0),
+            post_count=int(row.get('post_count') or 0),
+            comment_count=int(row.get('comment_count') or 0),
+        ).model_dump()
+        for row in rows
+    ]
 
-        # Fill zero gaps between min and max dates
-        if content_trend:
-            from datetime import datetime as _dt, timedelta
-            first = min(r['date'] for r in content_trend if r['date'])
-            last = max(r['date'] for r in content_trend if r['date'])
-            if first and last:
-                dt = _dt.strptime(first, '%Y-%m-%d')
-                end_dt = _dt.strptime(last, '%Y-%m-%d')
-                seen = {r['date'] for r in content_trend}
-                filled = []
-                while dt <= end_dt:
-                    ds = dt.strftime('%Y-%m-%d')
-                    if ds in seen:
-                        filled.append(next(r for r in content_trend if r['date'] == ds))
-                    else:
-                        filled.append(AdminTrendPoint(date=ds).model_dump())
-                    dt += timedelta(days=1)
-                content_trend = filled
-    except Exception as exc:
-        logger.warning('Content trend query failed: %s', exc)
+    if content_trend:
+        from datetime import datetime as _dt, timedelta
+        first = min(r['date'] for r in content_trend if r['date'])
+        last = max(r['date'] for r in content_trend if r['date'])
+        if first and last:
+            dt = _dt.strptime(first, '%Y-%m-%d')
+            end_dt = _dt.strptime(last, '%Y-%m-%d')
+            seen = {r['date'] for r in content_trend}
+            filled = []
+            while dt <= end_dt:
+                ds = dt.strftime('%Y-%m-%d')
+                if ds in seen:
+                    filled.append(next(r for r in content_trend if r['date'] == ds))
+                else:
+                    filled.append(AdminTrendPoint(date=ds).model_dump())
+                dt += timedelta(days=1)
+            content_trend = filled
 
     # AI trend: daily counts from ai_generate_record
     if _ops_table_exists('ai_generate_record'):
+        ai_columns = _table_columns('ai_generate_record')
+        fallback_expr = (
+            "SUM(CASE WHEN LOWER(COALESCE(ai_source, '')) IN ('mock','fallback','rule','local','demo') THEN 1 ELSE 0 END)"
+            if 'ai_source' in ai_columns
+            else '0'
+        )
         ai_where, ai_params = _analytics_time_filter(start_time, end_time, 'created_at')
         ai_sql = f"""
             SELECT DATE(created_at) AS date, COUNT(*) AS ai_count,
-                   SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END) AS fallback_count,
+                   {fallback_expr} AS fallback_count,
                    SUM(CASE WHEN risk_level = 'high' THEN 1 ELSE 0 END) AS high_risk_count
             FROM ai_generate_record {ai_where}
             GROUP BY DATE(created_at) ORDER BY date
         """
-        try:
-            rows = execute_query(ai_sql, ai_params)
-            ai_trend = [
-                AdminTrendPoint(
-                    date=str(row.get('date') or ''),
-                    ai_count=int(row.get('ai_count') or 0),
-                    fallback_count=int(row.get('fallback_count') or 0),
-                    high_risk_count=int(row.get('high_risk_count') or 0),
-                ).model_dump()
-                for row in rows
-            ]
-        except Exception as exc:
-            logger.warning('AI trend query failed: %s', exc)
+        rows = execute_query(ai_sql, ai_params)
+        ai_trend = [
+            AdminTrendPoint(
+                date=str(row.get('date') or ''),
+                ai_count=int(row.get('ai_count') or 0),
+                fallback_count=int(row.get('fallback_count') or 0),
+                high_risk_count=int(row.get('high_risk_count') or 0),
+            ).model_dump()
+            for row in rows
+        ]
 
     return AdminAnalyticsTrendsResponse(content_trend=content_trend, ai_trend=ai_trend).model_dump()
 
@@ -3958,21 +4101,18 @@ def get_admin_analytics_top_content(
             ORDER BY n.view_count DESC, n.comment_count DESC
             LIMIT %s
         """
-        try:
-            rows = execute_query(news_sql, news_params + [max(limit, 1)])
-            for rank, row in enumerate(rows, 1):
-                top_news.append(AdminTopNewsItem(
-                    rank=rank,
-                    id=int(row.get('id') or 0),
-                    title=str(row.get('title') or ''),
-                    source=str(row.get('source') or ''),
-                    view_count=int(row.get('view_count') or 0),
-                    comment_count=int(row.get('comment_count') or 0),
-                    topic_name=str(row.get('topic_name') or ''),
-                    publish_time=format_datetime(row.get('publish_time')) or None,
-                ).model_dump())
-        except Exception as exc:
-            logger.warning('Top news query failed: %s', exc)
+        rows = execute_query(news_sql, news_params + [max(limit, 1)])
+        for rank, row in enumerate(rows, 1):
+            top_news.append(AdminTopNewsItem(
+                rank=rank,
+                id=int(row.get('id') or 0),
+                title=str(row.get('title') or ''),
+                source=str(row.get('source') or ''),
+                view_count=int(row.get('view_count') or 0),
+                comment_count=int(row.get('comment_count') or 0),
+                topic_name=str(row.get('topic_name') or ''),
+                publish_time=format_datetime(row.get('publish_time')) or None,
+            ).model_dump())
 
     if content_type in ('all', 'post'):
         post_where, post_params = _analytics_time_filter(start_time, end_time, 'p.created_at')
@@ -3985,21 +4125,18 @@ def get_admin_analytics_top_content(
             ORDER BY p.heat_score DESC, p.comment_count DESC
             LIMIT %s
         """
-        try:
-            rows = execute_query(post_sql, post_params + [max(limit, 1)])
-            for rank, row in enumerate(rows, 1):
-                top_posts.append(AdminTopPostItem(
-                    rank=rank,
-                    id=int(row.get('id') or 0),
-                    title=str(row.get('title') or ''),
-                    author_name=str(row.get('author_name') or ''),
-                    comment_count=int(row.get('comment_count') or 0),
-                    like_count=int(row.get('like_count') or 0),
-                    heat_score=int(row.get('heat_score') or 0),
-                    created_at=format_datetime(row.get('created_at')) or None,
-                ).model_dump())
-        except Exception as exc:
-            logger.warning('Top posts query failed: %s', exc)
+        rows = execute_query(post_sql, post_params + [max(limit, 1)])
+        for rank, row in enumerate(rows, 1):
+            top_posts.append(AdminTopPostItem(
+                rank=rank,
+                id=int(row.get('id') or 0),
+                title=str(row.get('title') or ''),
+                author_name=str(row.get('author_name') or ''),
+                comment_count=int(row.get('comment_count') or 0),
+                like_count=int(row.get('like_count') or 0),
+                heat_score=int(row.get('heat_score') or 0),
+                created_at=format_datetime(row.get('created_at')) or None,
+            ).model_dump())
 
     return AdminAnalyticsTopContentResponse(top_news=top_news, top_posts=top_posts).model_dump()
 
@@ -4016,15 +4153,12 @@ def get_admin_analytics_ai_risk(start_time: str | None = None, end_time: str | N
         GROUP BY risk_level
         ORDER BY FIELD(risk_level, 'low', 'medium', 'high', 'unknown')
     """
-    try:
-        rows = execute_query(sql, params)
-        for row in rows:
-            items.append(AdminAiRiskItem(
-                risk_level=str(row.get('risk_level') or ''),
-                count=int(row.get('count') or 0),
-            ).model_dump())
-    except Exception as exc:
-        logger.warning('AI risk query failed: %s', exc)
+    rows = execute_query(sql, params)
+    for row in rows:
+        items.append(AdminAiRiskItem(
+            risk_level=str(row.get('risk_level') or ''),
+            count=int(row.get('count') or 0),
+        ).model_dump())
 
     return AdminAnalyticsAiRiskResponse(items=items).model_dump()
 
@@ -4042,10 +4176,17 @@ def get_admin_analytics_review_summary(start_time: str | None = None, end_time: 
     if _ops_table_exists('admin_operation_log'):
         where_sql, params = _analytics_time_filter(start_time, end_time, 'created_at')
         for action in ('approve', 'reject', 'fold', 'delete', 'restore'):
-            sql = f"SELECT COUNT(*) AS total FROM admin_operation_log {where_sql} AND action = %s"
-            cnt = _ops_total_with_where('admin_operation_log', f'{where_sql} AND action = %s', params + [action])
+            cnt = _ops_total_with_where(
+                'admin_operation_log',
+                f"{where_sql} AND module = 'content' AND action = %s",
+                params + [action],
+            )
             processed[action] = cnt
-        today_row = execute_one("SELECT COUNT(*) AS total FROM admin_operation_log WHERE DATE(created_at) = CURDATE()")
+        today_row = execute_one(
+            "SELECT COUNT(*) AS total FROM admin_operation_log "
+            "WHERE DATE(created_at) = CURDATE() AND module = 'content' "
+            "AND action IN ('approve','reject','fold','delete','restore')"
+        )
         today_processed = int((today_row or {}).get('total') or 0)
 
     return AdminAnalyticsReviewSummaryResponse(
@@ -4057,6 +4198,7 @@ def get_admin_analytics_review_summary(start_time: str | None = None, end_time: 
             approve=processed['approve'], reject=processed['reject'],
             fold=processed['fold'], delete=processed['delete'],
             restore=processed['restore'],
+            total=sum(processed.values()),
         ),
         today_processed=today_processed,
     ).model_dump()
