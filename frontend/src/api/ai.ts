@@ -89,7 +89,10 @@ export function generateTitleSummaryAsync(data: AIGenerateRequest) {
 
 /** 查询异步任务结果。 */
 export function getAsyncTaskResult(taskId: string) {
-  return request.get<{ task_id: string; status: string; result?: AIGenerateResponse; error?: string }>(
+  return request.get<
+    { task_id: string; status: string; result?: AIGenerateResponse; error?: string },
+    { task_id: string; status: string; result?: AIGenerateResponse; error?: string }
+  >(
     `/api/ai/generate/async/${taskId}`,
     { timeout: 5000 }
   )

@@ -12,7 +12,7 @@
       :default-active="$route.path"
     >
       <el-menu-item index="/home">首页</el-menu-item>
-      <el-menu-item index="/ai/title-summary">AI 生成</el-menu-item>
+      <el-menu-item index="/ai-generate">AI 生成</el-menu-item>
       <el-menu-item index="/community">社区</el-menu-item>
       <el-menu-item index="/profile">个人中心</el-menu-item>
       <el-menu-item v-if="userStore.isEditorOrAdmin" index="/admin">管理后台</el-menu-item>

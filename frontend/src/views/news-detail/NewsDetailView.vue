@@ -293,7 +293,7 @@ function goToAiGenerate() {
   )
 
   router.push({
-    path: '/ai/title-summary',
+    path: '/ai-generate',
     query: {
       source: 'news',
       newsId: newsDetail.value.id,

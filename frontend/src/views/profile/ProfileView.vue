@@ -1549,7 +1549,7 @@ onMounted(async () => {
             <div v-if="aiRecords.length === 0" class="empty-state compact-empty">
               <p class="empty-text">暂无 AI 生成记录</p>
               <p class="empty-desc">去体验 AI 智能摘要功能吧</p>
-              <el-button type="primary" @click="router.push('/ai/title-summary')">去生成</el-button>
+              <el-button type="primary" @click="router.push('/ai-generate')">去生成</el-button>
             </div>
             <div v-else-if="filteredAIRecords.length === 0" class="empty-state compact-empty">
               <p class="empty-text">未找到匹配的 AI 记录</p>

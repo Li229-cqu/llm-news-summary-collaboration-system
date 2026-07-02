@@ -35,9 +35,25 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'ai/title-summary',
+        redirect: '/ai-generate',
+      },
+      {
+        path: 'ai-generate',
         name: 'ai-generate',
         component: () => import('@/views/ai-generate/AIGenerateView.vue'),
         meta: { title: 'AI 标题摘要生成', requiresAuth: true },
+      },
+      {
+        path: 'ai-generate/history',
+        name: 'ai-generate-history',
+        component: () => import('@/views/ai-generate/AIGenerateHistoryListView.vue'),
+        meta: { title: 'AI 生成历史', requiresAuth: true },
+      },
+      {
+        path: 'ai-generate/history/:id',
+        name: 'ai-generate-history-detail',
+        component: () => import('@/views/ai-generate/AIGenerateHistoryDetailView.vue'),
+        meta: { title: 'AI 生成历史详情', requiresAuth: true },
       },
       {
         path: 'community',

@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AIInputPanel from '@/components/ai/AIInputPanel.vue'
 import AIParamPanel from '@/components/ai/AIParamPanel.vue'
 import AIResultPanel from '@/components/ai/AIResultPanel.vue'
-import AIGenerateHistory from '@/components/ai/AIGenerateHistory.vue'
+import AIGenerateSidebar from './components/AIGenerateSidebar.vue'
 import { useAIDraftStore } from '@/stores/aiDraft'
 import { generateTitleSummaryAsync, getAsyncTaskResult } from '@/api/ai'
 
 const aiDraft = useAIDraftStore()
 const route = useRoute()
-const historyRef = ref<{ loadHistory?: () => Promise<void> } | null>(null)
 
 function loadNewsDraftFromSession() {
   const rawDraft = sessionStorage.getItem('ai_draft_from_news')
@@ -93,8 +92,6 @@ const handleGenerate = async () => {
       if (taskResult.status === 'completed') {
         aiDraft.setResult(taskResult.result!)
         ElMessage.success('标题和摘要生成成功')
-        await nextTick()
-        await historyRef.value?.loadHistory?.()
         return
       } else if (taskResult.status === 'failed') {
         throw new Error(taskResult.error || 'AI 服务执行失败')
@@ -168,12 +165,13 @@ watch(
 
     <div class="main-content">
       <aside class="sidebar">
-        <AIParamPanel />
+        <AIGenerateSidebar />
+        <AIParamPanel class="param-panel" />
       </aside>
-      
+
       <div class="main-area">
         <AIInputPanel />
-        
+
         <div class="action-wrapper">
           <div class="tips-section">
             <div class="tip-item">
@@ -189,12 +187,12 @@ watch(
               <span>短摘要150字以内，长摘要300-800字</span>
             </div>
           </div>
-          
+
           <div class="shortcuts-section">
             <button class="shortcut-btn" @click="handleClear">清空内容</button>
             <button class="shortcut-btn" @click="handleLoadSample">加载示例</button>
           </div>
-          
+
           <el-button
             type="primary"
             size="large"
@@ -208,7 +206,6 @@ watch(
         </div>
 
         <AIResultPanel />
-        <AIGenerateHistory ref="historyRef" />
       </div>
     </div>
   </main>
@@ -263,6 +260,16 @@ watch(
 .sidebar {
   width: 260px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+}
+
+.param-panel {
+  margin: 0;
 }
 
 .main-area {
