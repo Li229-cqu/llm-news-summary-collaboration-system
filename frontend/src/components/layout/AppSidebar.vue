@@ -33,6 +33,7 @@ const selectedSubscriptionIds = ref<number[]>([])
 
 const activeCategory = computed(() => String(route.query.category_id ?? ''))
 const isSubscriptionActive = computed(() => route.query.tab === 'subscription')
+const isTimelineActive = computed(() => route.path.startsWith('/timeline'))
 
 function normalizeCategory(category: NewsCategory): SidebarCategory {
   if (category.code === 'recommend') {
@@ -149,6 +150,10 @@ async function handleSubscriptionClick() {
   }
 }
 
+function goToTimeline() {
+  router.push('/timeline')
+}
+
 async function saveSubscriptions() {
   savingSubscriptions.value = true
   try {
@@ -241,6 +246,23 @@ onMounted(loadCategories)
           </template>
         </div>
       </el-collapse-transition>
+    </div>
+
+    <!-- 事件脉络入口 -->
+    <div class="app-sidebar__timeline">
+      <button
+        class="app-sidebar__timeline-trigger"
+        :class="{ 'is-active': isTimelineActive }"
+        type="button"
+        @click="goToTimeline"
+      >
+        <span class="app-sidebar__dot" aria-hidden="true"></span>
+        <div class="app-sidebar__timeline-text">
+          <span class="app-sidebar__timeline-name">事件脉络</span>
+          <span class="app-sidebar__timeline-desc">AI 聚合热点事件发展线</span>
+        </div>
+        <span class="app-sidebar__timeline-arrow">→</span>
+      </button>
     </div>
   </aside>
 </template>
@@ -600,5 +622,117 @@ onMounted(loadCategories)
 :root.dark .sub-btn--cancel:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
+}
+
+/* ========================================
+   事件脉络入口
+   ======================================== */
+.app-sidebar__timeline {
+  margin-top: 12px;
+  padding: 0 2px;
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);
+  padding-top: 12px;
+}
+
+.app-sidebar__timeline-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background .2s ease,
+    color .2s ease,
+    padding-left .2s ease;
+}
+
+.app-sidebar__timeline-trigger:hover {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-card));
+  padding-left: 16px;
+}
+
+.app-sidebar__timeline-trigger.is-active {
+  color: #991b1b;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card));
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+  padding-left: 16px;
+}
+
+.app-sidebar__timeline-trigger.is-active .app-sidebar__dot {
+  background: var(--color-primary);
+}
+
+.app-sidebar__timeline-trigger:hover .app-sidebar__dot {
+  background: var(--color-primary);
+  transform: scale(1.3);
+}
+
+.app-sidebar__timeline-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.app-sidebar__timeline-name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.app-sidebar__timeline-trigger.is-active .app-sidebar__timeline-name {
+  font-weight: 600;
+}
+
+.app-sidebar__timeline-desc {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar__timeline-arrow {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  transition:
+    color .2s ease,
+    transform .2s ease;
+}
+
+.app-sidebar__timeline-trigger:hover .app-sidebar__timeline-arrow {
+  color: var(--color-primary);
+  transform: translateX(2px);
+}
+
+.app-sidebar__timeline-trigger.is-active .app-sidebar__timeline-arrow {
+  color: var(--color-primary);
+}
+
+/* 暗色模式 */
+:root.dark .app-sidebar__timeline-trigger:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, rgba(255,255,255,.04));
+}
+
+:root.dark .app-sidebar__timeline-trigger.is-active {
+  background: color-mix(in srgb, var(--color-primary) 12%, rgba(255,255,255,.04));
+}
+
+:root.dark .app-sidebar__timeline-name {
+  color: #e5e7eb;
+}
+
+:root.dark .app-sidebar__timeline-desc {
+  color: #9ca3af;
 }
 </style>

@@ -13,4 +13,4 @@ router = APIRouter(prefix=settings.api_prefix, tags=["阅读报告"])
 @router.post("/profile-weekly-report", response_model=ApiResponse[ProfileReportResponse])
 async def profile_weekly_report(request: ProfileReportRequest) -> ApiResponse[ProfileReportResponse]:
     """根据近 7 天聚合数据生成个性化周报文案。"""
-    return success_response(generate_profile_report(request))
+    return success_response(await generate_profile_report(request))

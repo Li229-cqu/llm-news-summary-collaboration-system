@@ -58,6 +58,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发布帖子', requiresAuth: true },
       },
       {
+        path: 'timeline',
+        name: 'timeline-list',
+        component: () => import('@/views/timeline/TimelineListView.vue'),
+        meta: { title: '事件脉络', requiresAuth: false },
+      },
+      {
+        path: 'timeline/:topicId',
+        name: 'timeline-detail',
+        component: () => import('@/views/timeline/TimelineDetailView.vue'),
+        meta: { title: '事件脉络详情', requiresAuth: false },
+      },
+      {
         path: 'profile',
         name: 'profile',
         component: () => import('@/views/profile/ProfileView.vue'),

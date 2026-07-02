@@ -163,16 +163,8 @@
         <el-card class="aside-card" shadow="never">
           <NewsHotList :list="hotNewsList" :loading="loadingHot" />
         </el-card>
-
-        <NewsRecommendPanel :topics="timelineTopics" :loading="loadingTimelineTopics" @open="openTimeline" />
       </aside>
     </div>
-
-    <TimelineDrawer
-      v-model="timelineDrawerVisible"
-      :topic-id="selectedTopicId"
-      :topic-name="selectedTopicName"
-    />
   </main>
 </template>
 
@@ -189,13 +181,10 @@ import {
   type NewsItem,
 } from '@/api/news'
 import { getRecommendations } from '@/api/profile'
-import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 import { useUserStore } from '@/stores/user'
 import { useHomeFeedStore } from '@/stores/homeFeed'
 import NewsList from '@/components/news/NewsList.vue'
 import NewsHotList from '@/components/news/NewsHotList.vue'
-import NewsRecommendPanel from '@/components/news/NewsRecommendPanel.vue'
-import TimelineDrawer from '@/components/timeline/TimelineDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -204,10 +193,8 @@ const feedStore = useHomeFeedStore()
 
 const newsList = ref<NewsItem[]>([])
 const hotNewsList = ref<HotNewsItem[]>([])
-const timelineTopics = ref<TimelineTopic[]>([])
 const loadingNews = ref(false)
 const loadingHot = ref(false)
-const loadingTimelineTopics = ref(false)
 const isRecommendationFeed = ref(false)
 const recommendationHasMore = ref(false)
 const page = ref(1)
@@ -306,10 +293,6 @@ const remainingNews = computed(() => {
 const secondaryNews = computed(() => remainingNews.value.slice(0, 2))
 /** 普通新闻流（剩余列表第 3 条起） */
 const normalNews = computed(() => remainingNews.value.slice(2))
-
-const timelineDrawerVisible = ref(false)
-const selectedTopicId = ref<number | string | null>(null)
-const selectedTopicName = ref('')
 
 const loadMoreText = computed(() => {
   if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
@@ -472,22 +455,29 @@ async function loadNews(
       } else {
         try {
           // 推荐模式刷新：请求更多数据再取不同切片实现换一批
-          const recLimit = force ? pageSize.value * (refreshOffset.value + 1) : pageSize.value
-          const result = await getRecommendations(Math.min(recLimit, 50))
+          const maxLimit = 50
+          const offset = force ? refreshOffset.value : 0
+          const startIdx = offset * pageSize.value
+          const endIdx = startIdx + pageSize.value
+          const requestLimit = Math.min(endIdx, maxLimit)
+
+          const result = await getRecommendations(requestLimit)
           if (result.list.length) {
-            // 刷新时取最后 pageSize 条（避免和之前重复），首次取前 pageSize 条
-            const sliced = force && result.list.length > pageSize.value
-              ? result.list.slice(-pageSize.value)
-              : result.list.slice(0, pageSize.value)
+            let sliced = result.list.slice(startIdx, endIdx)
+
+            // 仅在目标切片确实为空时才重置（不再基于 total 提前重置）
+            if (force && sliced.length === 0 && offset > 0) {
+              refreshOffset.value = 0
+              const fallback = await getRecommendations(pageSize.value)
+              sliced = fallback.list.slice(0, pageSize.value)
+            }
+
             newsList.value = sliced
             total.value = Math.max(result.total, result.list.length)
             page.value = 1
             isRecommendationFeed.value = true
-            recommendationHasMore.value = !force && result.list.length >= pageSize.value && result.list.length < 50
-            // 已取到全部数据则重置偏移
-            if (force && recLimit >= Math.min(result.total, 50)) {
-              refreshOffset.value = 0
-            }
+            // 刷新后也保持 hasMore：只要当前切片满一页且未达上限，就还有更多
+            recommendationHasMore.value = sliced.length >= pageSize.value && endIdx < maxLimit
           } else {
             refreshOffset.value = 0
             const fallback = await getNewsList({
@@ -555,20 +545,6 @@ async function loadHotNews() {
     ElMessage.error(error instanceof Error ? error.message : '获取热榜失败')
   } finally {
     loadingHot.value = false
-  }
-}
-
-async function loadTimelineTopics() {
-  loadingTimelineTopics.value = true
-
-  try {
-    const result = await getTimelineTopics()
-    timelineTopics.value = result.slice(0, 5)
-  } catch (error) {
-    timelineTopics.value = []
-    ElMessage.error(error instanceof Error ? error.message : '获取事件脉络话题失败')
-  } finally {
-    loadingTimelineTopics.value = false
   }
 }
 
@@ -641,21 +617,6 @@ function goToNews(id: number | string): void {
   router.push(`/news/${id}`)
 }
 
-function openTimeline(topic: TimelineTopic) {
-  if (!userStore.isLoggedIn) {
-    ElMessage.warning('请先登录后查看事件脉络')
-    router.push({
-      path: '/login',
-      query: { redirect: route.fullPath },
-    })
-    return
-  }
-
-  selectedTopicId.value = topic.topic_id
-  selectedTopicName.value = topic.topic_name
-  timelineDrawerVisible.value = true
-}
-
 onMounted(async () => {
   if (!userStore.userInfo) {
     userStore.loadFromStorage()
@@ -664,7 +625,7 @@ onMounted(async () => {
   // 优先从 Pinia 缓存恢复新闻列表（从详情页返回首页时不重新请求）
   // 热榜和热点脉络每次都刷新（数据变化频繁，请求量小）
   await loadNews()
-  await Promise.all([loadHotNews(), loadTimelineTopics()])
+  await loadHotNews()
 })
 
 watch(

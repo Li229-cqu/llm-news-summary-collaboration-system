@@ -116,33 +116,33 @@ async def call_llm(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> str:
-    if not settings.llm_api_key or settings.llm_api_key.strip() == "":
+    if not settings.summary_llm_api_key or settings.summary_llm_api_key.strip() == "":
         raise ValueError(
-            "未配置智谱 API Key，请检查 ai-service/.env 中的 LLM_API_KEY"
+            "未配置生成类 AI API Key，请检查 ai-service/.env 中的 SUMMARY_LLM_API_KEY"
         )
 
     if not messages or len(messages) == 0:
         raise ValueError("调用 LLM 的消息列表不能为空")
 
     logger.info(
-        f"调用智谱 LLM: "
-        f"provider={settings.llm_provider}, "
-        f"model={settings.llm_model}, "
-        f"api_key={mask_api_key(settings.llm_api_key)}"
+        f"调用生成类 LLM: "
+        f"provider={settings.summary_llm_provider}, "
+        f"model={settings.summary_llm_model}, "
+        f"api_key={mask_api_key(settings.summary_llm_api_key)}"
     )
 
     try:
         client = AsyncOpenAI(
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_base_url,
-            timeout=settings.llm_timeout,
+            api_key=settings.summary_llm_api_key,
+            base_url=settings.summary_llm_base_url,
+            timeout=settings.summary_llm_timeout,
         )
 
-        actual_temperature = temperature if temperature is not None else settings.llm_temperature
-        actual_max_tokens = max_tokens if max_tokens is not None else settings.llm_max_tokens
+        actual_temperature = temperature if temperature is not None else settings.summary_llm_temperature
+        actual_max_tokens = max_tokens if max_tokens is not None else settings.summary_llm_max_tokens
 
         request_kwargs = {
-            "model": settings.llm_model,
+            "model": settings.summary_llm_model,
             "messages": messages,
             "temperature": actual_temperature,
             "max_tokens": actual_max_tokens,

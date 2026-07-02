@@ -2223,6 +2223,26 @@ def _ai_fallback(
     )
 
 
+def _score_tier(value: int, thresholds: list[int], scores: list[int]) -> int:
+    """分段映射评分：value 达到第 i 个阈值即得对应分数。
+    低于第一个阈值得 10 分兜底，超过最后一个阈值得 100 分。
+
+    示例：浏览了 7 个内容
+      _score_tier(7, [1,4,10,22], [15,35,55,75]) → 55
+    """
+    if value <= 0:
+        return 5
+    for i, t in enumerate(thresholds):
+        if value <= t:
+            # 在当前段和前一段之间线性插值
+            prev_t = 0 if i == 0 else thresholds[i - 1]
+            prev_s = 10 if i == 0 else scores[i - 1]
+            target_s = scores[i]
+            ratio = (value - prev_t) / (t - prev_t)
+            return max(10, int(prev_s + (target_s - prev_s) * ratio))
+    return 100
+
+
 def get_weekly_report(current_user: Optional[Any] = None, force_refresh: bool = False) -> WeeklyReportResponse:
     """Generate a weekly reading report for the last 7 days.
 
@@ -2332,11 +2352,15 @@ def get_weekly_report(current_user: Optional[Any] = None, force_refresh: bool = 
             max_count = cnt
             max_date = d
 
-    # ---- 行为评分 ----
-    reading_score = min(100, int(browse_count / 25 * 100))
-    collect_score = min(100, int(favorite_count / 10 * 100))
-    interaction_score = min(100, int(comment_count / 12 * 100))
-    ai_score = min(100, int(ai_count / 6 * 100))
+    # ---- 行为评分（分段映射，更符合真实分布） ----
+    reading_score = _score_tier(browse_count, [1, 4, 10, 22, 40],
+                                [15, 35, 55, 75, 90])
+    collect_score = _score_tier(favorite_count, [1, 3, 7, 12],
+                                [25, 45, 65, 85])
+    interaction_score = _score_tier(comment_count, [1, 3, 8, 15],
+                                    [20, 42, 64, 86])
+    ai_score = _score_tier(ai_count, [1, 3, 7, 14],
+                           [30, 50, 70, 90])
 
     # ---- 用户称号 ----
     scores_for_persona = {
@@ -2346,22 +2370,22 @@ def get_weekly_report(current_user: Optional[Any] = None, force_refresh: bool = 
         "ai_usage": ai_score,
     }
     max_score = max(scores_for_persona.values())
-    if max_score < 20:
+    if active_days <= 1 and browse_count <= 3:
         persona_title = "新晋观察者"
         persona_desc = "你刚开始探索平台，继续保持好奇，未来会生成更丰富的阅读画像。"
-    elif ai_score >= 70 and reading_score >= 60:
+    elif ai_score >= 65 and reading_score >= 50:
         persona_title = "AI驱动型新闻探索者"
-        persona_desc = "你的阅读探索和 AI 使用较突出，说明你更倾向于主动获取信息并借助智能工具提升阅读效率。"
-    elif max_score == reading_score:
+        persona_desc = "你的阅读探索和 AI 使用较突出，善于借助智能工具提升阅读效率。"
+    elif max_score == reading_score and reading_score >= 55:
         persona_title = "新闻探索者"
         persona_desc = "你热衷于浏览各类新闻内容，保持对世界的好奇心是你的标签。"
-    elif max_score == scores_for_persona["collecting"]:
+    elif max_score == scores_for_persona["collecting"] and collect_score >= 50:
         persona_title = "内容收藏家"
         persona_desc = "你善于发现并保存有价值的内容，收藏夹是你的知识库。"
-    elif max_score == scores_for_persona["interaction"]:
+    elif max_score == scores_for_persona["interaction"] and interaction_score >= 50:
         persona_title = "社区互动者"
         persona_desc = "你喜欢在社区中表达观点，通过评论与其他用户交流想法。"
-    elif all(v >= 60 for v in scores_for_persona.values()):
+    elif all(v >= 45 for v in scores_for_persona.values()):
         persona_title = "全能型信息管理者"
         persona_desc = "你在阅读、收藏、互动和 AI 使用上都表现活跃，是平台的全能型用户。"
     else:
