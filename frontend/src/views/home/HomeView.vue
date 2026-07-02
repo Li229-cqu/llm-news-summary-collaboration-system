@@ -1,35 +1,18 @@
 <template>
   <main class="home-page">
-    <!-- 首页版头：现代新闻门户风格 -->
-    <section class="home-hero">
-      <div class="home-hero__bg">
-        <div class="home-hero__orb home-hero__orb--1"></div>
-        <div class="home-hero__orb home-hero__orb--2"></div>
-        <div class="home-hero__grid"></div>
-      </div>
-      <!-- 右侧抽象装饰：层叠新闻卡片 -->
-      <div class="home-hero__deco" aria-hidden="true">
-        <div class="home-hero__deco-card home-hero__deco-card--1"></div>
-        <div class="home-hero__deco-card home-hero__deco-card--2"></div>
-        <div class="home-hero__deco-card home-hero__deco-card--3"></div>
-      </div>
-      <div class="home-hero__inner">
-        <div class="home-hero__body">
-          <p class="home-hero__kicker">NEWS TODAY · 智能新闻聚合</p>
-          <h1 class="home-hero__title">今日头版</h1>
-          <p class="home-hero__subtitle">智能聚合最新资讯，洞察热点背后的新闻脉络</p>
-          <div class="home-hero__tags">
-            <span class="home-hero__tag">智能推荐</span>
-            <span class="home-hero__tag">实时热点</span>
-            <span class="home-hero__tag">深度追踪</span>
-            <span class="home-hero__tag">新闻速览</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <div class="home-content-layout">
       <section class="home-main">
+        <!-- 顶部热搜榜 -->
+        <section class="home-hot-section">
+          <NewsHotList
+            variant="top"
+            :list="hotNewsList"
+            :loading="loadingHot"
+            :title="hotListTitle"
+            :subtitle="hotListSubtitle"
+          />
+        </section>
+
         <!-- 新闻区：加载态 / 空态 / 内容态 -->
         <section class="news-section">
           <div class="section-header">
@@ -159,11 +142,6 @@
         </section>
       </section>
 
-      <aside class="home-aside">
-        <el-card class="aside-card" shadow="never">
-          <NewsHotList :list="hotNewsList" :loading="loadingHot" />
-        </el-card>
-      </aside>
     </div>
   </main>
 </template>
@@ -174,10 +152,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getHotNews,
+  getNewsCategories,
   getNewsList,
   getSubscribedNews,
   searchNews,
   type HotNewsItem,
+  type NewsCategory,
   type NewsItem,
 } from '@/api/news'
 import { getRecommendations } from '@/api/profile'
@@ -198,8 +178,11 @@ const loadingHot = ref(false)
 const isRecommendationFeed = ref(false)
 const recommendationHasMore = ref(false)
 const page = ref(1)
-const pageSize = ref(6)
+const pageSize = ref(25)
 const total = ref(0)
+
+/** 分类列表缓存，用于热搜榜标题计算 */
+const categories = ref<NewsCategory[]>([])
 
 const activeCategoryId = computed(() => String(route.query.category_id ?? '').trim())
 const activeTab = computed(() => String(route.query.tab ?? '').trim())
@@ -259,16 +242,6 @@ const emptyNewsText = computed(() => {
 
   return '暂无新闻数据'
 })
-
-/** 版头副标题：根据当前模式动态展示一句话说明 */
-const heroSubtitle = computed(() => {
-  if (searchKeyword.value) return `正在查看与「${searchKeyword.value}」相关的内容`
-  if (isSubscriptionTab.value) return '来自你关注分类的最新内容'
-  if (activeCategoryId.value) return '当前分类下的精选新闻内容'
-  if (userStore.isLoggedIn) return '为你整理最新推荐内容'
-  return '聚合全网热点，发现值得关注的新闻脉络'
-})
-
 /** 判断新闻是否有可用封面图：排除 null/undefined/空字符串 */
 function hasCoverImage(item?: NewsItem | null): boolean {
   if (!item) return false
@@ -293,6 +266,25 @@ const remainingNews = computed(() => {
 const secondaryNews = computed(() => remainingNews.value.slice(0, 2))
 /** 普通新闻流（剩余列表第 3 条起） */
 const normalNews = computed(() => remainingNews.value.slice(2))
+
+/** 当前分类名称，用于热搜榜标题 */
+const currentCategoryName = computed(() => {
+  if (!activeCategoryId.value || searchKeyword.value) return ''
+  const cat = categories.value.find((c) => String(c.id) === activeCategoryId.value)
+  return cat?.name ?? ''
+})
+
+/** 顶部热搜榜标题 */
+const hotListTitle = computed(() => {
+  if (currentCategoryName.value) return `${currentCategoryName.value}热搜`
+  return '今日热搜'
+})
+
+/** 顶部热搜榜副标题 */
+const hotListSubtitle = computed(() => {
+  if (currentCategoryName.value) return `${currentCategoryName.value}分类 · 热门排行`
+  return '实时热点 · 两列速览'
+})
 
 const loadMoreText = computed(() => {
   if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
@@ -455,7 +447,7 @@ async function loadNews(
       } else {
         try {
           // 推荐模式刷新：请求更多数据再取不同切片实现换一批
-          const maxLimit = 50
+          const maxLimit = 100
           const offset = force ? refreshOffset.value : 0
           const startIdx = offset * pageSize.value
           const endIdx = startIdx + pageSize.value
@@ -535,16 +527,29 @@ async function loadNews(
   }
 }
 
-async function loadHotNews() {
+/** 请求序列号，防止快速切换分类时旧请求覆盖新请求 */
+let hotNewsRequestSeq = 0
+
+async function loadHotNews(categoryId?: number | string) {
+  const seq = ++hotNewsRequestSeq
   loadingHot.value = true
 
   try {
-    hotNewsList.value = await getHotNews({ limit: 10 })
+    const result = await getHotNews({
+      limit: 10,
+      category_id: categoryId || undefined,
+    })
+    // 忽略过期的请求结果
+    if (seq !== hotNewsRequestSeq) return
+    hotNewsList.value = result
   } catch (error) {
+    if (seq !== hotNewsRequestSeq) return
     hotNewsList.value = []
     ElMessage.error(error instanceof Error ? error.message : '获取热榜失败')
   } finally {
-    loadingHot.value = false
+    if (seq === hotNewsRequestSeq) {
+      loadingHot.value = false
+    }
   }
 }
 
@@ -559,7 +564,7 @@ async function handleLoadMore() {
   try {
     if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
       const currentCount = newsList.value.length
-      const nextLimit = Math.min(currentCount + pageSize.value, 50)
+      const nextLimit = Math.min(currentCount + pageSize.value, 100)
 
       if (nextLimit <= currentCount) {
         recommendationHasMore.value = false
@@ -574,7 +579,7 @@ async function handleLoadMore() {
       total.value = Math.max(result.total, newsList.value.length)
       page.value = 1
       recommendationHasMore.value =
-        appendedList.length > 0 && result.list.length > currentCount && result.list.length < 50
+        appendedList.length > 0 && result.list.length > currentCount && result.list.length < 100
     } else {
       const nextPage = page.value + 1
       const result = searchKeyword.value
@@ -622,16 +627,24 @@ onMounted(async () => {
     userStore.loadFromStorage()
   }
 
+  // 加载分类列表用于热搜榜标题
+  getNewsCategories().then((data) => {
+    categories.value = data
+  }).catch(() => {
+    // 分类加载失败不影响主流程
+  })
+
   // 优先从 Pinia 缓存恢复新闻列表（从详情页返回首页时不重新请求）
   // 热榜和热点脉络每次都刷新（数据变化频繁，请求量小）
   await loadNews()
-  await loadHotNews()
+  await loadHotNews(activeCategoryId.value || undefined)
 })
 
 watch(
   () => route.query.category_id,
   () => {
     loadNews({ reset: true })
+    loadHotNews(activeCategoryId.value || undefined)
   },
 )
 
@@ -639,6 +652,15 @@ watch(
   () => route.query.keyword,
   () => {
     loadNews({ reset: true })
+
+    const keyword = String(route.query.keyword ?? '').trim()
+    if (keyword) {
+      // 进入搜索模式 → 全站热搜
+      loadHotNews(undefined)
+    } else {
+      // 清除搜索 → 如果 URL 仍有分类则恢复分类热搜
+      loadHotNews(activeCategoryId.value || undefined)
+    }
   },
 )
 
@@ -646,6 +668,7 @@ watch(
   () => route.query.tab,
   () => {
     loadNews({ reset: true })
+    loadHotNews(activeCategoryId.value || undefined)
   },
 )
 
@@ -677,199 +700,14 @@ onBeforeUnmount(() => {
 }
 
 .home-content-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
   width: 100%;
 }
 
 .home-main {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   display: grid;
   gap: 20px;
-}
-
-.home-aside {
-  width: 320px;
-  flex: 0 0 320px;
-  display: grid;
-  gap: 20px;
-  min-width: 0;
-}
-
-/* ========================================
-   首页版头 —— 现代新闻门户
-   ======================================== */
-.home-hero {
-  position: relative;
-  height: 185px;
-  margin-bottom: 24px;
-  border-radius: 22px;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid #f1d4d4;
-  box-shadow: 0 4px 24px rgba(217, 45, 32, .06);
-}
-
-.home-hero__bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-/* 网格纹理 */
-.home-hero__grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(217, 45, 32, .03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 45, 32, .03) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(to bottom, rgba(0,0,0,.08), transparent);
-}
-
-.home-hero__orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(72px);
-}
-
-.home-hero__orb--1 {
-  top: -50px;
-  right: 15%;
-  width: 200px;
-  height: 200px;
-  background: rgba(217, 45, 32, .06);
-}
-
-.home-hero__orb--2 {
-  bottom: -40px;
-  left: 50%;
-  width: 120px;
-  height: 120px;
-  background: rgba(217, 45, 32, .04);
-}
-
-/* 右侧抽象装饰：层叠新闻卡片 */
-.home-hero__deco {
-  position: absolute;
-  right: 40px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 200px;
-  height: 130px;
-  pointer-events: none;
-}
-
-.home-hero__deco-card {
-  position: absolute;
-  border-radius: 12px;
-  border: 1px solid rgba(217, 45, 32, .12);
-  background: #fff;
-}
-
-.home-hero__deco-card--1 {
-  top: 0;
-  right: 0;
-  width: 140px;
-  height: 90px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.06);
-  z-index: 3;
-}
-
-.home-hero__deco-card--1::after {
-  content: '';
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  right: 14px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(217, 45, 32, .3);
-}
-
-.home-hero__deco-card--2 {
-  top: 12px;
-  right: 18px;
-  width: 120px;
-  height: 80px;
-  box-shadow: 0 3px 12px rgba(0,0,0,.04);
-  transform: rotate(-3deg);
-  z-index: 2;
-}
-
-.home-hero__deco-card--3 {
-  top: 28px;
-  right: 36px;
-  width: 100px;
-  height: 70px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.03);
-  transform: rotate(-6deg);
-  z-index: 1;
-}
-
-.home-hero__inner {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 36px;
-}
-
-.home-hero__body {
-  min-width: 0;
-  max-width: 580px;
-}
-
-.home-hero__kicker {
-  margin: 0;
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-}
-
-.home-hero__title {
-  margin: 6px 0 0;
-  color: #1f2937;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: .01em;
-  line-height: 1.15;
-}
-
-.home-hero__subtitle {
-  margin: 10px 0 16px;
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.home-hero__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.home-hero__tag {
-  padding: 5px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(217, 45, 32, .22);
-  background: rgba(217, 45, 32, .04);
-  color: #b91c1c;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background .18s ease, border-color .18s ease;
-}
-
-.home-hero__tag:hover {
-  background: rgba(217, 45, 32, .1);
-  border-color: rgba(217, 45, 32, .35);
 }
 
 /* ========================================
@@ -1306,47 +1144,9 @@ onBeforeUnmount(() => {
   border-top-color: var(--color-primary);
 }
 
-.aside-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-card);
-  background: var(--color-bg-card);
-}
-
-.aside-card :deep(.el-card__body) {
-  padding: 18px;
-}
-
 /* ========================================
    暗色模式适配
    ======================================== */
-:root.dark .home-hero {
-  background: #1f2933;
-  border-color: #3b2020;
-}
-
-:root.dark .home-hero__title {
-  color: #e5e7eb;
-}
-
-:root.dark .home-hero__subtitle {
-  color: #aeb8c4;
-}
-
-:root.dark .home-hero__deco-card {
-  background: #2a3542;
-  border-color: rgba(248, 113, 113, .1);
-}
-
-:root.dark .home-hero__tag {
-  border-color: rgba(248, 113, 113, .25);
-  background: rgba(248, 113, 113, .08);
-  color: #fca5a5;
-}
-
-:root.dark .home-hero__tag:hover {
-  background: rgba(248, 113, 113, .15);
-}
-
 :root.dark .featured-news:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, .35);
 }
@@ -1365,44 +1165,24 @@ onBeforeUnmount(() => {
 }
 
 /* ========================================
+   顶部热搜区
+   ======================================== */
+.home-hot-section {
+  margin-bottom: 24px;
+}
+
+/* ========================================
    响应式
    ======================================== */
 @media (max-width: 1200px) {
-  .home-content-layout {
-    flex-direction: column;
-  }
-
-  .home-aside {
-    width: 100%;
-    flex: none;
-  }
-
   .featured-news {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .home-hero {
-    height: auto;
-    min-height: 130px;
-    padding: 24px 0;
-  }
-
-  .home-hero__inner {
-    padding: 0 20px;
-  }
-
-  .home-hero__deco {
-    display: none;
-  }
-
-  .home-hero__title {
-    font-size: 24px;
-  }
-
-  .home-hero__orb {
-    display: none;
+  .home-hot-section {
+    margin-bottom: 18px;
   }
 
   .featured-news {

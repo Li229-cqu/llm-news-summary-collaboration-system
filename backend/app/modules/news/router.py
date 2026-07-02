@@ -60,8 +60,11 @@ async def news_list(
 
 
 @router.get("/hot")
-async def hot_news(limit: int = Query(default=10, ge=0)) -> ApiResponse[Any]:
-    return success_response(get_hot_news(limit=limit))
+async def hot_news(
+    limit: int = Query(default=10, ge=0),
+    category_id: Optional[int] = Query(default=None),
+) -> ApiResponse[Any]:
+    return success_response(get_hot_news(limit=limit, category_id=category_id))
 
 
 @router.get("/search")

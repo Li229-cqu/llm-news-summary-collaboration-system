@@ -1,13 +1,13 @@
 <template>
-  <section class="news-hot-list">
+  <section class="news-hot-list" :class="`news-hot-list--${variant}`">
     <div class="news-hot-list__header">
       <div>
         <h3 class="news-hot-list__title">
           <span class="news-hot-list__title-icon">🔥</span>
-          热搜榜
+          {{ computedTitle }}
           <span class="news-hot-list__title-rank">Top10</span>
         </h3>
-        <p class="news-hot-list__desc">实时关注度排行</p>
+        <p class="news-hot-list__desc">{{ computedSubtitle }}</p>
       </div>
     </div>
 
@@ -15,7 +15,7 @@
     <el-empty v-else-if="!list.length" description="暂无热榜数据" />
     <ol v-else class="news-hot-list__items">
       <li
-        v-for="item in list"
+        v-for="item in displayList"
         :key="item.id"
         class="news-hot-list__item"
         @click="handleClick(item.id)"
@@ -37,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 export interface HotNewsItem {
@@ -57,7 +58,30 @@ export interface HotNewsItem {
 const props = defineProps<{
   list: HotNewsItem[]
   loading?: boolean
+  variant?: 'sidebar' | 'top'
+  title?: string
+  subtitle?: string
 }>()
+
+const variant = computed(() => props.variant ?? 'sidebar')
+
+/** 标题：优先外部传入，否则按 variant 取默认值 */
+const computedTitle = computed(() => {
+  if (props.title) return props.title
+  return variant.value === 'top' ? '今日热搜' : '热搜榜'
+})
+
+/** 副标题：优先外部传入，否则按 variant 取默认值 */
+const computedSubtitle = computed(() => {
+  if (props.subtitle) return props.subtitle
+  return variant.value === 'top' ? '实时热点 · 两列速览' : '实时关注度排行'
+})
+
+/** top 模式取前 10 条确保两列五行；sidebar 模式展示全部传入数据 */
+const displayList = computed(() => {
+  if (variant.value === 'top') return props.list.slice(0, 10)
+  return props.list
+})
 
 const router = useRouter()
 
@@ -242,7 +266,7 @@ function handleClick(newsId: number) {
 }
 
 /* ========================================
-   响应式
+   响应式（侧边栏模式）
    ======================================== */
 @media (max-width: 768px) {
   .news-hot-list__item {
@@ -255,6 +279,144 @@ function handleClick(newsId: number) {
     height: 32px;
     font-size: 14px;
     border-radius: 8px;
+  }
+}
+
+/* ========================================
+   顶部网格模式（variant="top"）
+   整体大卡片背景 + 列表式热搜项
+   ======================================== */
+
+/* --- 外层统一卡片容器 --- */
+.news-hot-list--top {
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid rgba(217, 45, 32, .10);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, .05);
+}
+
+/* --- 标题行：加大字号突出层级 --- */
+.news-hot-list--top .news-hot-list__title {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.news-hot-list--top .news-hot-list__title-icon {
+  font-size: 22px;
+}
+
+.news-hot-list--top .news-hot-list__title-rank {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.news-hot-list--top .news-hot-list__desc {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* --- 热榜列表：两列网格，紧凑行距 --- */
+.news-hot-list--top .news-hot-list__items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 20px;
+}
+
+/* --- 单条热搜项：去卡片化，保留 hover 微反馈 --- */
+.news-hot-list--top .news-hot-list__item {
+  min-height: 52px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background .15s ease,
+    transform .15s ease;
+}
+
+.news-hot-list--top .news-hot-list__item:hover {
+  background: rgba(217, 45, 32, .05);
+  transform: translateX(2px);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* --- 排名徽章 --- */
+.news-hot-list--top .news-hot-list__rank {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+  border-radius: 8px;
+}
+
+/* --- 标题：两行截断 --- */
+.news-hot-list--top .news-hot-list__item-title {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* --- 元信息 --- */
+.news-hot-list--top .news-hot-list__meta {
+  font-size: 12px;
+  gap: 4px 10px;
+}
+
+/* ========================================
+   顶部模式暗色适配
+   ======================================== */
+:root.dark .news-hot-list--top {
+  background: #1a232c;
+  border-color: rgba(248, 113, 113, .08);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+}
+
+:root.dark .news-hot-list--top .news-hot-list__item:hover {
+  background: rgba(248, 113, 113, .07);
+}
+
+/* ========================================
+   顶部模式响应式：小屏切换单列
+   ======================================== */
+@media (max-width: 768px) {
+  .news-hot-list--top {
+    padding: 16px 18px;
+    gap: 14px;
+  }
+
+  .news-hot-list--top .news-hot-list__title {
+    font-size: 19px;
+  }
+
+  .news-hot-list--top .news-hot-list__items {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+
+  .news-hot-list--top .news-hot-list__item {
+    min-height: 48px;
+    padding: 7px 8px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .news-hot-list--top .news-hot-list__rank {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .news-hot-list--top .news-hot-list__item-title {
+    font-size: 13px;
   }
 }
 </style>

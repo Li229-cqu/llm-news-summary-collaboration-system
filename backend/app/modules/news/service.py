@@ -325,12 +325,23 @@ def _db_subscribed_news(
         "page_size": normalized_page_size,
     }
 
-def _db_hot_news(limit: int = 10) -> list[dict[str, Any]]:
+def _db_hot_news(limit: int = 10, category_id: Optional[int] = None) -> list[dict[str, Any]]:
     normalized_limit = max(limit, 0)
     if normalized_limit == 0:
         return []
+
+    where_clauses = ["n.status = 1"]
+    params: list[Any] = []
+
+    if category_id is not None:
+        where_clauses.append("n.category_id = %s")
+        params.append(category_id)
+
+    where_sql = " AND ".join(where_clauses)
+    params.append(normalized_limit)
+
     rows = execute_query(
-        """
+        f"""
         SELECT
             n.id,
             n.title,
@@ -350,7 +361,7 @@ def _db_hot_news(limit: int = 10) -> list[dict[str, Any]]:
             ) AS heat_score
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE n.status = 1
+        WHERE {where_sql}
         ORDER BY heat_score DESC,
                  n.view_count DESC,
                  n.like_count DESC,
@@ -360,7 +371,7 @@ def _db_hot_news(limit: int = 10) -> list[dict[str, Any]]:
                  n.id DESC
         LIMIT %s
         """,
-        [normalized_limit],
+        params,
     )
     return [
         _format_hot_row(row, rank=index)
@@ -623,9 +634,13 @@ def get_subscribed_news(
     """获取当前登录用户订阅分类下的新闻，只读取数据库。"""
     return _db_subscribed_news(current_user=current_user, page=page, page_size=page_size)
 
-def get_hot_news(limit: int = 10) -> list[dict[str, Any]]:
-    """获取新闻热榜，只读取数据库。"""
-    rows = _db_hot_news(limit=limit)
+def get_hot_news(limit: int = 10, category_id: Optional[int] = None) -> list[dict[str, Any]]:
+    """获取新闻热榜，只读取数据库。
+
+    当 category_id 为 None 时返回全站热搜 Top N；
+    传入具体分类 ID 时返回该分类下的热搜 Top N。
+    """
+    rows = _db_hot_news(limit=limit, category_id=category_id)
     return rows or []
 
 
