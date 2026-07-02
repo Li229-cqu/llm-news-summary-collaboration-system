@@ -16,6 +16,25 @@
     </div>
     <h3 class="post-title">{{ post.title }}</h3>
     <p class="post-content">{{ truncateContent(post.content, 100) }}</p>
+    <div v-if="postImages.length" class="post-images" @click.stop>
+      <div
+        v-for="(img, idx) in displayImages"
+        :key="idx"
+        class="post-image-item"
+        :class="{ 'post-image-item--single': postImages.length === 1 }"
+      >
+        <el-image
+          :src="resolveImageUrl(img)"
+          fit="cover"
+          class="post-image-thumb"
+          :preview-src-list="previewImageUrls"
+          preview-teleported
+        />
+        <div v-if="isLastWithOverlay(idx)" class="post-image-overlay">
+          <span>+{{ postImages.length - MAX_VISIBLE }}</span>
+        </div>
+      </div>
+    </div>
     <div v-if="post.tags && post.tags.length" class="post-tags">
       <el-tag
         v-for="tag in post.tags"
@@ -88,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   View,
   Pointer,
@@ -97,6 +117,9 @@ import {
   Link,
 } from '@element-plus/icons-vue'
 import type { CommunityPost } from '@/api/community'
+import { resolveImageUrl } from '@/utils/media'
+
+const MAX_VISIBLE = 3
 
 const props = defineProps<{
   post: CommunityPost
@@ -109,6 +132,24 @@ const emit = defineEmits<{
   (e: 'comment', post: CommunityPost): void
   (e: 'openRelatedNews', post: CommunityPost): void
 }>()
+
+const displayImages = computed(() => {
+  if (!postImages.value.length) return []
+  return postImages.value.slice(0, MAX_VISIBLE)
+})
+
+const postImages = computed(() => {
+  return Array.isArray(props.post.images) ? props.post.images.filter(Boolean) : []
+})
+
+const previewImageUrls = computed(() =>
+  postImages.value.map((url) => resolveImageUrl(url))
+)
+
+function isLastWithOverlay(idx: number): boolean {
+  if (!postImages.value.length) return false
+  return idx === MAX_VISIBLE - 1 && postImages.value.length > MAX_VISIBLE
+}
 
 function handleOpenRelatedNews() {
   emit('openRelatedNews', props.post)
@@ -186,6 +227,42 @@ function truncateContent(content: string, maxLength: number) {
   font-size: 14px;
   margin-bottom: 12px;
   line-height: 1.6;
+}
+
+/* 图片缩略图 */
+.post-images {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.post-image-item {
+  position: relative;
+  width: 100px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+.post-image-item--single {
+  width: 180px;
+  height: 120px;
+}
+.post-image-thumb {
+  width: 100%;
+  height: 100%;
+}
+.post-image-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .post-tags {

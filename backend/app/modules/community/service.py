@@ -96,6 +96,23 @@ def _db_post_comment_has_media_json() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
+def _community_post_has_images_column() -> bool:
+    try:
+        row = execute_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'community_post'
+              AND column_name = 'images'
+            """,
+        )
+        return bool(int(row.get("cnt") or 0)) if row else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _normalize_media_json(value: Any) -> Any:
     if value in (None, ""):
         return None
@@ -263,6 +280,7 @@ def _post_row_to_item(
         normalize_text(row.get("author")),
     )
     tags = _parse_json_list(row.get("tags"))
+    images = _parse_json_list(row.get("images"))
 
     return {
         "id": int(row.get("id") or 0),
@@ -275,6 +293,7 @@ def _post_row_to_item(
         "related_news_id": row.get("related_news_id"),
         "related_news_title": normalize_text(row.get("related_news_title")),
         "topic_id": row.get("topic_id"),
+        "images": images,
         "like_count": like_count,
         "comment_count": comment_count,
         "favorite_count": favorite_count,
@@ -468,13 +487,19 @@ def _db_comment_liked_ids(user_id: int, comment_ids: list[int]) -> set[int]:
     return {int(row["target_id"]) for row in rows}
 
 
-def _db_posts_total(keyword: Optional[str] = None) -> int:
+def _db_posts_total(
+    keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+) -> int:
     where_sql = ["cp.status = 1"]
     params: list[Any] = []
     if keyword and keyword.strip():
         like_value = f"%{keyword.strip()}%"
         where_sql.append("(cp.title LIKE %s OR cp.content LIKE %s)")
         params.extend([like_value, like_value])
+    if tag and tag.strip():
+        where_sql.append("JSON_CONTAINS(cp.tags, %s)")
+        params.append(json.dumps(tag))
     row = execute_one(
         f"""
         SELECT COUNT(*) AS total
@@ -490,9 +515,11 @@ def _db_get_posts(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> dict[str, Any] | None:
-    total = _db_posts_total(keyword=keyword)
+    total = _db_posts_total(keyword=keyword, tag=tag)
     if total == 0:
         return None
 
@@ -504,7 +531,22 @@ def _db_get_posts(
         like_value = f"%{keyword.strip()}%"
         clauses.append("(cp.title LIKE %s OR cp.content LIKE %s)")
         params.extend([like_value, like_value])
+    if tag and tag.strip():
+        clauses.append("JSON_CONTAINS(cp.tags, %s)")
+        params.append(json.dumps(tag))
 
+    # 排序方式
+    if sort == "latest":
+        order_clause = "cp.created_at DESC, cp.id DESC"
+    else:
+        order_clause = """COALESCE(cp.heat_score, 0) DESC,
+                         COALESCE(cp.comment_count, 0) DESC,
+                         COALESCE(cp.like_count, 0) DESC,
+                         COALESCE(cp.favorite_count, 0) DESC,
+                         cp.created_at DESC,
+                         cp.id DESC"""
+
+    images_expr = "cp.images" if _community_post_has_images_column() else "'[]'"
     rows = execute_query(
         f"""
         SELECT
@@ -518,6 +560,7 @@ def _db_get_posts(
             cp.related_news_id,
             COALESCE(n.title, '') AS related_news_title,
             cp.topic_id,
+            {images_expr} AS images,
             cp.like_count,
             cp.comment_count,
             cp.favorite_count,
@@ -531,7 +574,7 @@ def _db_get_posts(
         LEFT JOIN `user` u ON u.id = cp.user_id
         LEFT JOIN news n ON n.id = cp.related_news_id
         WHERE {" AND ".join(clauses)}
-        ORDER BY cp.heat_score DESC, cp.created_at DESC, cp.id DESC
+        ORDER BY {order_clause}
         LIMIT %s OFFSET %s
         """,
         params + [normalized_page_size, (normalized_page - 1) * normalized_page_size],
@@ -577,8 +620,10 @@ def _db_get_posts(
 
 
 def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, Any] | None:
+    images_expr = "cp.images" if _community_post_has_images_column() else "'[]'"
+    tags_expr = "cp.tags" if _community_post_has_tags_column() else "NULL"
     row = execute_one(
-        """
+        f"""
         SELECT
             cp.id,
             cp.user_id,
@@ -598,13 +643,14 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
             cp.status,
             cp.created_at AS create_time,
             cp.updated_at AS update_time,
-            {tags_expr} AS tags
+            {tags_expr} AS tags,
+            {images_expr} AS images
         FROM community_post cp
         LEFT JOIN `user` u ON u.id = cp.user_id
         LEFT JOIN news n ON n.id = cp.related_news_id
         WHERE cp.id = %s AND cp.status = 1
         LIMIT 1
-        """.format(tags_expr="cp.tags" if _community_post_has_tags_column() else "NULL"),
+        """,
         [post_id],
     )
     if row is None:
@@ -1102,6 +1148,7 @@ def _post_create_row_from_request(request: CreatePostRequest, current_user: Opti
         "create_time": _now_text(),
         "update_time": _now_text(),
         "tags": request.tags or [],
+        "images": request.images or [],
         "author": _current_user_name(current_user),
         "author_id": user_id or 0,
         "created_at": _now_text(),
@@ -1122,28 +1169,50 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
         raise AppException(code=401, message="未登录或登录状态已失效")
 
     validated_tags = _validate_tags(request.tags or [])
+    images_json = json.dumps(request.images or [], ensure_ascii=False) if request.images else "[]"
 
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
             if _community_post_has_tags_column():
-                cursor.execute(
-                    """
-                    INSERT INTO community_post (
-                        user_id, title, content, related_news_id, topic_id,
-                        like_count, comment_count, favorite_count, heat_score,
-                        status, created_at, updated_at, tags
-                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
-                    """,
-                    [
-                        user_id,
-                        request.title,
-                        request.content,
-                        request.related_news_id,
-                        request.topic_id,
-                        json.dumps(validated_tags, ensure_ascii=False),
-                    ],
-                )
+                has_images = _community_post_has_images_column()
+                if has_images:
+                    cursor.execute(
+                        """
+                        INSERT INTO community_post (
+                            user_id, title, content, related_news_id, topic_id,
+                            like_count, comment_count, favorite_count, heat_score,
+                            status, created_at, updated_at, tags, images
+                        ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s, %s)
+                        """,
+                        [
+                            user_id,
+                            request.title,
+                            request.content,
+                            request.related_news_id,
+                            request.topic_id,
+                            json.dumps(validated_tags, ensure_ascii=False),
+                            images_json,
+                        ],
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO community_post (
+                            user_id, title, content, related_news_id, topic_id,
+                            like_count, comment_count, favorite_count, heat_score,
+                            status, created_at, updated_at, tags
+                        ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
+                        """,
+                        [
+                            user_id,
+                            request.title,
+                            request.content,
+                            request.related_news_id,
+                            request.topic_id,
+                            json.dumps(validated_tags, ensure_ascii=False),
+                        ],
+                    )
             else:
                 cursor.execute(
                     """
@@ -1212,6 +1281,7 @@ def create_post(request: CreatePostRequest, current_user: Optional[Any] = None) 
             "create_time": post["create_time"],
             "update_time": post["update_time"],
             "tags": request.tags or [],
+            "images": request.images or [],
         }
     )
     return CommunityPost(**post)
@@ -1221,10 +1291,12 @@ def get_post_list(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> PostListResponse:
     try:
-        result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+        result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, tag=tag, sort=sort, current_user=current_user)
         if result is not None:
             return PostListResponse(**result)
     except Exception as exc:  # noqa: BLE001
@@ -2008,6 +2080,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
         "create_time": now,
         "update_time": now,
         "tags": validated_tags,
+        "images": request.images or [],
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -2272,11 +2345,13 @@ def get_post_list(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> PostListResponse:
     try:
         if _db_has_posts():
-            result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+            result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, tag=tag, sort=sort, current_user=current_user)
             if result is not None:
                 return PostListResponse(**result)
     except Exception as exc:  # noqa: BLE001
@@ -3246,6 +3321,7 @@ def _my_post_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
     """将 community_post 行转为 MyCommunityPostItem 格式。"""
     content = normalize_text(row.get("content") or "")
     related_news_title = normalize_text(row.get("related_news_title") or "")
+    images = _parse_json_list(row.get("images"))
     return {
         "id": int(row.get("id") or 0),
         "title": normalize_text(row.get("title") or ""),
@@ -3257,6 +3333,7 @@ def _my_post_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": _format_datetime(row.get("create_time") or row.get("created_at")),
         "updated_at": _format_datetime(row.get("update_time") or row.get("updated_at")),
         "tags": _parse_json_list(row.get("tags")),
+        "images": images,
         "status": int(row.get("status") or 0),
         "view_count": int(row.get("view_count") or 0),
         "like_count": int(row.get("like_count") or 0),
@@ -3307,7 +3384,11 @@ def get_my_posts(
                 LEFT JOIN `user` u ON u.id = cp.user_id
                 LEFT JOIN news n ON n.id = cp.related_news_id
                 WHERE {' AND '.join(where)}
-                ORDER BY cp.created_at DESC, cp.id DESC
+                ORDER BY COALESCE(cp.heat_score, 0) DESC,
+                         COALESCE(cp.comment_count, 0) DESC,
+                         COALESCE(cp.like_count, 0) DESC,
+                         COALESCE(cp.favorite_count, 0) DESC,
+                         cp.created_at DESC, cp.id DESC
                 LIMIT %s OFFSET %s""",
             params + [page_size, (page - 1) * page_size],
         )
