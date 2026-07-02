@@ -3,9 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAIDraftStore } from '@/stores/aiDraft'
 import {
-  getAIHistory,
-  getAIRecordDetail,
-  deleteAIRecord,
+  aiApi,
   type AIGenerateRecordItem,
   type AIGenerateRecordDetail,
 } from '@/api/ai'
@@ -21,6 +19,11 @@ declare global {
 
 const aiDraft = useAIDraftStore()
 
+const emit = defineEmits<{
+  (e: 'load-history-item', record: AIGenerateRecordItem): void
+  (e: 'view-history-item', record: AIGenerateRecordItem): void
+}>()
+
 const historyRecords = ref<AIGenerateRecordItem[]>([])
 const loading = ref(false)
 const selectedRecord = ref<AIGenerateRecordDetail | null>(null)
@@ -34,7 +37,7 @@ const exportingDetail = ref<AIGenerateRecordDetail | null>(null)
 const loadHistory = async () => {
   loading.value = true
   try {
-    const response = await getAIHistory()
+    const response = await aiApi.getRecords()
     historyRecords.value = response.records
   } catch (error) {
     ElMessage.error('加载历史记录失败')
@@ -44,23 +47,11 @@ const loadHistory = async () => {
 }
 
 const handleViewRecord = async (record: AIGenerateRecordItem) => {
-  try {
-    selectedRecord.value = await getAIRecordDetail(record.id)
-    showDetailDialog.value = true
-  } catch (error) {
-    ElMessage.error('获取记录详情失败')
-  }
+  emit('view-history-item', record)
 }
 
 const handleReuseRecord = async (record: AIGenerateRecordItem) => {
-  try {
-    const detail = await getAIRecordDetail(record.id)
-    aiDraft.setInputText(detail.input_text)
-    aiDraft.setParams(detail.params)
-    ElMessage.success('已复用历史输入，可重新生成')
-  } catch (error) {
-    ElMessage.error('复用历史失败')
-  }
+  emit('load-history-item', record)
 }
 
 const handleDeleteRecord = async (record: AIGenerateRecordItem) => {
@@ -75,7 +66,7 @@ const handleDeleteRecord = async (record: AIGenerateRecordItem) => {
       }
     )
 
-    await deleteAIRecord(record.id)
+    await aiApi.deleteRecord(record.id)
     ElMessage.success('历史记录已删除')
     await loadHistory()
   } catch (error: any) {
@@ -133,7 +124,7 @@ const generateExportContent = (record: AIGenerateRecordItem, detail: AIGenerateR
 
 const handleExportRecord = async (record: AIGenerateRecordItem) => {
   try {
-    const detail = await getAIRecordDetail(record.id)
+    const detail = await aiApi.getRecordDetail(record.id)
     exportingRecord.value = record
     exportingDetail.value = detail
     selectedExportFormat.value = ''

@@ -2,16 +2,29 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import AIInputPanel from '@/components/ai/AIInputPanel.vue'
-import AIParamPanel from '@/components/ai/AIParamPanel.vue'
-import AIResultPanel from '@/components/ai/AIResultPanel.vue'
-import AIGenerateHistory from '@/components/ai/AIGenerateHistory.vue'
+import LeftControlPanel from '@/components/ai/LeftControlPanel.vue'
+import MainWorkspace from '@/components/ai/MainWorkspace.vue'
 import { useAIDraftStore } from '@/stores/aiDraft'
-import { generateTitleSummary } from '@/api/ai'
+import { aiApi, type AIGenerateRecordItem } from '@/api/ai'
 
 const aiDraft = useAIDraftStore()
 const route = useRoute()
-const historyRef = ref<{ loadHistory?: () => Promise<void> } | null>(null)
+const mainWorkspaceRef = ref<{ refreshHistory?: () => void } | null>(null)
+
+type UiMode = 'input' | 'history' | 'detail'
+
+const uiMode = ref<UiMode>('input')
+const historyDetailResult = ref<any>(null)
+
+interface Params {
+  title_count: number
+  summary_type: 'extract' | 'generate'
+  title_style: string
+  summary_style: string
+  summary_length: 'short' | 'long' | 'both'
+}
+
+type HistoryRecord = AIGenerateRecordItem
 
 function loadNewsDraftFromSession() {
   const rawDraft = sessionStorage.getItem('ai_draft_from_news')
@@ -70,7 +83,7 @@ const handleGenerate = async () => {
   aiDraft.setLoading(true)
 
   try {
-    const result = await generateTitleSummary({
+    const result = await aiApi.generate({
       input_text: aiDraft.inputText,
       title_count: aiDraft.params.title_count,
       summary_type: aiDraft.params.summary_type,
@@ -85,7 +98,7 @@ const handleGenerate = async () => {
     aiDraft.setResult(result)
     ElMessage.success('标题和摘要生成成功')
     await nextTick()
-    await historyRef.value?.loadHistory?.()
+    mainWorkspaceRef.value?.refreshHistory?.()
   } catch (error) {
     let errorMessage = 'AI 服务暂时不可用，请稍后重试'
 
@@ -105,7 +118,7 @@ const handleGenerate = async () => {
   }
 }
 
-function handleLoadSample() {
+const handleLoadSample = () => {
   const sampleText = `近日，我国新能源汽车产业发展再传捷报。据中国汽车工业协会最新数据显示，今年前五个月，全国新能源汽车销量达到224.7万辆，同比增长46.8%，市场占有率达到27.7%。
 
 在技术创新方面，多家车企宣布在固态电池领域取得重大突破。某知名新能源车企发布公告称，其自主研发的固态电池能量密度已突破500Wh/kg，预计明年将率先搭载于旗下高端车型。该技术将使纯电动汽车续航里程轻松突破1000公里，大幅缓解消费者的续航焦虑。
@@ -119,10 +132,49 @@ function handleLoadSample() {
   ElMessage.success('已加载示例新闻')
 }
 
-function handleClear() {
+const handleClear = () => {
   aiDraft.inputText = ''
   aiDraft.clearResult()
   aiDraft.setError('')
+}
+
+const handleParamUpdate = (key: keyof Params, value: any) => {
+  if (key === 'title_count') {
+    aiDraft.setParams({ [key]: Number(value) })
+  } else {
+    aiDraft.setParams({ [key]: value })
+  }
+}
+
+const handleResetParams = () => {
+  aiDraft.resetParams()
+}
+
+const handleSetUiMode = (mode: UiMode) => {
+  uiMode.value = mode
+}
+
+const handleLoadHistoryItem = async (record: HistoryRecord) => {
+  try {
+    const detail = await aiApi.getRecordDetail(record.id)
+    aiDraft.inputText = detail.input_text
+    aiDraft.setParams(detail.params)
+    ElMessage.success('已复用历史输入')
+  } catch (error) {
+    ElMessage.error('获取历史详情失败')
+    return
+  }
+  uiMode.value = 'input'
+}
+
+const handleViewHistoryItem = async (record: HistoryRecord) => {
+  try {
+    const detail = await aiApi.getRecordDetail(record.id)
+    historyDetailResult.value = detail.result
+    uiMode.value = 'detail'
+  } catch (error) {
+    ElMessage.error('获取历史详情失败')
+  }
 }
 
 onMounted(() => {
@@ -155,48 +207,27 @@ watch(
 
     <div class="main-content">
       <aside class="sidebar">
-        <AIParamPanel />
+        <LeftControlPanel
+          :params="aiDraft.params"
+          :ui-mode="uiMode"
+          @update:params="handleParamUpdate"
+          @reset="handleResetParams"
+          @set-ui-mode="handleSetUiMode"
+        />
       </aside>
       
-      <div class="main-area">
-        <AIInputPanel />
-        
-        <div class="action-wrapper">
-          <div class="tips-section">
-            <div class="tip-item">
-              <span class="tip-dot"></span>
-              <span>支持粘贴新闻正文，自动提取关键信息</span>
-            </div>
-            <div class="tip-item">
-              <span class="tip-dot"></span>
-              <span>可生成1-5个候选标题供选择</span>
-            </div>
-            <div class="tip-item">
-              <span class="tip-dot"></span>
-              <span>短摘要150字以内，长摘要300-800字</span>
-            </div>
-          </div>
-          
-          <div class="shortcuts-section">
-            <button class="shortcut-btn" @click="handleClear">清空内容</button>
-            <button class="shortcut-btn" @click="handleLoadSample">加载示例</button>
-          </div>
-          
-          <el-button
-            type="primary"
-            size="large"
-            class="generate-button"
-            @click="handleGenerate"
-            :loading="aiDraft.loading"
-            :disabled="aiDraft.loading"
-          >
-            {{ aiDraft.loading ? '生成中...' : '生成标题和摘要' }}
-          </el-button>
-        </div>
-
-        <AIResultPanel />
-        <AIGenerateHistory ref="historyRef" />
-      </div>
+      <MainWorkspace
+        ref="mainWorkspaceRef"
+        :loading="aiDraft.loading"
+        :ui-mode="uiMode"
+        :history-detail-result="historyDetailResult"
+        @generate="handleGenerate"
+        @clear="handleClear"
+        @load-sample="handleLoadSample"
+        @load-history-item="handleLoadHistoryItem"
+        @view-history-item="handleViewHistoryItem"
+        @set-ui-mode="handleSetUiMode"
+      />
     </div>
   </main>
 </template>
@@ -250,13 +281,9 @@ watch(
 .sidebar {
   width: 260px;
   flex-shrink: 0;
-}
-
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
 }
 
 @media (max-width: 900px) {
@@ -267,84 +294,6 @@ watch(
   .sidebar {
     width: 100%;
     position: static;
-  }
-}
-
-.action-wrapper {
-  padding: 20px;
-  background-color: #ffffff;
-  border-radius: 10px;
-  border: 1px solid #f0f0f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.tips-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  
-  .tip-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #666666;
-    
-    .tip-dot {
-      width: 4px;
-      height: 4px;
-      background-color: #ff4d4f;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-  }
-}
-
-.shortcuts-section {
-  display: flex;
-  gap: 10px;
-  
-  .shortcut-btn {
-    flex: 1;
-    padding: 10px 16px;
-    font-size: 13px;
-    color: #666666;
-    background-color: #f8f8f8;
-    border: 1px solid #e8e8e8;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    
-    &:hover {
-      background-color: #fff5f5;
-      border-color: #ffccc7;
-      color: #ff4d4f;
-    }
-  }
-}
-
-.generate-button {
-  width: 100%;
-  height: 46px;
-  font-size: 16px;
-  font-weight: 600;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
-  border: none;
-  transition: all 0.25s ease;
-  
-  &:hover:not(:disabled) {
-    background: linear-gradient(135deg, #ff7875 0%, #ff4d4f 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(255, 77, 79, 0.4);
-  }
-  
-  &:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: 0 3px 10px rgba(255, 77, 79, 0.3);
   }
 }
 

@@ -145,3 +145,10 @@ export function uploadFile(formData: FormData) {
     }
   )
 }
+
+export const aiApi = {
+  generate: generateTitleSummary,
+  getRecords: getAIHistory,
+  getRecordDetail: getAIRecordDetail,
+  deleteRecord: deleteAIRecord,
+}
