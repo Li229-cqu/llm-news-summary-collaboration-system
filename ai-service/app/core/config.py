@@ -57,14 +57,7 @@ class Settings(BaseModel):
     evidence_llm_temperature: float = float(os.getenv("EVIDENCE_LLM_TEMPERATURE", "0.1"))
     evidence_llm_max_tokens: int = int(os.getenv("EVIDENCE_LLM_MAX_TOKENS", "4096"))
 
-    llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() == "true"
-    llm_provider: str = os.getenv("LLM_PROVIDER", "zhipu")
-    llm_api_key: str = os.getenv("LLM_API_KEY", "")
-    llm_base_url: str = os.getenv("LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
-    llm_model: str = os.getenv("LLM_MODEL", "glm-4-flash")
-    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "30"))
-    llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.3"))
-    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    # --- 通用 LLM 参数（非配置，仅工具字段） ---
     llm_thinking_type: str = os.getenv("LLM_THINKING_TYPE", "disabled")
 
     @property
@@ -124,18 +117,16 @@ def apply_backend_config(settings: Settings, backend_config: Dict[str, Any]) -> 
     if backend_config.get('enable_real_llm') is not None:
         settings.summary_llm_enabled = backend_config['enable_real_llm']
         settings.evidence_llm_enabled = backend_config['enable_real_llm']
-        settings.llm_enabled = backend_config['enable_real_llm']
 
     if backend_config.get('timeout') is not None:
         settings.summary_llm_timeout = backend_config['timeout']
         settings.evidence_llm_timeout = backend_config['timeout']
-        settings.llm_timeout = backend_config['timeout']
 
     if backend_config.get('api_key'):
-        settings.llm_api_key = backend_config['api_key']
+        settings.summary_llm_api_key = backend_config['api_key']
 
     if backend_config.get('model_name'):
-        settings.llm_model = backend_config['model_name']
+        settings.summary_llm_model = backend_config['model_name']
         settings.evidence_llm_model = backend_config['model_name']
 
     if backend_config.get('service_url'):

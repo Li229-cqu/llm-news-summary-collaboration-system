@@ -456,7 +456,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
     if not 1 <= request.title_count <= 5:
         raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
 
-    if not settings.llm_enabled and not settings.summary_llm_enabled:
+    if not settings.summary_llm_enabled:
         logger.info("LLM 未启用，使用动态 mock 生成响应")
         return generate_mock_response(request)
 
@@ -560,7 +560,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
             return generate_mock_response(request)
 
     else:
-        logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.llm_model}")
+        logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.summary_llm_model}")
 
         try:
             messages = build_messages(request)

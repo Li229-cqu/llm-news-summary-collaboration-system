@@ -27,24 +27,22 @@
             :class="['message-row', msg.role]"
           >
             <div v-if="msg.role === 'assistant'" class="avatar-col">
-              <el-avatar icon="robot" :size="32" />
+              <el-avatar :size="32">
+                <el-icon><ChatLineSquare /></el-icon>
+              </el-avatar>
             </div>
             <div v-else class="avatar-col user-avatar-col">
-              <el-avatar :size="32" icon="user" />
+              <el-avatar :size="32" :src="userAvatar" />
             </div>
-            <div class="message-bubble">
-              <div class="message-content">{{ msg.content }}</div>
-              <div class="message-time">{{ formatTime(msg.created_at) }}</div>
-            </div>
-          </div>
-          <!-- 正在加载 -->
-          <div v-if="sending" class="message-row assistant">
-            <div class="avatar-col">
-              <el-avatar icon="robot" :size="32" />
-            </div>
-            <div class="message-bubble thinking-bubble">
+            <!-- loading 消息：带旋转图标 -->
+            <div v-if="(msg as any).loading" class="message-bubble thinking-bubble">
               <span class="thinking-text">AI 正在思考...</span>
               <el-icon class="thinking-icon"><Loading /></el-icon>
+            </div>
+            <!-- 普通消息 -->
+            <div v-else class="message-bubble">
+              <div class="message-content">{{ msg.content }}</div>
+              <div class="message-time">{{ formatTime(msg.created_at) }}</div>
             </div>
           </div>
         </template>
@@ -86,6 +84,7 @@ const props = defineProps<{
   messages: CommunityAiMessage[]
   loadingMessages: boolean
   sending: boolean
+  userAvatar?: string
 }>()
 
 const emit = defineEmits<{

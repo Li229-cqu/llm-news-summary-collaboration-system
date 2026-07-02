@@ -3384,11 +3384,7 @@ def get_my_posts(
                 LEFT JOIN `user` u ON u.id = cp.user_id
                 LEFT JOIN news n ON n.id = cp.related_news_id
                 WHERE {' AND '.join(where)}
-                ORDER BY COALESCE(cp.heat_score, 0) DESC,
-                         COALESCE(cp.comment_count, 0) DESC,
-                         COALESCE(cp.like_count, 0) DESC,
-                         COALESCE(cp.favorite_count, 0) DESC,
-                         cp.created_at DESC, cp.id DESC
+                ORDER BY cp.created_at DESC, cp.id DESC
                 LIMIT %s OFFSET %s""",
             params + [page_size, (page - 1) * page_size],
         )

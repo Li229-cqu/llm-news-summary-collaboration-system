@@ -64,7 +64,7 @@ def summarize_comments(request: CommentSummaryRequest) -> CommentSummaryResponse
     if not request.comments:
         raise AIServiceException(code=400, message="评论列表不能为空")
 
-    if not settings.llm_enabled:
+    if not settings.summary_llm_enabled:
         logger.info("LLM 未启用，使用 mock 生成评论总结")
         return summarize_comments_mock(request)
 

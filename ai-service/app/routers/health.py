@@ -16,8 +16,8 @@ async def health_check():
             "project": settings.project_name,
             "summary_llm_enabled": settings.summary_llm_enabled,
             "evidence_llm_enabled": settings.evidence_llm_enabled,
-            "llm_enabled": settings.llm_enabled,
-            "timeout": settings.llm_timeout,
+            "llm_enabled": settings.summary_llm_enabled,
+            "timeout": settings.summary_llm_timeout,
         }
     )
 
@@ -32,7 +32,7 @@ async def reload_config():
             "message": "配置已重新加载",
             "summary_llm_enabled": settings.summary_llm_enabled,
             "evidence_llm_enabled": settings.evidence_llm_enabled,
-            "llm_enabled": settings.llm_enabled,
-            "timeout": settings.llm_timeout,
+            "llm_enabled": settings.summary_llm_enabled,
+            "timeout": settings.summary_llm_timeout,
         }
     )

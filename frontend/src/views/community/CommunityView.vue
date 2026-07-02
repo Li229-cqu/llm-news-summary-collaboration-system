@@ -51,7 +51,7 @@
             />
             <div v-else-if="activeFeedTab === 'ai'" class="ai-tab-container">
               <AISessionList :sessions="aiSessions" :active-session-id="aiActiveSessionId" :collapsed="aiSessionCollapsed" :loading="aiLoadingSessions" @select="handleAiSelectSession" @create="handleAiCreateSession" @delete="handleAiDeleteSession" @toggle-collapse="aiSessionCollapsed = !aiSessionCollapsed" />
-              <AIChatPanel :active-session="aiActiveSession" :messages="aiCurrentMessages" :loading-messages="aiLoadingMessages" :sending="aiSending" @send="handleAiSend" @first-question="handleAiCreateSession" />
+              <AIChatPanel :active-session="aiActiveSession" :messages="aiCurrentMessages" :loading-messages="aiLoadingMessages" :sending="aiSending" :user-avatar="userAvatar" @send="handleAiSend" @first-question="handleAiCreateSession" />
             </div>
             <MyInteractionsPanel v-else-if="activeFeedTab === 'interactions'" @open-post-detail="handleOpenMyPostDetail" />
             <MyPostsPanel v-else-if="activeFeedTab === 'posts'" @publish="router.push('/community/create')" @view-post="handleOpenMyPostDetail" />
@@ -177,14 +177,60 @@ function handlePostDetailUpdated() {
 
 // ─── AI ──
 const aiSessions = ref<CommunityAiSession[]>([]); const aiActiveSessionId = ref<number | null>(null); const aiActiveSession = ref<CommunityAiSession | null>(null); const aiCurrentMessages = ref<CommunityAiMessage[]>([]); const aiLoadingSessions = ref(false); const aiLoadingMessages = ref(false); const aiSending = ref(false); const aiSessionCollapsed = ref(false)
+const userAvatar = computed(() => normalizeAvatarUrl(userStore.userInfo?.avatar))
+function normalizeAvatarUrl(url?: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
+function makeTempMsg(role: 'user' | 'assistant', content: string, loading = false): CommunityAiMessage {
+  return { id: `temp-${role}-${Date.now()}`, role, content, loading, created_at: new Date().toISOString() } as unknown as CommunityAiMessage
+}
 watch(activeFeedTab, (tab) => { if (tab === 'ai') loadAiSessions() })
 async function loadAiSessions() { aiLoadingSessions.value = true; try { const res = await getCommunityAiSessions({ page: 1, page_size: 50 }); aiSessions.value = res.list || []; if (aiSessions.value.length > 0) { if (!aiActiveSessionId.value || !aiSessions.value.some(s => s.id === aiActiveSessionId.value)) aiActiveSessionId.value = aiSessions.value[0].id; await loadAiSessionDetail(aiActiveSessionId.value) } else { aiActiveSessionId.value = null; aiActiveSession.value = null; aiCurrentMessages.value = [] } } catch { aiSessions.value = [] } finally { aiLoadingSessions.value = false } }
 async function loadAiSessionDetail(sessionId: number) { if (!sessionId) return; aiLoadingMessages.value = true; try { const res = await getCommunityAiSessionDetail(sessionId); aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('获取会话详情失败') } finally { aiLoadingMessages.value = false } }
 async function handleAiCreateSession() { try { const res = await createCommunityAiSession({}); aiSessions.value.unshift(res.session); aiActiveSessionId.value = res.session.id; aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('创建会话失败') } }
 async function handleAiSelectSession(sessionId: number) { aiActiveSessionId.value = sessionId; await loadAiSessionDetail(sessionId) }
 async function handleAiSend(question: string) {
-  if (aiActiveSessionId.value) { aiSending.value = true; try { const res = await sendCommunityAiMessage(aiActiveSessionId.value, { question }); aiCurrentMessages.value.push(res.user_message); aiCurrentMessages.value.push(res.assistant_message); aiActiveSession.value = res.session; const idx = aiSessions.value.findIndex(s => s.id === res.session.id); if (idx !== -1) aiSessions.value[idx] = res.session } catch { ElMessage.error('消息发送失败') } finally { aiSending.value = false } }
-  else { aiSending.value = true; try { const res = await createCommunityAiSession({ question }); aiSessions.value.unshift(res.session); aiActiveSessionId.value = res.session.id; aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('发送失败') } finally { aiSending.value = false } }
+  // 乐观更新：先立即显示用户消息 + AI loading
+  const userMsg = makeTempMsg('user', question)
+  const loadingMsg = makeTempMsg('assistant', '', true)
+  aiCurrentMessages.value.push(userMsg)
+  aiCurrentMessages.value.push(loadingMsg)
+  aiSending.value = true
+  try {
+    if (aiActiveSessionId.value) {
+      const res = await sendCommunityAiMessage(aiActiveSessionId.value, { question })
+      // 替换临时消息为真实消息
+      const userIdx = aiCurrentMessages.value.findIndex(m => m.id === userMsg.id)
+      if (userIdx !== -1) aiCurrentMessages.value[userIdx] = res.user_message
+      const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
+      if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = res.assistant_message
+      aiActiveSession.value = res.session
+      const idx = aiSessions.value.findIndex(s => s.id === res.session.id)
+      if (idx !== -1) aiSessions.value[idx] = res.session
+    } else {
+      const res = await createCommunityAiSession({ question })
+      aiSessions.value.unshift(res.session)
+      aiActiveSessionId.value = res.session.id
+      aiActiveSession.value = res.session
+      // 合并后端返回的消息，去重
+      const serverMessages = res.messages || []
+      if (serverMessages.length > 0) {
+        const currentIds = new Set(aiCurrentMessages.value.filter(m => !String(m.id).startsWith('temp-')).map(m => m.id))
+        const newMsgs = serverMessages.filter(m => !currentIds.has(m.id))
+        // 移除临时 loading，追加新消息
+        const filtered = aiCurrentMessages.value.filter(m => !String(m.id).startsWith('temp-'))
+        aiCurrentMessages.value = [...filtered, ...newMsgs]
+      }
+    }
+  } catch {
+    // 失败时保留用户消息，loading 改为失败提示
+    const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
+    if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = makeTempMsg('assistant', 'AI 助手暂时无法回复，请稍后再试。')
+    ElMessage.error('消息发送失败')
+  } finally { aiSending.value = false }
 }
 async function handleAiDeleteSession(sessionId: number) { try { await deleteCommunityAiSession(sessionId); aiSessions.value = aiSessions.value.filter(s => s.id !== sessionId); if (aiActiveSessionId.value === sessionId) { if (aiSessions.value.length > 0) { aiActiveSessionId.value = aiSessions.value[0].id; await loadAiSessionDetail(aiActiveSessionId.value) } else { aiActiveSessionId.value = null; aiActiveSession.value = null; aiCurrentMessages.value = [] } } } catch { ElMessage.error('删除会话失败') } }
 

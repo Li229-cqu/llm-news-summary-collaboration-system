@@ -7,13 +7,13 @@ from app.services.llm_client import call_llm
 logger = logging.getLogger(__name__)
 
 
-def chat(request: ChatRequest) -> ChatResponse:
+async def chat(request: ChatRequest) -> ChatResponse:
     """调用 AI 模型回答新闻相关问题。"""
     if not request.question.strip():
         raise AIServiceException(code=400, message="问题不能为空")
 
-    if not settings.llm_enabled:
-        logger.info("🤖 [MOCK MODE] 返回模拟 AI 回答（LLM 未启用）")
+    if not settings.summary_llm_enabled:
+        logger.info("🤖 [MOCK MODE] 返回模拟 AI 回答（SUMMARY_LLM 未启用）")
         from app.mock.sample_outputs import CHAT_OUTPUT
         return ChatResponse(**CHAT_OUTPUT, source="mock")
 
@@ -30,7 +30,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     try:
         logger.info("🚀 [REAL API] 调用真实大语言模型 API...")
-        answer = call_llm(messages)
+        answer = await call_llm(messages)
         logger.info("✅ [REAL API] 大模型 API 调用成功")
         return ChatResponse(
             answer=answer,
