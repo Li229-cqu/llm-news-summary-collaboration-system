@@ -138,14 +138,22 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
 async def _call_ai_service(request: AIGenerateRequest) -> AIGenerateResponse:
     endpoint = f"{settings.ai_service_url.rstrip('/')}/ai/generate-title-summary"
     logger.info(f"🚀 [REAL API] 调用 AI 服务: {endpoint}")
+    logger.info(f"📋 [REAL API] 请求参数: input_text长度={len(request.input_text)}, title_count={request.title_count}")
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
             response = await client.post(endpoint, json=request.model_dump())
+            logger.info(f"📡 [REAL API] 响应状态码: {response.status_code}")
             response.raise_for_status()
             payload = response.json()
         logger.info("✅ [REAL API] AI 服务调用成功")
-    except (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
-        logger.error(f"❌ [REAL API] AI 服务调用失败: {str(exc)}")
+    except httpx.TimeoutException as exc:
+        logger.error(f"❌ [REAL API] AI 服务调用超时: {str(exc)}")
+        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
+    except httpx.HTTPStatusError as exc:
+        logger.error(f"❌ [REAL API] AI 服务返回错误状态码: {exc.response.status_code}, 响应内容: {exc.response.text[:500]}")
+        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
+    except httpx.RequestError as exc:
+        logger.error(f"❌ [REAL API] AI 服务网络请求失败: {type(exc).__name__}: {str(exc)}")
         raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
 
     if payload.get("code") != 200:
@@ -161,6 +169,64 @@ async def _call_ai_service(request: AIGenerateRequest) -> AIGenerateResponse:
     except (KeyError, TypeError, ValueError) as exc:
         logger.error(f"❌ [REAL API] AI 生成结果解析失败: {str(exc)}")
         raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
+
+
+import uuid
+import asyncio
+
+async_tasks: Dict[str, Dict[str, Any]] = {}
+
+
+async def _create_async_task(request: AIGenerateRequest, current_user: Optional[Any] = None) -> str:
+    task_id = str(uuid.uuid4())
+    async_tasks[task_id] = {
+        "status": "pending",
+        "request": request,
+        "result": None,
+        "error": None,
+    }
+    
+    async def execute_task():
+        task = async_tasks.get(task_id)
+        if not task:
+            return
+        
+        try:
+            async_tasks[task_id]["status"] = "running"
+            result = await _call_ai_service(request)
+            async_tasks[task_id]["status"] = "completed"
+            async_tasks[task_id]["result"] = result
+            
+            try:
+                _save_ai_record(request, result, current_user=current_user)
+            except Exception as exc:
+                logger.warning("AI 生成记录保存失败：%s", exc)
+                
+        except Exception as exc:
+            async_tasks[task_id]["status"] = "failed"
+            async_tasks[task_id]["error"] = str(exc)
+            logger.error(f"❌ 异步任务 {task_id} 执行失败: {str(exc)}")
+    
+    asyncio.create_task(execute_task())
+    return task_id
+
+
+async def _get_async_task_result(task_id: str) -> Dict[str, Any]:
+    task = async_tasks.get(task_id)
+    if not task:
+        raise AppException(code=404, message="任务不存在")
+    
+    result_data = {
+        "task_id": task_id,
+        "status": task["status"],
+    }
+    
+    if task["status"] == "completed" and task["result"]:
+        result_data["result"] = task["result"]
+    elif task["status"] == "failed" and task["error"]:
+        result_data["error"] = task["error"]
+    
+    return result_data
 
 
 def _save_ai_record(

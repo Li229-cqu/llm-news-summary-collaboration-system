@@ -69,13 +69,29 @@ export interface AIGenerateResponse {
   evidence_coverage?: number
 }
 
-/** 调用 AI 生成标题和摘要。 */
+/** 调用 AI 生成标题和摘要（同步模式）。 */
 export function generateTitleSummary(data: AIGenerateRequest) {
-  // 双AI架构：DeepSeek生成(30-60秒) + 智谱评估(30-60秒)，总耗时可能超过60秒
   return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(
     '/api/ai/generate',
     data,
-    { timeout: 120000 }  // 120 秒 timeout
+    { timeout: 300000 }  // 5分钟 timeout
+  )
+}
+
+/** 调用 AI 生成标题和摘要（异步模式）。 */
+export function generateTitleSummaryAsync(data: AIGenerateRequest) {
+  return request.post<{ task_id: string }, { task_id: string }, AIGenerateRequest>(
+    '/api/ai/generate/async',
+    data,
+    { timeout: 10000 }  // 创建任务很快
+  )
+}
+
+/** 查询异步任务结果。 */
+export function getAsyncTaskResult(taskId: string) {
+  return request.get<{ task_id: string; status: string; result?: AIGenerateResponse; error?: string }>(
+    `/api/ai/generate/async/${taskId}`,
+    { timeout: 5000 }
   )
 }
 

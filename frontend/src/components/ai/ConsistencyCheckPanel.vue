@@ -36,12 +36,12 @@ const scoreStatus = computed(() => {
 
 <template>
   <div class="consistency-section">
-    <h4 class="section-title">✅ 一致性质量校验</h4>
+    <h4 class="section-title">一致性质量校验</h4>
 
     <!-- 得分卡片 -->
     <div class="score-card">
       <div class="score-display">
-        <div class="score-value">{{ consistency.score }}</div>
+        <div class="score-value" :class="`score-status-${scoreStatus}`">{{ consistency.score }}</div>
         <div class="score-label">质量分</div>
       </div>
       <div class="score-bar">
@@ -117,7 +117,18 @@ const scoreStatus = computed(() => {
 .score-value {
   font-size: 32px;
   font-weight: bold;
-  color: var(--color-primary);
+
+  &.score-status-success {
+    color: #67c23a;
+  }
+
+  &.score-status-warning {
+    color: #e6a23c;
+  }
+
+  &.score-status-danger {
+    color: #f56c6c;
+  }
 }
 
 .score-label {

@@ -7,7 +7,7 @@ import AIParamPanel from '@/components/ai/AIParamPanel.vue'
 import AIResultPanel from '@/components/ai/AIResultPanel.vue'
 import AIGenerateHistory from '@/components/ai/AIGenerateHistory.vue'
 import { useAIDraftStore } from '@/stores/aiDraft'
-import { generateTitleSummary } from '@/api/ai'
+import { generateTitleSummaryAsync, getAsyncTaskResult } from '@/api/ai'
 
 const aiDraft = useAIDraftStore()
 const route = useRoute()
@@ -70,7 +70,7 @@ const handleGenerate = async () => {
   aiDraft.setLoading(true)
 
   try {
-    const result = await generateTitleSummary({
+    const { task_id } = await generateTitleSummaryAsync({
       input_text: aiDraft.inputText,
       title_count: aiDraft.params.title_count,
       summary_type: aiDraft.params.summary_type,
@@ -82,20 +82,33 @@ const handleGenerate = async () => {
       source_title: aiDraft.sourceTitle,
     })
 
-    aiDraft.setResult(result)
-    ElMessage.success('标题和摘要生成成功')
-    await nextTick()
-    await historyRef.value?.loadHistory?.()
+    const maxRetries = 120
+    let retryCount = 0
+    
+    while (retryCount < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      const taskResult = await getAsyncTaskResult(task_id)
+      
+      if (taskResult.status === 'completed') {
+        aiDraft.setResult(taskResult.result!)
+        ElMessage.success('标题和摘要生成成功')
+        await nextTick()
+        await historyRef.value?.loadHistory?.()
+        return
+      } else if (taskResult.status === 'failed') {
+        throw new Error(taskResult.error || 'AI 服务执行失败')
+      }
+      
+      retryCount++
+    }
+    
+    throw new Error('AI 生成超时，请稍后重试')
   } catch (error) {
     let errorMessage = 'AI 服务暂时不可用，请稍后重试'
 
     if (error instanceof Error) {
-      const msg = error.message || ''
-      if (msg.includes('timeout') || msg.includes('60000ms')) {
-        errorMessage = 'AI 生成耗时较长，请稍后重试或缩短新闻正文'
-      } else {
-        errorMessage = msg
-      }
+      errorMessage = error.message
     }
 
     aiDraft.setError(errorMessage)

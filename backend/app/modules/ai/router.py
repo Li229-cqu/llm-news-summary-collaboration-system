@@ -62,6 +62,33 @@ async def generate_ai_content(
     return success_response(await generate_title_summary(request, current_user=current_user))
 
 
+@router.post("/generate/async")
+async def generate_ai_content_async(
+    request: AIGenerateRequest,
+    current_user: Optional[UserInfo] = Depends(_get_optional_current_user),
+):
+    """异步模式：创建任务并立即返回task_id，避免超时。"""
+    from app.modules.ai.service import _create_async_task, _get_async_task_result
+    
+    if not request.input_text.strip():
+        raise AppException(code=400, message="输入文本不能为空")
+    
+    if not 1 <= request.title_count <= 5:
+        raise AppException(code=400, message="标题数量必须在 1-5 范围内")
+    
+    task_id = await _create_async_task(request, current_user)
+    return success_response({"task_id": task_id})
+
+
+@router.get("/generate/async/{task_id}")
+async def get_async_task_result(task_id: str):
+    """查询异步任务结果。"""
+    from app.modules.ai.service import _get_async_task_result
+    
+    result = await _get_async_task_result(task_id)
+    return success_response(result)
+
+
 @router.get("/records", response_model=ApiResponse[AIRecordListResponse])
 async def get_ai_history(
     current_user: Optional[UserInfo] = Depends(_get_optional_current_user),

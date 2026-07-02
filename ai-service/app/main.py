@@ -12,6 +12,7 @@ from app.routers.generate import router as generate_router
 from app.routers.health import router as health_router
 from app.routers.profile_report import router as profile_report_router
 from app.routers.timeline import router as timeline_router
+from app.routers.task import router as task_router
 
 app = FastAPI(
     title=f"{settings.project_name} AI 服务",
@@ -44,3 +45,4 @@ app.include_router(chat_router)
 app.include_router(comment_summary_router)
 app.include_router(profile_report_router)
 app.include_router(timeline_router)
+app.include_router(task_router, prefix=settings.api_prefix)
