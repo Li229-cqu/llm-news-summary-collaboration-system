@@ -109,6 +109,8 @@ def _topic_row_to_model(row: dict[str, Any], news_count: int) -> TimelineTopic:
         heat_score=int(row.get("heat_score") or 0),
         summary=normalize_text(row.get("summary")),
         news_count=news_count,
+        source_type=normalize_text(row.get("source_type")) or "manual",
+        auto_generated_at=normalize_text(row.get("auto_generated_at")) or None,
     )
 
 
@@ -153,13 +155,15 @@ def _db_topics() -> list[TimelineTopic] | None:
             nt.heat_score,
             nt.summary,
             nt.status,
+            nt.source_type,
+            nt.auto_generated_at,
             COALESCE(COUNT(n.id), 0) AS news_count
         FROM news_topic nt
         LEFT JOIN news n
           ON n.topic_id = nt.id
          AND n.status = 1
         WHERE nt.status = 1
-        GROUP BY nt.id, nt.topic_name, nt.keyword_list, nt.heat_score, nt.summary, nt.status
+        GROUP BY nt.id, nt.topic_name, nt.keyword_list, nt.heat_score, nt.summary, nt.status, nt.source_type, nt.auto_generated_at
         ORDER BY nt.heat_score DESC, nt.id ASC
         """,
     )
@@ -174,6 +178,8 @@ def _db_topics() -> list[TimelineTopic] | None:
             heat_score=int(row.get("heat_score") or 0),
             summary=normalize_text(row.get("summary")),
             news_count=int(row.get("news_count") or 0),
+            source_type=normalize_text(row.get("source_type")) or "manual",
+            auto_generated_at=normalize_text(row.get("auto_generated_at")) or None,
         )
         for row in rows
     ]
@@ -842,3 +848,39 @@ async def generate_timeline(topic_id: int, current_user: Optional[UserInfo] = No
         logger.warning("设置生成中状态失败：%s", exc)
 
     return await _generate_with_ai_or_fallback(topic, news_rows)
+
+
+def auto_cluster_timeline_topics(request) -> dict[str, Any]:
+    """后台批量自动聚类生成事件脉络话题。"""
+    from app.modules.timeline.cluster_service import apply_auto_cluster_write
+
+    if request.dry_run is False and request.confirm is not True:
+        return {
+            "success": False, "dry_run": False,
+            "message": "正式发布自动话题需要 confirm=true，请先预览确认后再发布。",
+        }
+
+    result = apply_auto_cluster_write(
+        days=request.days, max_news=request.max_news,
+        use_llm_polish=request.use_llm_polish,
+        max_write_topics=request.max_write_topics,
+        dry_run=request.dry_run,
+    )
+
+    if result.get("success"):
+        manual_count = execute_one("SELECT COUNT(*) as c FROM news_topic WHERE source_type='manual' AND status=1")
+        auto_active = execute_one("SELECT COUNT(*) as c FROM news_topic WHERE source_type='auto' AND status=1")
+        result.update({
+            "message": "预览完成，未写入数据库。" if request.dry_run else "自动话题已发布，用户端 /timeline 可查看。",
+            "summary": {
+                "manual_topic_count": int((manual_count or {}).get("c", 0)),
+                "auto_active_count": int((auto_active or {}).get("c", 0)),
+                "updated_news_count": result.get("updated_news_topic_id", 0),
+                "timeline_count": result.get("written_timelines", 0),
+            },
+            "warnings": ["自动聚类结果可能存在偏差，建议管理员审核后再发布。", "当前未覆盖任何人工话题和人工绑定。"],
+        })
+    else:
+        result["dry_run"] = request.dry_run
+        result["message"] = result.get("message", "自动话题生成失败。")
+    return result

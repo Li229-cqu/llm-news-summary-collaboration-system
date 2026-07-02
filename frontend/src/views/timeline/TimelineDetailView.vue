@@ -8,6 +8,8 @@
             <span class="breadcrumb-arrow">←</span>
             <span>返回事件脉络中心</span>
           </button>
+          <el-tag v-if="isAutoTopic" type="success" size="small" style="margin-left:12px">自动生成</el-tag>
+          <span v-if="isAutoTopic" style="font-size:12px;color:#94a3b8;margin-left:8px">该事件脉络由系统根据近期新闻自动聚合生成</span>
         </div>
 
         <!-- 复用 TimelineBriefPanel -->
@@ -47,8 +49,10 @@ const topicId = computed<number | null>(() => {
   return Number.isFinite(id) && id > 0 ? id : null
 })
 
-// ── topicName：优先 query，兜底从话题列表查找 ──
+// ── topicName & sourceType ──
 const queryTopicName = computed(() => String(route.query.topicName || ''))
+const querySourceType = computed(() => String(route.query.sourceType || 'manual'))
+const isAutoTopic = computed(() => querySourceType.value === 'auto')
 const fallbackName = ref('')
 
 async function resolveTopicName() {

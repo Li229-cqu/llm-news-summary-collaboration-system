@@ -15,6 +15,8 @@ class TimelineTopic(BaseModel):
     heat_score: int
     summary: str
     news_count: int
+    source_type: str = "manual"
+    auto_generated_at: str | None = None
 
 
 class TimelineNewsItem(BaseModel):
@@ -90,3 +92,13 @@ class TimelineGenerateResult(TimelineResponse):
     key_figures: list[str] = Field(default_factory=list)
     phases: list[TimelinePhase] = Field(default_factory=list)
     relationships: list[TimelineRelationship] = Field(default_factory=list)
+
+
+class AutoClusterRequest(BaseModel):
+    """自动聚类生成事件脉络话题请求。"""
+    days: int = Field(default=30, ge=1, le=90, description="最近多少天新闻参与聚类")
+    max_news: int = Field(default=1000, ge=20, le=5000, description="最多参与聚类新闻数")
+    max_write_topics: int = Field(default=8, ge=1, le=20, description="最多生成话题数")
+    use_llm_polish: bool = Field(default=True, description="是否启用 LLM 润色")
+    dry_run: bool = Field(default=True, description="是否只预览不写库")
+    confirm: bool = Field(default=False, description="正式发布确认开关，dry_run=false 时必须为 true")

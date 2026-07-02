@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
 
 from fastapi import APIRouter, Depends
 
-from app.common.auth import require_login
+from app.common.auth import require_editor_or_admin, require_login
 from app.common.response import ApiResponse, success_response
 from app.modules.auth.schema import UserInfo
 from app.modules.timeline.schema import (
+    AutoClusterRequest,
     TimelineGenerateResult,
     TimelineNewsListResponse,
     TimelineTopic,
 )
 from app.modules.timeline.service import (
+    auto_cluster_timeline_topics,
     generate_timeline,
     get_timeline_detail,
     get_timeline_topics,
@@ -51,3 +53,16 @@ async def generate_topic_timeline(
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[TimelineGenerateResult]:
     return success_response(await generate_timeline(topic_id, current_user=current_user))
+
+
+@router.post("/topics/auto-cluster", response_model=ApiResponse[Any])
+async def auto_cluster_topics(
+    request: "AutoClusterRequest",
+    current_user: UserInfo = Depends(require_editor_or_admin),
+) -> ApiResponse[Any]:
+    """后台批量自动聚类生成事件脉络话题。
+
+    dry_run=true 时只返回预览结果，不写库。
+    正式发布需要 dry_run=false + confirm=true。
+    """
+    return success_response(auto_cluster_timeline_topics(request))

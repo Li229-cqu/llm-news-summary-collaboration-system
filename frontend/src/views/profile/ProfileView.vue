@@ -46,7 +46,7 @@ import { useUserStore } from '@/stores/user'
 const router = useRouter()
 const userStore = useUserStore()
 
-const activeTab = ref('history')
+const activeTab = ref('insights')
 const loadingTab = ref('')
 
 const browseType = ref<'news' | 'post'>('news')
@@ -77,24 +77,10 @@ const statCards = [
   { key: 'ai-records', icon: MagicStick, label: 'AI生成记录', count: () => profileOverview.value?.ai_generate_count ?? 0, desc: '标题摘要生成历史' },
 ]
 
-// ===== 阅读洞察 / 每周报告状态 =====
+// ===== 阅读报告 / 每周报告状态 =====
 const weeklyReport = ref<WeeklyReportResponse | null>(null)
 const weeklyReportLoading = ref(false)
 const weeklyReportError = ref('')
-
-// 阅读报告翻页状态
-const reportPageIndex = ref(0)
-const reportPages = [
-  { key: 'overview', title: '本周总览', subtitle: '这周的你，是什么样的读者？' },
-  { key: 'trajectory', title: '阅读轨迹', subtitle: '这一周，你如何阅读？' },
-  { key: 'insights', title: '高光与建议', subtitle: '这一周，你留下了哪些阅读高光？' },
-]
-const isFirstReportPage = computed(() => reportPageIndex.value === 0)
-const isLastReportPage = computed(() => reportPageIndex.value === reportPages.length - 1)
-const currentReportPage = computed(() => reportPages[reportPageIndex.value])
-function goReportPage(idx: number) { if (idx >= 0 && idx < reportPages.length) reportPageIndex.value = idx }
-function nextReportPage() { if (!isLastReportPage.value) reportPageIndex.value++ }
-function prevReportPage() { if (!isFirstReportPage.value) reportPageIndex.value-- }
 
 // AI 来源标签
 const aiSourceLabel = computed(() => {
@@ -291,11 +277,11 @@ const categoryDescs: Record<string, string> = {
 }
 
 const profileNavItems = [
+  { key: 'insights', label: '阅读报告', icon: Grid, desc: '近 7 天阅读分析与建议' },
   { key: 'history', label: '浏览记录', icon: Clock, desc: '新闻与帖子足迹' },
   { key: 'favorites', label: '收藏记录', icon: Star, desc: '保存的新闻与帖子' },
   { key: 'comments', label: '评论记录', icon: ChatDotRound, desc: '你的互动发言' },
   { key: 'ai-records', label: 'AI 生成记录', icon: MagicStick, desc: '标题摘要历史' },
-  { key: 'insights', label: '阅读洞察', icon: Grid, desc: '活跃、行为与主题脉络' },
 ]
 
 const filteredBrowseHistory = computed(() => {
@@ -1034,7 +1020,7 @@ onMounted(async () => {
     <section class="profile-main-panel">
       <div class="profile-module-body">
 
-        <!-- ===== 阅读洞察 / 近 7 天阅读报告 ===== -->
+        <!-- ===== 阅读报告 / 近 7 天阅读报告 ===== -->
         <div v-if="activeTab === 'insights'" class="module-content">
           <!-- Loading -->
           <div v-if="weeklyReportLoading" class="report-loading">
@@ -1057,153 +1043,159 @@ onMounted(async () => {
 
           <!-- Report Content -->
           <template v-else>
-            <!-- ===== 三页翻页式阅读报告 ===== -->
-            <div class="weekly-report-book">
-              <!-- 导航头 -->
-              <div class="report-book-header">
-                <div class="report-book-header__left">
-                  <span class="report-book-header__title">{{ currentReportPage.title }}</span>
-                  <span class="report-book-header__subtitle">{{ currentReportPage.subtitle }}</span>
+            <div class="weekly-report-scroll">
+              <!-- 报告顶部标题区 -->
+              <header class="report-scroll-header">
+                <div class="report-scroll-header__bg"></div>
+                <div class="report-scroll-header__inner">
+                  <p class="report-scroll-header__eyebrow">READING REPORT</p>
+                  <h1 class="report-scroll-header__title">阅读报告</h1>
+                  <p class="report-scroll-header__subtitle">近 7 天阅读分析与建议</p>
+                  <p class="report-scroll-header__desc">基于你近 7 天的浏览、收藏、评论与 AI 使用行为，自动生成个性化阅读画像</p>
                 </div>
-                <span class="report-book-header__count">{{ reportPageIndex + 1 }} / {{ reportPages.length }}</span>
-              </div>
+              </header>
 
-              <!-- 页面内容 (fade 过渡) -->
-              <transition name="report-fade" mode="out-in">
-                <!-- ====== 第 1 页：本周总览 ====== -->
-                <section v-if="reportPageIndex === 0" key="overview" class="report-page report-page--overview">
-                  <div class="report-cover">
-                    <div class="report-cover__bg"></div>
-                    <div class="report-cover__content">
-                      <h1 class="report-cover__title">近 7 天我的阅读报告</h1>
-                      <p class="report-cover__subtitle">基于截至昨日的最近完整 7 天浏览、收藏、评论与 AI 使用行为生成</p>
-                      <div class="report-cover__persona">
-                        <span class="report-cover__persona-badge">{{ weeklyReport.persona.title }}</span>
-                        <span v-if="aiSourceLabel" class="report-cover__ai-tag">{{ aiSourceLabel }}</span>
-                      </div>
-                      <p class="report-cover__summary">{{ weeklyReport.ai_analysis?.enabled ? weeklyReport.ai_analysis.summary : weeklyReport.summary }}</p>
-                    </div>
+              <!-- ===== 第一部分：本周总览 ===== -->
+              <section class="report-scroll-section report-scroll-section--overview">
+                <div class="report-section-header">
+                  <span class="report-section-header__num">01</span>
+                  <div>
+                    <h2 class="report-section-header__title">本周总览</h2>
+                    <p class="report-section-header__subtitle">这周的你，是什么样的读者？</p>
                   </div>
-                  <div class="report-page__body report-page__body--overview">
-                    <!-- 画像综合区：左侧文字 + 右侧雷达图 -->
-                    <div class="overview-integrated">
-                      <div class="overview-integrated__text">
-                        <h2 class="overview-integrated__title">本周画像</h2>
-                        <p class="overview-integrated__desc">{{ weeklyReport.ai_analysis?.page_analyses?.overview || weeklyReport.analysis_texts?.profile_analysis || weeklyReport.persona.description }}</p>
-                        <p v-if="weeklyReport.ai_analysis?.reading_style" class="overview-integrated__style">「{{ weeklyReport.ai_analysis.reading_style }}」</p>
-                        <div class="overview-integrated__dimensions">
-                          <div class="ov-dim-item" v-for="d in radarLegend" :key="d.key">
-                            <span class="ov-dim-item__dot" :style="{background:d.color}"></span>
-                            <span class="ov-dim-item__label">{{ d.label }}</span>
-                            <span class="ov-dim-item__score">{{ d.score }}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="overview-integrated__radar">
-                        <svg viewBox="-20 -20 340 340" class="radar-svg radar-svg--large">
-                          <polygon v-for="level in 4" :key="'grid-'+level" :points="radarPointsLg(55 + level * 22).join(' ')" fill="none" :stroke="level===4?'#cbd5e1':'#e5e7eb'" stroke-width="1.5"/>
-                          <line v-for="(axis,ai) in radarAxesLg" :key="'ax-'+ai" :x1="150" :y1="150" :x2="axis.x" :y2="axis.y" stroke="#e5e7eb" stroke-width="1.5"/>
-                          <polygon :points="radarDataPointsLg.join(' ')" fill="rgba(217,45,32,0.12)" stroke="var(--color-primary)" stroke-width="2.5"/>
-                          <circle v-for="(pt,pi) in radarDataPointsLg" :key="'pt-'+pi" :cx="pt[0]" :cy="pt[1]" r="6" fill="var(--color-primary)"/>
-                          <text v-for="(axis,ai) in radarAxesLg" :key="'lbl-'+ai" :x="axis.labelX" :y="axis.labelY" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">{{ axis.label }}</text>
-                        </svg>
-                      </div>
-                    </div>
-                    <div v-if="weeklyReport.analysis_texts?.behavior_analysis" class="overview-behavior-bar">
-                      <span class="overview-behavior-bar__title">行为画像解读</span>
-                      <p class="overview-behavior-bar__text">{{ weeklyReport.analysis_texts.behavior_analysis }}</p>
-                    </div>
-                  </div>
-                </section>
-
-                <!-- ====== 第 2 页：阅读轨迹 ====== -->
-                <section v-else-if="reportPageIndex === 1" key="trajectory" class="report-page report-page--trajectory">
-                  <div class="report-page__body">
-                    <p class="page2-intro">{{ weeklyReport.ai_analysis?.page_analyses?.trajectory || ('这一周，你的阅读节奏整体较稳定，兴趣主要集中在' + (weeklyReport.topic_rank.slice(0,3).filter(t=>t.name!=='其他').map(t=>t.name).join('、') || '多个领域') + '，说明你更关注现实议题、产业变化与技术趋势。') }}</p>
-                    <!-- 阅读足迹：时间轴节点图 -->
-                    <div class="report-card report-card--footprint">
-                      <div class="report-card__header"><span class="report-card__title">阅读足迹</span><span class="report-card__subtitle">近 7 天每日浏览次数</span></div>
-                      <div class="report-card__body">
-                        <div class="footprint-timeline">
-                          <div class="footprint-line"></div>
-                          <div v-for="day in weeklyReport.daily_activity" :key="day.date" class="footprint-node-wrap">
-                            <div class="footprint-node" :class="{ 'footprint-node--peak': day.count===maxDailyCount&&maxDailyCount>0, 'footprint-node--zero': day.count===0 }" :style="{ width: footprintNodeSize(day.count)+'px', height: footprintNodeSize(day.count)+'px' }">
-                              <span v-if="day.count>0" class="footprint-node__count">{{ day.count }}</span>
-                            </div>
-                            <span class="footprint-node__date">{{ formatWeekDate(day.date) }}</span>
-                          </div>
-                        </div>
-                        <div class="activity-summary"><span>活跃 {{ weeklyReport.overview.active_days }} 天</span><span v-if="maxDailyCount>0"> · 最活跃 {{ formatWeekDate(mostActiveDate) }} · 共 {{ weeklyReport.daily_activity.reduce((s,d)=>s+d.count,0) }} 次</span></div>
-                        <div v-if="weeklyReport.analysis_texts?.activity_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.activity_analysis }}</div>
-                      </div>
-                    </div>
-                    <!-- 兴趣主题：气泡标签图 -->
-                    <div class="report-card report-card--bubbles">
-                      <div class="report-card__header"><span class="report-card__title">兴趣主题</span><span class="report-card__subtitle">近 7 天浏览内容分类分布</span></div>
-                      <div class="report-card__body">
-                        <div v-if="weeklyReport.topic_rank.length===0" class="report-card__empty">暂无数据</div>
-                        <div v-else class="topic-list">
-                            <div v-for="(topic, idx) in weeklyReport.topic_rank" :key="topic.name" class="topic-item">
-                              <span class="topic-item__rank" :class="{ 'topic-item__rank--top3': idx < 3 }">{{ idx + 1 }}</span>
-                              <span class="topic-item__name">{{ topic.name }}</span>
-                              <div class="topic-item__bar-track"><div class="topic-item__bar-fill" :style="{ width: topic.percent + '%', background: topicBarColors[idx] || '#94a3b8' }"></div></div>
-                              <span class="topic-item__count">{{ topic.count }}</span>
-                              <span class="topic-item__pct">{{ topic.percent }}%</span>
-                            </div>
-                          </div>
-                        <div v-if="weeklyReport.analysis_texts?.topic_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.topic_analysis }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <!-- ====== 第 3 页：高光与建议 ====== -->
-                <section v-else key="insights" class="report-page report-page--insights">
-                  <div class="report-page__body report-page__body--insights">
-                    <p class="page3-intro">{{ weeklyReport.ai_analysis?.page_analyses?.conclusion || '这一周，你留下了这些阅读痕迹。从行为来看，你保持了稳定的信息获取节奏，也在积极使用 AI 工具提升效率。' }}</p>
-                    <!-- 高光叙事 -->
-                    <div class="report-card report-card--highlights">
-                      <div class="report-card__header"><span class="report-card__title">本周高光</span></div>
-                      <div class="report-card__body">
-                        <div v-if="weeklyReport.highlights.length===0" class="report-card__empty">暂无数据</div>
-                        <div v-else class="highlight-narrative-list">
-                          <div v-for="(hl, hIdx) in weeklyReport.highlights" :key="hl.label" class="highlight-narrative-item"><span class="highlight-narrative-item__icon">{{ String(hIdx + 1).padStart(2, '0') }}</span><div class="highlight-narrative-item__content"><span class="highlight-narrative-item__text">{{ hl.narrative||hl.desc }}</span></div></div>
-                        </div>
-                      </div>
-                    </div>
-                    <!-- AI 洞察 + 建议 合并卡 -->
-                    <div v-if="weeklyReport.ai_analysis?.enabled" class="report-card report-card--ai-merged">
-                      <div class="report-card__header"><span class="report-card__title">AI 给你的阅读回顾</span></div>
-                      <div class="report-card__body">
-                        <div class="ai-merged-grid">
-                          <div class="ai-merged-col">
-                            <span class="ai-merged-col__label">从你的行为中看到</span>
-                            <div class="ai-insight-list">
-                              <div v-for="(insight,idx) in weeklyReport.ai_analysis.insights" :key="'ins-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot"></span><span>{{ insight }}</span></div>
-                            </div>
-                          </div>
-                          <div class="ai-merged-col ai-merged-col--suggestions">
-                            <span class="ai-merged-col__label">下一步可以这样阅读</span>
-                            <div class="ai-insight-list">
-                              <div v-for="(sg,idx) in weeklyReport.ai_analysis.suggestions" :key="'sug-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot ai-insight-item__dot--suggestion"></span><span>{{ sg }}</span></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <p class="report-closing">{{ weeklyReport.ai_analysis?.closing || reportClosingText }}</p>
-                  </div>
-                </section>
-              </transition>
-
-              <!-- 底部翻页控件 -->
-              <div class="report-book-controls">
-                <button class="report-book-btn" :disabled="isFirstReportPage" @click="prevReportPage">← 上一页</button>
-                <div class="report-book-dots">
-                  <span v-for="(p, idx) in reportPages" :key="p.key" class="report-book-dot" :class="{ 'report-book-dot--active': idx === reportPageIndex }" @click="goReportPage(idx)"></span>
                 </div>
-                <button class="report-book-btn" @click="isLastReportPage ? (reportPageIndex = 0) : nextReportPage()">{{ isLastReportPage ? '↻ 回到首页' : '下一页 →' }}</button>
-              </div>
+                <div class="report-cover">
+                  <div class="report-cover__bg"></div>
+                  <div class="report-cover__content">
+                    <div class="report-cover__persona">
+                      <span class="report-cover__persona-badge">{{ weeklyReport.persona.title }}</span>
+                      <span v-if="aiSourceLabel" class="report-cover__ai-tag">{{ aiSourceLabel }}</span>
+                    </div>
+                    <p class="report-cover__summary">{{ weeklyReport.ai_analysis?.enabled ? weeklyReport.ai_analysis.summary : weeklyReport.summary }}</p>
+                  </div>
+                </div>
+                <div class="report-page__body report-page__body--overview">
+                  <div class="overview-integrated">
+                    <div class="overview-integrated__text">
+                      <h3 class="overview-integrated__title">本周画像</h3>
+                      <p class="overview-integrated__desc">{{ weeklyReport.ai_analysis?.page_analyses?.overview || weeklyReport.analysis_texts?.profile_analysis || weeklyReport.persona.description }}</p>
+                      <p v-if="weeklyReport.ai_analysis?.reading_style" class="overview-integrated__style">「{{ weeklyReport.ai_analysis.reading_style }}」</p>
+                      <div class="overview-integrated__dimensions">
+                        <div class="ov-dim-item" v-for="d in radarLegend" :key="d.key">
+                          <span class="ov-dim-item__dot" :style="{background:d.color}"></span>
+                          <span class="ov-dim-item__label">{{ d.label }}</span>
+                          <span class="ov-dim-item__score">{{ d.score }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="overview-integrated__radar">
+                      <svg viewBox="-20 -20 340 340" class="radar-svg radar-svg--large">
+                        <polygon v-for="level in 4" :key="'grid-'+level" :points="radarPointsLg(55 + level * 22).join(' ')" fill="none" :stroke="level===4?'#cbd5e1':'#e5e7eb'" stroke-width="1.5"/>
+                        <line v-for="(axis,ai) in radarAxesLg" :key="'ax-'+ai" :x1="150" :y1="150" :x2="axis.x" :y2="axis.y" stroke="#e5e7eb" stroke-width="1.5"/>
+                        <polygon :points="radarDataPointsLg.join(' ')" fill="rgba(217,45,32,0.12)" stroke="var(--color-primary)" stroke-width="2.5"/>
+                        <circle v-for="(pt,pi) in radarDataPointsLg" :key="'pt-'+pi" :cx="pt[0]" :cy="pt[1]" r="6" fill="var(--color-primary)"/>
+                        <text v-for="(axis,ai) in radarAxesLg" :key="'lbl-'+ai" :x="axis.labelX" :y="axis.labelY" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">{{ axis.label }}</text>
+                      </svg>
+                    </div>
+                  </div>
+                  <div v-if="weeklyReport.analysis_texts?.behavior_analysis" class="overview-behavior-bar">
+                    <span class="overview-behavior-bar__title">行为画像解读</span>
+                    <p class="overview-behavior-bar__text">{{ weeklyReport.analysis_texts.behavior_analysis }}</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 第二部分：阅读轨迹 ===== -->
+              <section class="report-scroll-section report-scroll-section--trajectory">
+                <div class="report-section-header">
+                  <span class="report-section-header__num">02</span>
+                  <div>
+                    <h2 class="report-section-header__title">阅读轨迹</h2>
+                    <p class="report-section-header__subtitle">这一周，你如何阅读？</p>
+                  </div>
+                </div>
+                <div class="report-page__body">
+                  <p class="page2-intro">{{ weeklyReport.ai_analysis?.page_analyses?.trajectory || ('这一周，你的阅读节奏整体较稳定，兴趣主要集中在' + (weeklyReport.topic_rank.slice(0,3).filter(t=>t.name!=='其他').map(t=>t.name).join('、') || '多个领域') + '，说明你更关注现实议题、产业变化与技术趋势。') }}</p>
+                  <div class="report-card report-card--footprint">
+                    <div class="report-card__header"><span class="report-card__title">阅读足迹</span><span class="report-card__subtitle">近 7 天每日浏览次数</span></div>
+                    <div class="report-card__body">
+                      <div class="footprint-timeline">
+                        <div class="footprint-line"></div>
+                        <div v-for="day in weeklyReport.daily_activity" :key="day.date" class="footprint-node-wrap">
+                          <div class="footprint-node" :class="{ 'footprint-node--peak': day.count===maxDailyCount&&maxDailyCount>0, 'footprint-node--zero': day.count===0 }" :style="{ width: footprintNodeSize(day.count)+'px', height: footprintNodeSize(day.count)+'px' }">
+                            <span v-if="day.count>0" class="footprint-node__count">{{ day.count }}</span>
+                          </div>
+                          <span class="footprint-node__date">{{ formatWeekDate(day.date) }}</span>
+                        </div>
+                      </div>
+                      <div class="activity-summary">
+                        <span class="activity-summary__key">活跃 <strong class="activity-summary__num">{{ weeklyReport.overview.active_days }}</strong> 天</span>
+                        <span v-if="maxDailyCount>0"> · 最活跃 {{ formatWeekDate(mostActiveDate) }} · 共 <strong class="activity-summary__num">{{ weeklyReport.daily_activity.reduce((s,d)=>s+d.count,0) }}</strong> 次</span>
+                      </div>
+                      <div v-if="weeklyReport.analysis_texts?.activity_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.activity_analysis }}</div>
+                    </div>
+                  </div>
+                  <div class="report-card report-card--bubbles">
+                    <div class="report-card__header"><span class="report-card__title">兴趣主题</span><span class="report-card__subtitle">近 7 天浏览内容分类分布</span></div>
+                    <div class="report-card__body">
+                      <div v-if="weeklyReport.topic_rank.length===0" class="report-card__empty">暂无数据</div>
+                      <div v-else class="topic-list">
+                        <div v-for="(topic, idx) in weeklyReport.topic_rank" :key="topic.name" class="topic-item">
+                          <span class="topic-item__rank" :class="{ 'topic-item__rank--top3': idx < 3 }">{{ idx + 1 }}</span>
+                          <span class="topic-item__name">{{ topic.name }}</span>
+                          <div class="topic-item__bar-track"><div class="topic-item__bar-fill" :style="{ width: topic.percent + '%', background: topicBarColors[idx] || '#94a3b8' }"></div></div>
+                          <span class="topic-item__count"><strong>{{ topic.count }}</strong></span>
+                          <span class="topic-item__pct">{{ topic.percent }}%</span>
+                        </div>
+                      </div>
+                      <div v-if="weeklyReport.analysis_texts?.topic_analysis" class="chart-insight">{{ weeklyReport.analysis_texts.topic_analysis }}</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 第三部分：阅读发现与建议 ===== -->
+              <section class="report-scroll-section report-scroll-section--findings">
+                <div class="report-section-header">
+                  <span class="report-section-header__num">03</span>
+                  <div>
+                    <h2 class="report-section-header__title">阅读发现与建议</h2>
+                    <p class="report-section-header__subtitle">这一周，你有哪些值得关注的阅读发现？</p>
+                  </div>
+                </div>
+                <div class="report-page__body report-page__body--insights">
+                  <p class="page3-intro">{{ weeklyReport.ai_analysis?.page_analyses?.conclusion || '这一周，你留下了这些阅读痕迹。从行为来看，你保持了稳定的信息获取节奏，也在积极使用 AI 工具提升效率。' }}</p>
+                  <div class="report-card report-card--highlights">
+                    <div class="report-card__header"><span class="report-card__title">阅读发现</span></div>
+                    <div class="report-card__body">
+                      <div v-if="weeklyReport.highlights.length===0" class="report-card__empty">暂无数据</div>
+                      <div v-else class="highlight-narrative-list">
+                        <div v-for="(hl, hIdx) in weeklyReport.highlights" :key="hl.label" class="highlight-narrative-item"><span class="highlight-narrative-item__icon">{{ String(hIdx + 1).padStart(2, '0') }}</span><div class="highlight-narrative-item__content"><span class="highlight-narrative-item__text">{{ hl.narrative||hl.desc }}</span></div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="weeklyReport.ai_analysis?.enabled" class="report-card report-card--ai-merged">
+                    <div class="report-card__header"><span class="report-card__title">AI 给你的阅读回顾</span></div>
+                    <div class="report-card__body">
+                      <div class="ai-merged-grid">
+                        <div class="ai-merged-col">
+                          <span class="ai-merged-col__label">从你的行为中看到</span>
+                          <div class="ai-insight-list">
+                            <div v-for="(insight,idx) in weeklyReport.ai_analysis.insights" :key="'ins-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot"></span><span>{{ insight }}</span></div>
+                          </div>
+                        </div>
+                        <div class="ai-merged-col ai-merged-col--suggestions">
+                          <span class="ai-merged-col__label">下一步可以这样阅读</span>
+                          <div class="ai-insight-list">
+                            <div v-for="(sg,idx) in weeklyReport.ai_analysis.suggestions" :key="'sug-'+idx" class="ai-insight-item"><span class="ai-insight-item__dot ai-insight-item__dot--suggestion"></span><span>{{ sg }}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="report-closing">{{ weeklyReport.ai_analysis?.closing || reportClosingText }}</p>
+                </div>
+              </section>
             </div>
           </template>
         </div>
@@ -2113,7 +2105,7 @@ onMounted(async () => {
 }
 
 
-/* -- 阅读洞察矩阵 + 星轨 -- */
+/* -- 阅读报告矩阵 + 星轨 -- */
 
 
 @media (max-width: 768px) {
@@ -2671,13 +2663,35 @@ onMounted(async () => {
 .report-empty__hint { font-size: 13px; color: #94a3b8; text-align: center; }
 
 /* ---- 翻页报告书 ---- */
-.weekly-report-book { background: #fff; border-radius: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); overflow: hidden; min-height: calc(100vh - 140px); }
-.report-book-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 30px 16px; border-bottom: 1px solid #f1f5f9; }
-.report-book-header__left { display: flex; align-items: baseline; gap: 10px; }
-.report-book-header__title { font-size: 30px; font-weight: 850; color: #1e293b; letter-spacing: -0.5px; }
-.report-book-header__subtitle { font-size: 16px; color: #64748b; font-weight: 400; }
-.report-book-header__count { font-size: 13px; color: var(--color-primary); font-weight: 650; background: #fff1f0; padding: 4px 14px; border-radius: 14px; white-space: nowrap; }
-.report-page { min-height: 560px; }
+/* 纵向滚动报告容器 */
+.weekly-report-scroll { background: #fff; border-radius: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); padding: 36px 36px 48px; display: flex; flex-direction: column; gap: 40px; }
+
+/* 报告顶部标题区 — 渐变封面卡片 */
+.report-scroll-header { position: relative; text-align: center; padding: 36px 36px 32px; border-radius: 20px; overflow: hidden; margin-bottom: 0; background: linear-gradient(160deg, #fff5f5 0%, #fff1f0 30%, #fff 70%, #fafbfc 100%); border: 1px solid rgba(217,45,32,.08); }
+.report-scroll-header__bg { display: none; }
+.report-scroll-header__inner { position: relative; z-index: 1; }
+.report-scroll-header__eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .18em; color: var(--color-primary); margin: 0 0 10px; text-transform: uppercase; }
+.report-scroll-header__title { font-size: 34px; font-weight: 850; color: #1e293b; margin: 0 0 10px; letter-spacing: -0.5px; }
+.report-scroll-header__subtitle { font-size: 15px; color: #64748b; margin: 0 0 8px; }
+.report-scroll-header__desc { font-size: 13px; color: #94a3b8; margin: 0; }
+
+/* 每部分标题 — 含序号 */
+.report-section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
+.report-section-header__num { flex-shrink: 0; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #d92d20, #b91c1c); color: #fff; font-size: 18px; font-weight: 800; letter-spacing: .02em; }
+.report-section-header__title { font-size: 22px; font-weight: 750; color: #1e293b; margin: 0 0 3px; }
+.report-section-header__subtitle { font-size: 14px; color: #64748b; margin: 0; }
+
+/* 部分间距 */
+.report-scroll-section { }
+.report-scroll-section--trajectory { border-top: 1px solid #f1f5f9; padding-top: 8px; }
+.report-scroll-section--findings { border-top: 1px solid #f1f5f9; padding-top: 8px; }
+.report-page { min-height: auto; }
+
+/* 关键数字强调 */
+.activity-summary__num { font-size: 20px; font-weight: 800; color: #d92d20; }
+.topic-item__count strong { font-size: 16px; color: #d92d20; font-weight: 700; }
+.ov-dim-item__score { font-size: 20px; font-weight: 800; color: #1e293b; margin-left: auto; }
+.ov-dim-item__label { font-weight: 600; }
 .report-page__body { padding: 24px 30px; display: flex; flex-direction: column; gap: 20px; }
 .report-page__body--overview { padding: 0 30px 24px; }
 .report-page__body--insights { gap: 18px; }
@@ -2693,16 +2707,13 @@ onMounted(async () => {
 .overview-behavior-bar__title { font-size: 15px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px; }
 .overview-behavior-bar__text { font-size: 16px; color: #475569; line-height: 1.8; margin: 0; }
 
-/* 翻页控件 */
-.report-book-controls { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px 18px; border-top: 1px solid #f1f5f9; }
-.report-book-btn { padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 20px; background: #fff; color: #475569; font-size: 13px; cursor: pointer; transition: all 0.2s ease; }
-.report-book-btn:hover:not(:disabled) { background: #fff1f0; border-color: var(--color-primary); color: var(--color-primary); }
-.report-book-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.report-book-dots { display: flex; gap: 8px; }
-.report-book-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5e7eb; cursor: pointer; transition: all 0.25s ease; }
-.report-book-dot--active { background: #d92d20; transform: scale(1.3); }
-.report-fade-enter-active, .report-fade-leave-active { transition: opacity 0.22s ease; }
-.report-fade-enter-from, .report-fade-leave-to { opacity: 0; }
+/* 阅读发现与建议部分（第三部分）紧凑样式 */
+.report-scroll-section--findings .page3-intro { font-size: 14px; line-height: 1.65; color: #64748b; }
+.report-scroll-section--findings .highlight-narrative-item__text { font-size: 13px; line-height: 1.55; }
+.report-scroll-section--findings .ai-insight-item { font-size: 13px; line-height: 1.55; }
+.report-scroll-section--findings .report-card__title { font-size: 16px; }
+.report-scroll-section--findings .report-card { padding: 14px 18px; margin-bottom: 14px; }
+.report-scroll-section--findings .report-closing { font-size: 14px; line-height: 1.65; }
 
 /* 封面卡 — 浅色报告风格 */
 .report-cover { position: relative; border-radius: 22px; overflow: hidden; margin-bottom: 0; background: #fff; border: 1px solid var(--color-border); }
@@ -2778,7 +2789,7 @@ onMounted(async () => {
 .ai-merged-col { display: flex; flex-direction: column; gap: 10px; }
 .ai-merged-col__label { font-size: 14px; font-weight: 650; color: #475569; padding-bottom: 4px; border-bottom: 2px solid #f1f5f9; }
 
-/* 高光编号式列表 */
+/* 阅读发现编号式列表 */
 .highlight-narrative-list { display: flex; flex-direction: column; gap: 12px; }
 .highlight-narrative-item { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; background: #fafbfc; border-radius: 12px; border: 1px solid #f1f5f9; }
 .highlight-narrative-item__icon { font-size: 13px; font-weight: 800; color: var(--color-primary); background: #fff1f0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
@@ -2800,8 +2811,8 @@ onMounted(async () => {
   .report-cover__content { padding: 24px 20px 20px; }
   .report-cover__summary { font-size: 15px; }
   .radar-wrap { flex-direction: column; }
-  .report-book-controls { flex-wrap: wrap; gap: 10px; justify-content: center; }
-  .report-book-dots { order: -1; width: 100%; justify-content: center; }
+  .weekly-report-scroll { padding: 24px 20px 32px; gap: 28px; }
+  .report-scroll-header__title { font-size: 26px; }
   .overview-integrated { grid-template-columns: 1fr; }
   .overview-integrated__radar { order: -1; padding-top: 0; }
   .radar-svg--large { width: 260px; height: 260px; }

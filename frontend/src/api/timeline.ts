@@ -9,6 +9,8 @@ export interface TimelineTopic {
   heat_score: number
   summary: string
   news_count: number
+  source_type?: 'manual' | 'auto' | string
+  auto_generated_at?: string | null
 }
 
 export interface TimelineNewsItem {
@@ -95,4 +97,56 @@ export function generateTimeline(topicId: number | string) {
 /** 获取指定话题的 timeline。 */
 export function getTimeline(topicId: number | string) {
   return request.get<TimelineResponse, TimelineResponse>(`/api/timeline/topics/${topicId}`)
+}
+
+// ── 自动聚类生成事件脉络 ──────────────────────────────────────────
+
+export interface AutoClusterRequest {
+  days?: number
+  max_news?: number
+  max_write_topics?: number
+  use_llm_polish?: boolean
+  dry_run?: boolean
+  confirm?: boolean
+}
+
+export interface AutoClusterTopicPreview {
+  topic_name: string
+  heat_score?: number
+  news_count?: number
+  event_point_count?: number
+  quality_status?: string
+  quality_score?: number
+  llm_used?: boolean
+  representative_titles?: string[]
+  timeline_preview?: Array<{
+    event_title: string
+    source_news_ids?: number[]
+  }>
+}
+
+export interface AutoClusterResponse {
+  success: boolean
+  dry_run: boolean
+  message?: string
+  summary?: {
+    candidate_count?: number
+    write_topic_count?: number
+    skipped_count?: number
+    updated_news_count?: number
+    timeline_count?: number
+    manual_topic_count?: number
+    auto_active_count?: number
+  }
+  topics?: AutoClusterTopicPreview[]
+  skipped_topics?: Array<{ topic_name: string; reason?: string }>
+  warnings?: string[]
+}
+
+/** 后台批量自动聚类生成事件脉络（dry_run=true 预览，dry_run=false+confirm=true 发布） */
+export function autoClusterTimelineTopics(params: AutoClusterRequest) {
+  return request.post<AutoClusterResponse, AutoClusterResponse>(
+    '/api/timeline/topics/auto-cluster',
+    params,
+  )
 }

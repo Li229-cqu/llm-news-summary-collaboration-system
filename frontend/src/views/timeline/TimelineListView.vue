@@ -50,17 +50,33 @@
           <el-empty description="暂无事件脉络话题" :image-size="56" />
         </div>
 
+        <!-- 来源筛选 -->
+        <div v-if="!loadingTopics && !topicError && topics.length" class="timeline-source-filter">
+          <el-radio-group v-model="topicSourceFilter" size="small">
+            <el-radio-button value="all">全部 ({{ topics.length }})</el-radio-button>
+            <el-radio-button value="auto">自动生成 ({{ topics.filter(t=>(t.source_type||'manual')==='auto').length }})</el-radio-button>
+            <el-radio-button value="manual">人工维护 ({{ topics.filter(t=>(t.source_type||'manual')==='manual').length }})</el-radio-button>
+          </el-radio-group>
+        </div>
+
         <!-- 主题列表 -->
-        <div v-else class="timeline-topics">
+        <div v-if="!loadingTopics && filteredTopics.length" class="timeline-topics">
           <article
-            v-for="topic in topics"
+            v-for="topic in filteredTopics"
             :key="topic.topic_id"
             class="timeline-topic-card"
             :class="{ 'timeline-topic-card--disabled': topic.news_count < 2 }"
           >
             <div class="timeline-topic-card__body">
-              <h3 class="timeline-topic-card__title">{{ topic.topic_name }}</h3>
+              <h3 class="timeline-topic-card__title">
+                {{ topic.topic_name }}
+                <el-tag v-if="(topic.source_type||'manual')==='auto'" type="success" size="small" style="margin-left:8px">自动生成</el-tag>
+                <el-tag v-else type="info" size="small" style="margin-left:8px">人工维护</el-tag>
+              </h3>
               <p v-if="topic.summary" class="timeline-topic-card__summary">{{ topic.summary }}</p>
+              <p v-if="(topic.source_type||'manual')==='auto' && topic.auto_generated_at" class="timeline-topic-card__auto-time">
+                自动生成于 {{ formatAutoTime(topic.auto_generated_at) }}
+              </p>
 
               <div class="timeline-topic-card__meta">
                 <span class="timeline-topic-card__meta-pill">{{ topic.news_count }} 篇新闻</span>
@@ -91,6 +107,11 @@
             </div>
           </article>
         </div>
+
+        <!-- 筛选空态 -->
+        <div v-else-if="!loadingTopics && !filteredTopics.length" class="timeline-page__empty">
+          <el-empty description="该筛选条件下暂无话题" :image-size="48" />
+        </div>
       </section>
 
       <!-- 右侧：热搜榜 -->
@@ -110,7 +131,24 @@ const topics = ref<TimelineTopic[]>([])
 const loadingTopics = ref(false)
 const topicError = ref('')
 
+const topicSourceFilter = ref<'all' | 'manual' | 'auto'>('all')
+
+const filteredTopics = computed(() => {
+  if (topicSourceFilter.value === 'all') return topics.value
+  return topics.value.filter((t) => (t.source_type || 'manual') === topicSourceFilter.value)
+})
+
 const availableCount = computed(() => topics.value.filter((t) => t.news_count >= 2).length)
+
+/** 格式化时间显示 */
+function formatAutoTime(dateStr?: string | null): string {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
+}
 
 async function loadTopics() {
   loadingTopics.value = true
@@ -130,7 +168,7 @@ function handleViewTopic(topic: TimelineTopic) {
   router.push({
     name: 'timeline-detail',
     params: { topicId: topic.topic_id },
-    query: { topicName: topic.topic_name },
+    query: { topicName: topic.topic_name, sourceType: topic.source_type || 'manual' },
   })
 }
 
@@ -642,4 +680,6 @@ onMounted(() => {
     font-size: 15px;
   }
 }
+.timeline-source-filter { margin-bottom:16px; display:flex; align-items:center }
+.timeline-topic-card__auto-time { margin:0; font-size:12px; color:#94a3b8 }
 </style>

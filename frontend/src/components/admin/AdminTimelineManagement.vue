@@ -17,9 +17,79 @@ import {
   getAdminTimelineSourceNews,
   refreshAdminTimeline,
 } from '@/api/admin'
+import {
+  type AutoClusterResponse,
+  autoClusterTimelineTopics,
+} from '@/api/timeline'
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const router = useRouter()
+
+// ── 自动生成事件脉络 ────────────────────────────────────────────
+const autoClusterForm = reactive({
+  days: 30,
+  max_news: 1000,
+  max_write_topics: 8,
+  use_llm_polish: true,
+})
+const autoClusterLoading = ref(false)
+const autoClusterPublishing = ref(false)
+const autoClusterPreview = ref<AutoClusterResponse | null>(null)
+
+async function handleAutoClusterPreview() {
+  autoClusterLoading.value = true
+  try {
+    const res = await autoClusterTimelineTopics({
+      ...autoClusterForm,
+      dry_run: true,
+      confirm: false,
+    })
+    autoClusterPreview.value = res
+    if (res.success) {
+      ElMessage.success(`预览完成，候选 ${res.topics?.length ?? 0} 个话题`)
+    } else {
+      ElMessage.warning(res.message || '预览失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '自动生成预览失败')
+  } finally {
+    autoClusterLoading.value = false
+  }
+}
+
+async function handleAutoClusterConfirm() {
+  if (!autoClusterPreview.value?.success) {
+    ElMessage.warning('请先预览生成结果')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '确认发布后，系统会清理旧的自动话题并写入新的自动话题和事件脉络。人工话题不会被覆盖。是否继续？',
+      '确认发布自动事件脉络',
+      { confirmButtonText: '确认发布', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch { return }
+
+  autoClusterPublishing.value = true
+  try {
+    const res = await autoClusterTimelineTopics({
+      ...autoClusterForm,
+      dry_run: false,
+      confirm: true,
+    })
+    if (res.success) {
+      ElMessage.success('自动事件脉络发布成功')
+      autoClusterPreview.value = null
+      loadList()
+    } else {
+      ElMessage.error(res.message || '发布失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '自动事件脉络发布失败')
+  } finally {
+    autoClusterPublishing.value = false
+  }
+}
 
 // ── state ──────────────────────────────────────────────────────
 const timelineOptions = ref<AdminTimelineOptionsResponse | null>(null)
@@ -199,6 +269,88 @@ onMounted(async () => {
       </div>
       <el-button type="primary" @click="loadList">刷新</el-button>
     </div>
+
+    <!-- 自动生成事件脉络 -->
+    <el-card class="auto-cluster-card" shadow="never">
+      <template #header>
+        <div class="auto-cluster-card__header">
+          <div>
+            <span style="font-weight:700;font-size:16px">自动生成事件脉络</span>
+            <p style="margin:4px 0 0;font-size:13px;color:#64748b">基于最近新闻自动聚类生成候选话题和事件脉络。请先预览，确认无误后再发布。</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- 参数表单 -->
+      <div class="auto-cluster-form">
+        <el-form :inline="true" :model="autoClusterForm" size="small">
+          <el-form-item label="最近天数">
+            <el-input-number v-model="autoClusterForm.days" :min="1" :max="90" />
+          </el-form-item>
+          <el-form-item label="最大新闻数">
+            <el-input-number v-model="autoClusterForm.max_news" :min="20" :max="5000" :step="100" />
+          </el-form-item>
+          <el-form-item label="最大话题数">
+            <el-input-number v-model="autoClusterForm.max_write_topics" :min="1" :max="20" />
+          </el-form-item>
+          <el-form-item label="LLM 润色">
+            <el-switch v-model="autoClusterForm.use_llm_polish" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="autoClusterLoading" :disabled="autoClusterPublishing" @click="handleAutoClusterPreview">
+              {{ autoClusterLoading ? '生成中...' : '预览生成' }}
+            </el-button>
+            <el-button type="success" :loading="autoClusterPublishing" :disabled="autoClusterLoading" @click="handleAutoClusterConfirm">
+              {{ autoClusterPublishing ? '发布中...' : '确认发布' }}
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- 预览结果 -->
+      <template v-if="autoClusterPreview">
+        <el-alert
+          :type="autoClusterPreview.success ? 'success' : 'warning'"
+          :title="autoClusterPreview.message || ''"
+          :closable="false"
+          style="margin-bottom:12px"
+        />
+        <div v-if="autoClusterPreview.summary" class="auto-cluster-summary">
+          <span>手动话题 {{ autoClusterPreview.summary.manual_topic_count ?? '-' }}</span>
+          <span>活跃自动话题 {{ autoClusterPreview.summary.auto_active_count ?? '-' }}</span>
+          <span>本次将写入 {{ autoClusterPreview.summary.write_topic_count ?? autoClusterPreview.topics?.length ?? '-' }} 个</span>
+          <span>绑定新闻 {{ autoClusterPreview.summary.updated_news_count ?? '-' }}</span>
+        </div>
+        <el-table v-if="autoClusterPreview.topics?.length" :data="autoClusterPreview.topics" size="small" style="margin-top:8px" max-height="400">
+          <el-table-column prop="topic_name" label="话题名" min-width="140" />
+          <el-table-column prop="heat_score" label="热度" width="70" />
+          <el-table-column prop="news_count" label="新闻" width="60" />
+          <el-table-column prop="event_point_count" label="事件点" width="70" />
+          <el-table-column prop="quality_status" label="质量" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.quality_status==='ok'?'success':'warning'" size="small">{{ row.quality_status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="LLM" width="60">
+            <template #default="{ row }">{{ row.llm_used ? '是' : '否' }}</template>
+          </el-table-column>
+          <el-table-column label="代表新闻" min-width="200">
+            <template #default="{ row }">
+              <span v-for="(t,i) in (row.representative_titles||[]).slice(0,2)" :key="i" style="display:block;font-size:12px;color:#64748b">{{ t?.slice(0,50) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="autoClusterPreview.skipped_topics?.length" style="margin-top:8px">
+          <span style="font-size:13px;color:#909399">已跳过：</span>
+          <el-tag v-for="s in autoClusterPreview.skipped_topics" :key="s.topic_name" size="small" type="info" style="margin:2px 4px">
+            {{ s.topic_name }} ({{ s.reason }})
+          </el-tag>
+        </div>
+        <div v-if="autoClusterPreview.warnings?.length" style="margin-top:8px">
+          <el-alert v-for="(w,i) in autoClusterPreview.warnings" :key="i" :title="w" type="warning" :closable="false" style="margin-bottom:4px" />
+        </div>
+      </template>
+    </el-card>
 
     <!-- summary cards -->
     <div class="summary-grid">
@@ -386,4 +538,10 @@ onMounted(async () => {
 .tl-node-source { font-size:12px; color:#909399 }
 
 .json-block { background:#1e1e1e; color:#d4d4d4; padding:16px; border-radius:8px; font-size:12px; white-space:pre-wrap; word-break:break-all; max-height:calc(100vh - 160px); overflow:auto }
+
+.auto-cluster-card { margin-bottom:20px; border:1px solid var(--color-border); border-radius:12px }
+.auto-cluster-card__header { display:flex; align-items:center; justify-content:space-between }
+.auto-cluster-form { margin-bottom:12px }
+.auto-cluster-summary { display:flex; flex-wrap:wrap; gap:12px 24px; font-size:13px; color:#64748b }
+.auto-cluster-summary span { white-space:nowrap }
 </style>
