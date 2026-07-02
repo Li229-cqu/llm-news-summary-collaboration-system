@@ -204,17 +204,18 @@ watch(
 <style scoped>
 .ai-generate-container {
   padding: 0;
-  max-width: 1200px;
-  margin: 0 auto;
   min-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
 }
 
 .page-header {
-  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  background: #fff;
+  border: 1px solid #f1d4d4;
+  border-radius: 22px;
   padding: 32px 40px;
   margin-bottom: 24px;
+  box-shadow: 0 4px 24px rgba(217, 45, 32, .06);
   
   .header-content {
     display: flex;
@@ -227,14 +228,14 @@ watch(
       margin: 0;
       font-size: 26px;
       font-weight: 700;
-      color: #ffffff;
+      color: #1e293b;
       letter-spacing: -0.5px;
     }
     
     p {
       margin: 6px 0 0;
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.85);
+      color: #666666;
     }
   }
 }
@@ -243,6 +244,7 @@ watch(
   padding: 0 24px 24px;
   display: flex;
   gap: 24px;
+  max-width: none;
 }
 
 .sidebar {
