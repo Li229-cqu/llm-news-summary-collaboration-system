@@ -72,6 +72,7 @@ const mappedCards = computed<CommunityPost[]>(() => {
     comments: p.comment_count ?? p.comments ?? 0,
     views: p.view_count ?? p.views ?? 0,
     tags: p.tags || [],
+    images: p.images || [],
     liked: p.liked ?? false,
     is_favorited: p.favorited ?? false,
     favorite_count: p.favorite_count ?? 0,

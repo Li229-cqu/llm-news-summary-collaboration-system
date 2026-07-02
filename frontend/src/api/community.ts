@@ -14,6 +14,7 @@ export interface CommunityPost {
   comment_count?: number
   views: number
   tags: string[]
+  images?: string[]
   liked?: boolean
   is_favorited?: boolean
   favorite_count?: number
@@ -28,6 +29,7 @@ export interface CreatePostRequest {
   content: string
   tags?: string[]
   related_news_id?: number | null
+  images?: string[]
 }
 
 export interface PostListResponse {
@@ -134,11 +136,28 @@ export interface PostListParams {
   page?: number
   page_size?: number
   keyword?: string
+  tag?: string
+  sort?: 'hot' | 'latest'
 }
 
 export interface CommentListParams {
   page?: number
   page_size?: number
+}
+
+export interface PostMediaUploadResponse {
+  url: string
+  filename: string
+  size: number
+}
+
+export function uploadPostMedia(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<PostMediaUploadResponse, PostMediaUploadResponse>(
+    '/api/community/posts/media/upload',
+    formData,
+  )
 }
 
 export function getPostList(params: PostListParams = {}) {
@@ -326,6 +345,7 @@ export interface MyCommunityPost {
   created_at: string
   updated_at?: string
   tags: string[]
+  images?: string[]
   status?: number
   view_count?: number
   like_count?: number

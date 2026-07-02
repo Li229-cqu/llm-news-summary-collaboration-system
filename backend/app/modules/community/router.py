@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import os
+import secrets
+import time
+from pathlib import Path as FilePath
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, Path, Query
+from fastapi import APIRouter, Body, Depends, File, Header, Path, Query, UploadFile
 
 from app.common.auth import require_login
 from app.common.exceptions import AppException
@@ -33,6 +37,7 @@ from app.modules.community.schema import (
     LikeResponse,
     MyCommunityPostListResponse,
     PostListResponse,
+    PostMediaUploadResponse,
     ReceivedInteractionListResponse,
     TagCount,
 )
@@ -71,6 +76,61 @@ from app.modules.community.service import (
 
 router = APIRouter(prefix="/api/community", tags=["community"])
 
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+BASE_DIR = FilePath(__file__).resolve().parents[3]
+UPLOADS_DIR = BASE_DIR / "uploads" / "posts"
+
+
+@router.post(
+    "/posts/media/upload",
+    response_model=ApiResponse[PostMediaUploadResponse],
+)
+async def upload_post_media(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(require_login),
+) -> ApiResponse[PostMediaUploadResponse]:
+    """上传帖子图片，需要登录。"""
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise AppException(
+            code=400,
+            message=f"不支持的图片类型：{content_type}，仅支持 JPG/PNG/GIF/WebP",
+        )
+
+    ext = os.path.splitext(file.filename or ".jpg")[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise AppException(
+            code=400,
+            message=f"不支持的图片格式：{ext}，仅支持 JPG/PNG/GIF/WebP",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise AppException(code=400, message="图片大小不能超过 5MB")
+
+    month_dir = time.strftime("%Y/%m")
+    target_dir = UPLOADS_DIR / month_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = int(time.time() * 1000)
+    random_suffix = secrets.token_hex(4)
+    filename = f"{timestamp}_{random_suffix}{ext}"
+    file_path = target_dir / filename
+
+    file_path.write_bytes(contents)
+
+    url = f"/uploads/posts/{month_dir}/{filename}"
+    return success_response(
+        PostMediaUploadResponse(
+            url=url,
+            filename=filename,
+            size=len(contents),
+        )
+    )
+
 
 def _optional_current_user(authorization: Optional[str]) -> Optional[UserInfo]:
     if not authorization or not authorization.startswith("Bearer "):
@@ -87,10 +147,12 @@ async def list_posts(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     keyword: Optional[str] = Query(None, description="关键词"),
+    tag: Optional[str] = Query(None, description="标签筛选"),
+    sort: Optional[str] = Query("hot", description="排序方式：hot/latest"),
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ) -> ApiResponse[PostListResponse]:
     current_user = _optional_current_user(authorization)
-    result = get_post_list(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+    result = get_post_list(page=page, page_size=page_size, keyword=keyword, tag=tag, sort=sort, current_user=current_user)
     return success_response(result)
 
 

@@ -115,6 +115,7 @@ RSS_SOURCES: dict[str, list[dict[str, str]]] = {
 ENABLE_PEOPLE_RSS = True  # 启用人民网 RSS 源以获得更多数据
 DEFAULT_MAX_ITEMS = 10
 DEFAULT_SOURCE_MODE = "all"  # 使用所有 RSS 源
+DUPLICATE_IMAGE_MIN_COUNT = 2
 
 logger = logging.getLogger("rss_news_crawler")
 
@@ -314,6 +315,9 @@ BAD_IMAGE_KEYWORDS = [
 # 通用图片特征（RSS 默认图、栏目图、视频默认图）
 GENERIC_IMAGE_PATTERNS = [
     r"U\d+P\d+T\d+D\d+F\d+DT\d+\.jpg",  # 中国新闻网通用图格式
+    r"U\d+P\d+T\d+D\d+F\d+DT\d+\.(?:png|jpe?g|webp)",
+    r"/U\d+P\d+T\d+D\d+F\d+DT\d+\.",
+    r"/simg/ypt/\d+/\d+/[a-f0-9-]+(?:_\d+x\d+)?_zsite(?:_sl)?\.(?:jpe?g|png|webp)",
     r"/fileftp/",  # 备份/通用图
     r"default",
     r"placeholder",
@@ -381,6 +385,75 @@ def is_generic_image(image_url: str) -> bool:
             return True
 
     return False
+
+
+def is_same_url(left: str | None, right: str | None) -> bool:
+    return normalize_url(left or "") == normalize_url(right or "")
+
+
+def is_image_used_by_other_news(
+    connection: pymysql.connections.Connection,
+    image_url: str,
+    *,
+    source_url: str | None = None,
+    title: str | None = None,
+    exclude_news_id: int | None = None,
+) -> bool:
+    if not image_url:
+        return False
+
+    where = ["cover_image = %s"]
+    params: list[Any] = [image_url]
+    if exclude_news_id is not None:
+        where.append("id <> %s")
+        params.append(exclude_news_id)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT id, title, source_url
+              FROM news
+             WHERE {' AND '.join(where)}
+             LIMIT 5
+            """,
+            params,
+        )
+        rows = cursor.fetchall()
+
+    for row in rows:
+        if source_url and is_same_url(row.get("source_url"), source_url):
+            continue
+        if title and normalize_whitespace(str(row.get("title") or "")) == normalize_whitespace(title):
+            continue
+        return True
+    return False
+
+
+def sanitize_cover_image_for_db(
+    connection: pymysql.connections.Connection,
+    item: ParsedNewsItem,
+    *,
+    existing_news_id: int | None = None,
+) -> ParsedNewsItem:
+    image_url = item.cover_image
+    if not image_url:
+        return item
+
+    if is_generic_image(image_url):
+        logger.info("过滤通用封面图：%s | %s", image_url[:80], item.title[:60])
+        item.cover_image = ""
+        return item
+
+    if is_image_used_by_other_news(
+        connection,
+        image_url,
+        source_url=item.source_url,
+        title=item.title,
+        exclude_news_id=existing_news_id,
+    ):
+        logger.info("过滤已被其他新闻使用的封面图：%s | %s", image_url[:80], item.title[:60])
+        item.cover_image = ""
+    return item
 
 
 def is_video_news(entry: Any, title: str, html_text: str) -> bool:
@@ -932,12 +1005,13 @@ def should_update_existing(existing_row: dict[str, Any], item: ParsedNewsItem, u
     existing_title = str(existing_row.get("title") or "")
     existing_image = str(existing_row.get("cover_image") or "")
     existing_url = str(existing_row.get("source_url") or "")
+    image_changed = bool(item.cover_image) and existing_image != item.cover_image
     return (
         is_noisy_content(existing_content)
         or looks_mojibake(existing_title)
         or looks_mojibake(existing_content)
         or cut_boilerplate_tail(existing_content) != existing_content.strip()
-        or existing_image != item.cover_image
+        or image_changed
         or (bool(item.source_url) and existing_url != item.source_url)
     )
 
@@ -1000,7 +1074,6 @@ def update_news(
         "`title` = %s",
         "`summary` = %s",
         "`content` = %s",
-        "`cover_image` = %s",
         "`category_id` = %s",
         "`topic_id` = %s",
         "`source` = %s",
@@ -1014,7 +1087,6 @@ def update_news(
         item.title,
         item.summary,
         item.content,
-        item.cover_image,
         item.category_id,
         item.topic_id,
         item.source,
@@ -1024,6 +1096,9 @@ def update_news(
         json.dumps(item.tags, ensure_ascii=False),
         item.publish_time,
     ]
+    if item.cover_image:
+        set_clauses.insert(3, "`cover_image` = %s")
+        values.insert(3, item.cover_image)
     if has_source_url and item.source_url:
         set_clauses.insert(4, "`source_url` = COALESCE(%s, `source_url`)")
         values.insert(4, item.source_url)
@@ -1137,6 +1212,11 @@ def crawl_source(
                         match_key = "title"
 
                 if existing_row is not None:
+                    item = sanitize_cover_image_for_db(
+                        connection,
+                        item,
+                        existing_news_id=int(existing_row["id"]),
+                    )
                     if should_update_existing(existing_row, item, update_existing_content):
                         if dry_run:
                             stats["updated"] += 1
@@ -1150,6 +1230,7 @@ def crawl_source(
                         logger.info("跳过重复新闻：%s", item.title)
                     continue
 
+                item = sanitize_cover_image_for_db(connection, item)
                 if dry_run:
                     stats["inserted"] += 1
                     logger.info(
@@ -1198,7 +1279,8 @@ def print_summary(source_name: str, stats: dict[str, Any]) -> None:
 def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[str, Any]:
     """过滤重复使用的图片（通用图检测）
 
-    如果同一张图片被超过3条新闻使用，认为它是通用图，过滤掉
+    同一张图片被多条不同新闻使用时，通常是 RSS/栏目默认图或组图列表图，
+    会造成新闻列表大面积重复封面。这里直接清空所有重复封面。
     """
     filter_stats = {
         "duplicate_images_filtered": 0,
@@ -1224,7 +1306,7 @@ def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[
                 image_url = row["cover_image"]
                 count = row["count"]
 
-                if count > 10:  # 超过10次的认为是通用图
+                if count >= DUPLICATE_IMAGE_MIN_COUNT:
                     duplicate_images[image_url] = count
                     logger.warning(
                         "检测到重复图片（%d 次使用）：%s",
