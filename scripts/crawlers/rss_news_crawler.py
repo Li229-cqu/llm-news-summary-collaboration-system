@@ -116,6 +116,7 @@ ENABLE_PEOPLE_RSS = True  # 启用人民网 RSS 源以获得更多数据
 DEFAULT_MAX_ITEMS = 10
 DEFAULT_SOURCE_MODE = "all"  # 使用所有 RSS 源
 DUPLICATE_IMAGE_MIN_COUNT = 2
+MIN_CONTENT_LENGTH = 500
 
 logger = logging.getLogger("rss_news_crawler")
 
@@ -518,6 +519,10 @@ def normalize_whitespace(text: str) -> str:
     return " ".join(str(text).split()).strip()
 
 
+def content_length(text: str) -> int:
+    return len(re.findall(r"\S", text or ""))
+
+
 def looks_mojibake(text: str) -> bool:
     if not text:
         return False
@@ -665,17 +670,132 @@ def match_topic_id(topics: list[dict[str, Any]], title: str, summary: str) -> in
     return None
 
 
-def build_tags(category_code: str, topic_name: str | None, source_name: str) -> list[str]:
-    tags = [category_code, source_name]
-    if topic_name:
-        tags.insert(1, topic_name)
-    result: list[str] = []
+def extract_meta_tags(html_text: str, title: str) -> list[str]:
+    """从新闻详情页 HTML 中提取 meta 关键词标签。"""
+    if not html_text:
+        return []
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+        tags: list[str] = []
+
+        # 优先级1: meta[name="keywords"] / meta[name="Keywords"]
+        for meta in soup.find_all("meta"):
+            name = (meta.get("name") or "").lower()
+            prop = (meta.get("property") or "").lower()
+            content = (meta.get("content") or "").strip()
+            if not content:
+                continue
+            if name == "keywords" or name == "news_keywords" or prop == "article:tag":
+                # 用逗号、顿号、分号、空格 分割
+                for sep in [",", "，", "、", ";", ";", " "]:
+                    if sep in content:
+                        parts = [p.strip() for p in content.split(sep) if p.strip()]
+                        tags.extend(parts)
+                        break
+                else:
+                    tags.append(content)
+
+        if tags:
+            return tags
+    except Exception:
+        pass
+    return []
+
+
+def normalize_tags(
+    raw_tags: list[str],
+    category_code: str = "",
+    source_name: str = "",
+    topic_name: str | None = None,
+) -> list[str]:
+    """清洗和标准化 tags 列表。
+
+    规则：
+    - 去除空字符串、None
+    - 去除重复项
+    - 去除 category_code
+    - 去除 source_name
+    - 去除 topic_name（整体匹配）
+    - 去除过长文本（超过 20 个字符）
+    - 去除过短文本（少于 2 个字符）
+    - 限制最多 5 个
+    """
     seen: set[str] = set()
-    for tag in tags:
-        if tag and tag not in seen:
-            seen.add(tag)
-            result.append(tag)
+    result: list[str] = []
+
+    # 用于排除的集合
+    exclude_set: set[str] = {category_code, source_name}
+    if topic_name:
+        exclude_set.add(topic_name)
+
+    for tag in raw_tags:
+        if not tag or not tag.strip():
+            continue
+        tag = tag.strip()
+        if tag in exclude_set:
+            continue
+        if tag in seen:
+            continue
+        if len(tag) > 20:
+            continue
+        if len(tag) < 2:
+            continue
+        seen.add(tag)
+        result.append(tag)
+        if len(result) >= 5:
+            break
+
     return result
+
+
+def build_tags(
+    category_code: str,
+    topic_name: str | None,
+    source_name: str,
+    rss_entry: Any = None,
+    html_text: str = "",
+    title: str = "",
+    summary: str = "",
+) -> list[str]:
+    """生成新闻内容关键词标签。
+
+    优先级：
+    1. 从 RSS item 的 category/tags 元素提取
+    2. 从新闻详情页 HTML 的 meta 标签提取
+    3. 从标题(title)和摘要(summary)中轻量提取
+    4. 若都无法提取，返回 []
+    """
+    raw_tags: list[str] = []
+
+    # 优先级1: 从 RSS item 提取
+    if rss_entry is not None:
+        rss_categories = getattr(rss_entry, "tags", None) or getattr(rss_entry, "categories", None)
+        if rss_categories:
+            for cat in rss_categories:
+                term = ""
+                if isinstance(cat, str):
+                    term = cat.strip()
+                elif hasattr(cat, "term") and cat.term:
+                    term = cat.term.strip()
+                elif isinstance(cat, dict):
+                    term = (cat.get("term") or "").strip()
+                if term and len(term) >= 2 and len(term) <= 20:
+                    raw_tags.append(term)
+
+    # 优先级2: 从 HTML meta 标签提取
+    if not raw_tags and html_text:
+        raw_tags = extract_meta_tags(html_text, title)
+
+    # 优先级3: 从 title + summary 提取轻量关键词
+    if not raw_tags:
+        combined = f"{title} {summary}".strip()
+        for sep in ["：", "，", "、", " ", "　", "|", "/", "·", "」", "「", "】", "【", "！", "？"]:
+            if sep in combined:
+                parts = [p.strip() for p in combined.split(sep) if p.strip()]
+                raw_tags = [p for p in parts if len(p) >= 2 and len(p) <= 12]
+                break
+
+    return normalize_tags(raw_tags, category_code, source_name, topic_name)
 
 
 def extract_text_block(node: Any) -> str:
@@ -969,7 +1089,7 @@ def parse_item(
         comment_count=0,
         favorite_count=0,
         status=1,
-        tags=build_tags(category_code, topic_name, feed_source["source_name"]),
+        tags=build_tags(category_code, topic_name, feed_source["source_name"], rss_entry=entry, html_text=html_text, title=title, summary=summary),
         source_url=link or None,
     )
 
@@ -1200,6 +1320,16 @@ def crawl_source(
                 item = parse_item(entry, feed_source, category_map, topics, fetch_content=fetch_content)
                 if not item.title:
                     raise ValueError("标题为空")
+                item_content_length = content_length(item.content)
+                if item_content_length < MIN_CONTENT_LENGTH:
+                    stats["skipped"] += 1
+                    logger.info(
+                        "跳过短正文新闻：%s | content_length=%s < %s",
+                        item.title,
+                        item_content_length,
+                        MIN_CONTENT_LENGTH,
+                    )
+                    continue
 
                 existing_row = None
                 match_key = ""

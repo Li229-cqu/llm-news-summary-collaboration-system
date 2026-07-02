@@ -69,6 +69,13 @@ export interface AIGenerateResponse {
   evidence_coverage?: number
 }
 
+export interface AIAsyncTaskResult {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  result?: AIGenerateResponse
+  error?: string
+}
+
 /** 调用 AI 生成标题和摘要（同步模式）。 */
 export function generateTitleSummary(data: AIGenerateRequest) {
   return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(

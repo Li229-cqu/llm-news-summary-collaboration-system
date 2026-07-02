@@ -49,17 +49,15 @@ function riskLevelCn(r: string) {
   return map[r] || r || '未知'
 }
 function statusCnLabel(s: string | number) {
-  const map: Record<string, string> = { 'Normal': '正常', 'Pending': '待审核', 'Folded': '折叠', 'Deleted': '已删除', 'Disabled': '已禁用' }
+  const map: Record<string, string> = { Normal: '正常', Pending: '待审核', Folded: '折叠', Deleted: '已删除', Disabled: '已禁用' }
   return map[String(s)] || String(s) || '未知'
 }
 function contentTypeCn(t: string) {
   const map: Record<string, string> = { news: '新闻', post: '帖子', comment: '评论', timeline: '时间线', topic: '话题' }
   return map[t] || t
 }
-function resultCnSimple(r: string) {
-  const map: Record<string, string> = { success: '成功', failed: '失败', unsupported: '不支持' }
-  return map[r] || r
-}
+
+const colorMap: Record<string, string> = { low: '#67c23a', medium: '#e6a23c', high: '#f56c6c', unknown: '#909399' }
 
 // ── Loading states ──
 const overviewLoading = ref(false)
@@ -93,6 +91,41 @@ let contentChart: echarts.ECharts | null = null
 let aiChart: echarts.ECharts | null = null
 let riskChart: echarts.ECharts | null = null
 
+// ── Computed: Review summary stats ──
+const processedActions = computed(() => {
+  if (!reviewSummary.value) return []
+  const p = reviewSummary.value.processed
+  const total = p.approve + p.reject + p.fold + p.delete + p.restore
+  if (total === 0) return []
+  const items = [
+    { key: 'approve', label: '通过', count: p.approve, color: '#67c23a' },
+    { key: 'reject', label: '驳回', count: p.reject, color: '#f56c6c' },
+    { key: 'fold', label: '折叠', count: p.fold, color: '#909399' },
+    { key: 'delete', label: '删除', count: p.delete, color: '#e6a23c' },
+    { key: 'restore', label: '恢复', count: p.restore, color: '#409eff' },
+  ]
+  return items.map(i => ({ ...i, pct: total > 0 ? (i.count / total) * 100 : 0 })).filter(i => i.count > 0)
+})
+
+// ── Computed: AI risk stats ──
+const riskStats = computed(() => {
+  if (!aiRisk.value?.items?.length) return null
+  const items = aiRisk.value.items
+  const total = items.reduce((s, i) => s + i.count, 0)
+  if (total === 0) return { total: 0, levels: [] }
+  return {
+    total,
+    levels: items.map(i => ({
+      level: i.risk_level,
+      label: riskLevelCn(i.risk_level),
+      count: i.count,
+      pct: Math.round((i.count / total) * 100),
+      color: colorMap[i.risk_level] || '#909399',
+    })),
+  }
+})
+
+// ── Chart renderers ──
 function initCharts() {
   if (contentChartRef.value && !contentChart) contentChart = echarts.init(contentChartRef.value)
   if (aiChartRef.value && !aiChart) aiChart = echarts.init(aiChartRef.value)
@@ -113,12 +146,12 @@ function renderContentTrend() {
     tooltip: { trigger: 'axis' },
     legend: { data: ['新闻', '帖子', '评论'], top: 0 },
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
-    xAxis: { type: 'category', data: data.map((d) => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
+    xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
-      { name: '新闻', type: 'line', data: data.map((d) => d.news_count), smooth: true, symbol: 'none' },
-      { name: '帖子', type: 'line', data: data.map((d) => d.post_count), smooth: true, symbol: 'none' },
-      { name: '评论', type: 'line', data: data.map((d) => d.comment_count), smooth: true, symbol: 'none' },
+      { name: '新闻', type: 'line', data: data.map(d => d.news_count), smooth: true, symbol: 'none' },
+      { name: '帖子', type: 'line', data: data.map(d => d.post_count), smooth: true, symbol: 'none' },
+      { name: '评论', type: 'line', data: data.map(d => d.comment_count), smooth: true, symbol: 'none' },
     ],
   }, true)
 }
@@ -131,12 +164,12 @@ function renderAiTrend() {
     tooltip: { trigger: 'axis' },
     legend: { data: ['AI 调用', '降级', '高风险'], top: 0 },
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
-    xAxis: { type: 'category', data: data.map((d) => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
+    xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
-      { name: 'AI 调用', type: 'bar', data: data.map((d) => d.ai_count), barMaxWidth: 12 },
-      { name: '降级', type: 'line', data: data.map((d) => d.fallback_count), smooth: true, symbol: 'none' },
-      { name: '高风险', type: 'line', data: data.map((d) => d.high_risk_count), smooth: true, symbol: 'none' },
+      { name: 'AI 调用', type: 'bar', data: data.map(d => d.ai_count), barMaxWidth: 12 },
+      { name: '降级', type: 'line', data: data.map(d => d.fallback_count), smooth: true, symbol: 'none' },
+      { name: '高风险', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
     ],
   }, true)
 }
@@ -145,24 +178,23 @@ function renderRiskChart() {
   if (!riskChart || !aiRisk.value) return
   const items = aiRisk.value.items
   if (!items.length) { riskChart.clear(); return }
-  const colors: Record<string, string> = { low: '#16a34a', medium: '#d97706', high: '#dc2626', unknown: '#9ca3af' }
   riskChart.setOption({
     tooltip: {
       trigger: 'item',
       formatter: (p: { name: string; value: number; percent: number }) =>
-        riskLevelCn(p.name) + ': ' + p.value + ' (' + p.percent + '%)',
+        p.name + ': ' + p.value + ' (' + p.percent + '%)',
     },
-    legend: { orient: 'vertical', right: 8, top: 'center' },
+    legend: { show: false },
     series: [{
       type: 'pie',
       radius: ['45%', '75%'],
-      center: ['40%', '50%'],
+      center: ['50%', '50%'],
       label: { show: false },
       emphasis: { label: { show: true } },
-      data: items.map((i) => ({
+      data: items.map(i => ({
         name: riskLevelCn(i.risk_level),
         value: i.count,
-        itemStyle: { color: colors[i.risk_level] || '#9ca3af' },
+        itemStyle: { color: colorMap[i.risk_level] || '#909399' },
       })),
     }],
   }, true)
@@ -250,7 +282,7 @@ function jumpTo(tab: string) {
   emit('navigate', tab)
 }
 
-// ── Summary cards (Chinese) ──
+// ── Summary cards ──
 const summaryCards = computed(() => {
   const o = overview.value
   return [
@@ -353,67 +385,182 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       </el-card>
     </div>
 
-    <!-- Top content + AI risk row -->
+    <!-- Row 1: Review Summary + AI Risk -->
+    <div class="content-row">
+      <!-- Review Summary -->
+      <el-card class="content-card" shadow="never" v-loading="reviewLoading">
+        <div class="card-header">
+          <div>
+            <h3>审核处理概况</h3>
+            <p class="card-subtitle">待审核内容与今日处理结果</p>
+          </div>
+        </div>
+        <template v-if="reviewSummary">
+          <div class="review-body">
+            <!-- Pending section -->
+            <div>
+              <div class="review-section-title">待处理</div>
+              <div class="stat-grid-4">
+                <div class="stat-block">
+                  <span class="stat-label">新闻待审</span>
+                  <span class="stat-value stat-value--warning">{{ reviewSummary.pending.news }}</span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">帖子待审</span>
+                  <span class="stat-value stat-value--warning">{{ reviewSummary.pending.posts }}</span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">评论待审</span>
+                  <span class="stat-value stat-value--warning">{{ reviewSummary.pending.comments }}</span>
+                </div>
+                <div class="stat-block">
+                  <span class="stat-label">合计待审</span>
+                  <span class="stat-value stat-value--danger">{{ reviewSummary.pending.total }}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Processed section -->
+            <div>
+              <div class="review-section-title">已处理 / 今日内容处理</div>
+              <div class="stat-grid-5">
+                <div class="stat-block stat-block--sm">
+                  <span class="stat-label">通过</span>
+                  <span class="stat-value stat-value--success">{{ reviewSummary.processed.approve }}</span>
+                </div>
+                <div class="stat-block stat-block--sm">
+                  <span class="stat-label">驳回</span>
+                  <span class="stat-value stat-value--danger">{{ reviewSummary.processed.reject }}</span>
+                </div>
+                <div class="stat-block stat-block--sm">
+                  <span class="stat-label">折叠</span>
+                  <span class="stat-value stat-value--info">{{ reviewSummary.processed.fold }}</span>
+                </div>
+                <div class="stat-block stat-block--sm">
+                  <span class="stat-label">删除</span>
+                  <span class="stat-value">{{ reviewSummary.processed.delete }}</span>
+                </div>
+                <div class="stat-block stat-block--sm">
+                  <span class="stat-label">恢复</span>
+                  <span class="stat-value stat-value--primary">{{ reviewSummary.processed.restore }}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Footer: today processed + action distribution bar -->
+            <div class="review-footer">
+              <div class="review-today">
+                <span>今日内容处理：</span>
+                <strong>{{ reviewSummary.today_processed }}</strong>
+              </div>
+              <div v-if="processedActions.length > 1" class="action-bar">
+                <div
+                  v-for="a in processedActions"
+                  :key="a.key"
+                  class="action-segment"
+                  :style="{ width: a.pct + '%', backgroundColor: a.color }"
+                  :title="a.label + ': ' + a.count + ' (' + a.pct.toFixed(0) + '%)'"
+                />
+              </div>
+              <div class="action-legend">
+                <span v-for="a in processedActions" :key="a.key" class="action-legend-item">
+                  <span class="action-dot" :style="{ backgroundColor: a.color }" />
+                  {{ a.label }}{{ a.count > 0 ? ` (${a.count})` : '' }}
+                </span>
+                <span v-if="processedActions.length === 0" class="action-legend-item">暂无处理记录</span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <el-empty v-else description="暂无审核数据" />
+      </el-card>
+
+      <!-- AI Risk Distribution -->
+      <el-card class="content-card" shadow="never" v-loading="riskLoading">
+        <div class="card-header">
+          <div>
+            <h3>AI 风险分布</h3>
+            <p class="card-subtitle">AI 生成记录风险等级统计</p>
+          </div>
+        </div>
+        <template v-if="riskStats && riskStats.total > 0">
+          <div class="risk-body">
+            <!-- Chart + Stats side by side -->
+            <div class="risk-row">
+              <div ref="riskChartRef" class="risk-chart" />
+              <div class="risk-stats">
+                <div class="risk-stat-item">
+                  <span class="risk-stat-label">AI 调用总数</span>
+                  <span class="risk-stat-value">{{ riskStats.total }}</span>
+                </div>
+                <div v-for="lvl in riskStats.levels" :key="lvl.level" class="risk-stat-item">
+                  <span class="risk-stat-label">
+                    <span class="risk-dot" :style="{ backgroundColor: lvl.color }" />
+                    {{ lvl.label }}
+                  </span>
+                  <span class="risk-stat-value">{{ lvl.count }}</span>
+                </div>
+                <div v-if="riskStats.levels.some(l => l.level === 'high')" class="risk-high-alert">
+                  <el-tag type="danger" effect="plain" size="small">存在高风险记录，建议及时复核</el-tag>
+                </div>
+              </div>
+            </div>
+            <!-- Risk ratio bar -->
+            <div class="risk-bar-section">
+              <div class="risk-bar">
+                <div
+                  v-for="lvl in riskStats.levels"
+                  :key="lvl.level"
+                  class="risk-bar-segment"
+                  :style="{ width: lvl.pct + '%', backgroundColor: lvl.color }"
+                  :title="lvl.label + ': ' + lvl.count + ' (' + lvl.pct + '%)'"
+                />
+              </div>
+              <div class="risk-bar-legend">
+                <span v-for="lvl in riskStats.levels" :key="lvl.level" class="risk-bar-legend-item">
+                  <span class="risk-dot" :style="{ backgroundColor: lvl.color }" />
+                  {{ lvl.label }}：{{ lvl.pct }}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <el-empty v-else-if="aiRisk && aiRisk.items && aiRisk.items.length === 0" description="暂无 AI 风险统计数据" />
+        <el-empty v-else description="暂无 AI 风险统计数据" />
+      </el-card>
+    </div>
+
+    <!-- Row 2: Hot News + Hot Posts -->
     <div class="content-row">
       <el-card class="content-card" shadow="never">
-        <h3>热门新闻 Top10（按浏览量）</h3>
+        <div class="card-header">
+          <h3>热门新闻 Top10（按浏览量）</h3>
+        </div>
         <el-table :data="topContent?.top_news || []" v-loading="topLoading" empty-text="暂无数据" size="small">
-          <el-table-column label="#" width="50"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
+          <el-table-column label="#" width="48"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
           <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="source" label="来源" width="100" />
-          <el-table-column prop="view_count" label="浏览" width="70" />
-          <el-table-column prop="comment_count" label="评论" width="70" />
-          <el-table-column label="操作" width="70">
-            <template #default><el-button text type="primary" size="small" :icon="View" @click="jumpTo('news')">查看</el-button></template>
+          <el-table-column prop="source" label="来源" width="100" show-overflow-tooltip />
+          <el-table-column prop="view_count" label="浏览" width="70" align="right" />
+          <el-table-column prop="comment_count" label="评论" width="70" align="right" />
+          <el-table-column label="操作" width="70" fixed="right">
+            <template #default>
+              <el-button text type="primary" size="small" :icon="View" @click="jumpTo('news')">查看</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </el-card>
 
       <el-card class="content-card" shadow="never">
-        <h3>AI 风险分布</h3>
-        <div v-if="aiRisk?.items?.length" ref="riskChartRef" class="chart-box chart-box--small" />
-        <el-empty v-else description="暂无 AI 风险数据" />
-      </el-card>
-    </div>
-
-    <!-- Review summary + Top posts row -->
-    <div class="content-row">
-      <el-card class="content-card" shadow="never">
-        <h3>审核处理概况</h3>
-        <div v-if="reviewSummary" v-loading="reviewLoading">
-          <div class="review-block">
-            <h4>待处理</h4>
-            <div class="tag-row">
-              <el-tag type="warning">新闻: {{ reviewSummary.pending.news }}</el-tag>
-              <el-tag type="warning">帖子: {{ reviewSummary.pending.posts }}</el-tag>
-              <el-tag type="warning">评论: {{ reviewSummary.pending.comments }}</el-tag>
-              <el-tag type="danger">合计: {{ reviewSummary.pending.total }}</el-tag>
-            </div>
-          </div>
-          <div class="review-block">
-            <h4>已处理（来自操作日志）</h4>
-            <div class="tag-row">
-              <el-tag type="success">通过: {{ reviewSummary.processed.approve }}</el-tag>
-              <el-tag type="danger">驳回: {{ reviewSummary.processed.reject }}</el-tag>
-              <el-tag type="info">折叠: {{ reviewSummary.processed.fold }}</el-tag>
-              <el-tag>删除: {{ reviewSummary.processed.delete }}</el-tag>
-              <el-tag>恢复: {{ reviewSummary.processed.restore }}</el-tag>
-            </div>
-          </div>
-          <p class="review-footer">今日处理: {{ reviewSummary.today_processed }}</p>
+        <div class="card-header">
+          <h3>热门帖子 Top10（按热度）</h3>
         </div>
-        <el-empty v-else description="暂无审核数据" />
-      </el-card>
-
-      <el-card class="content-card" shadow="never">
-        <h3>热门帖子 Top10（按热度）</h3>
         <el-table :data="topContent?.top_posts || []" v-loading="topLoading" empty-text="暂无数据" size="small">
-          <el-table-column label="#" width="50"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
+          <el-table-column label="#" width="48"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
           <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="author_name" label="作者" width="100" />
-          <el-table-column prop="heat_score" label="热度" width="70" />
-          <el-table-column label="操作" width="70">
-            <template #default><el-button text type="primary" size="small" :icon="View" @click="jumpTo('posts')">查看</el-button></template>
+          <el-table-column prop="author_name" label="作者" width="100" show-overflow-tooltip />
+          <el-table-column prop="heat_score" label="热度" width="70" align="right" />
+          <el-table-column label="操作" width="70" fixed="right">
+            <template #default>
+              <el-button text type="primary" size="small" :icon="View" @click="jumpTo('posts')">查看</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </el-card>
@@ -517,22 +664,236 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 .summary-card__value { font-size: 22px; font-weight: 800; color: var(--el-text-color-primary); }
 .summary-card__hint { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 2px; }
 
-.charts-row, .content-row {
+.charts-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
-.chart-card, .content-card, .overview-card {
+.chart-card {
   border-radius: 18px;
 }
-.chart-card h3, .content-card h3, .overview-card .overview-header h3 {
+.chart-card h3 {
   margin: 0 0 10px;
 }
 .chart-box { width: 100%; height: 280px; }
-.chart-box--small { height: 240px; }
 
-.content-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* ── Content rows (2-col grids) ── */
+.content-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.content-card {
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.content-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.content-card .card-header {
+  margin-bottom: 14px;
+}
+.card-header h3 {
+  margin: 0;
+}
+.card-subtitle {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
 
+/* ── Review summary card ── */
+.review-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.review-section-title {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.stat-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+.stat-block {
+  background: var(--el-fill-color-extra-light);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-block--sm {
+  padding: 10px 6px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.stat-value--warning { color: var(--el-color-warning); }
+.stat-value--danger { color: var(--el-color-danger); }
+.stat-value--success { color: var(--el-color-success); }
+.stat-value--info { color: var(--el-color-info); }
+.stat-value--primary { color: var(--el-color-primary); }
+
+.review-footer {
+  background: var(--el-fill-color-extra-light);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  margin-top: auto;
+}
+.review-today {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+}
+.review-today strong {
+  font-size: 18px;
+  color: var(--el-color-primary);
+  margin-left: 4px;
+}
+.action-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--el-fill-color);
+  margin-bottom: 6px;
+}
+.action-segment {
+  height: 100%;
+  transition: width 0.3s;
+}
+.action-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+.action-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* ── AI Risk card ── */
+.risk-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.risk-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.risk-chart {
+  width: 140px;
+  min-height: 140px;
+  flex-shrink: 0;
+}
+.risk-stats {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.risk-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--el-fill-color-extra-light);
+  border-radius: 8px;
+}
+.risk-stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.risk-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+.risk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.risk-high-alert {
+  margin-top: 4px;
+}
+
+.risk-bar-section {
+  background: var(--el-fill-color-extra-light);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+.risk-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--el-fill-color);
+  margin-bottom: 6px;
+}
+.risk-bar-segment {
+  height: 100%;
+  transition: width 0.3s;
+}
+.risk-bar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+.risk-bar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Overview card ── */
+.overview-card {
+  border-radius: 18px;
+}
 .overview-filter {
   display: flex;
   gap: 8px;
@@ -541,20 +902,20 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   flex-wrap: wrap;
 }
 .overview-header { margin-bottom: 6px; }
-.overview-header p { margin: 0; color: var(--el-text-color-secondary); font-size: 12px; }
-
-.review-block { margin-bottom: 12px; }
-.review-block h4 { font-size: 13px; margin: 0 0 6px; color: var(--el-text-color-secondary); }
-.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.review-footer { font-size: 13px; color: var(--el-text-color-secondary); margin: 8px 0 0; }
+.overview-header h3 { margin: 0; }
+.overview-header p { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 12px; }
 
 .el-pagination { margin-top: 12px; justify-content: flex-end; }
 
 @media (max-width: 1200px) {
   .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stat-grid-5 { grid-template-columns: repeat(3, 1fr); }
+  .risk-row { flex-direction: column; align-items: center; }
 }
 @media (max-width: 960px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts-row, .content-row { grid-template-columns: 1fr; }
+  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .stat-grid-5 { grid-template-columns: repeat(3, 1fr); }
 }
 </style>

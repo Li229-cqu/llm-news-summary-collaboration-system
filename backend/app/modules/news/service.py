@@ -94,6 +94,7 @@ def _format_news_row(row: dict[str, Any]) -> dict[str, Any]:
         "category_id": int(row.get("category_id") or 0),
         "category_name": normalize_text(row.get("category_name")) or "未分类",
         "topic_id": row.get("topic_id"),
+        "topic_name": normalize_text(row.get("topic_name")) if row.get("topic_name") else None,
         "source": normalize_text(row.get("source")),
         "editor": normalize_text(row.get("editor")),
         "publish_time": format_datetime(row.get("publish_time")),
@@ -223,6 +224,7 @@ def _db_news_list(
             n.category_id,
             COALESCE(nc.name, '未分类') AS category_name,
             n.topic_id,
+            COALESCE(nt.topic_name, '') AS topic_name,
             n.source,
             n.editor,
             n.publish_time,
@@ -235,6 +237,7 @@ def _db_news_list(
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
+        LEFT JOIN news_topic nt ON nt.id = n.topic_id
         WHERE {where_sql}
         ORDER BY n.publish_time DESC, n.id DESC
         LIMIT %s OFFSET %s
@@ -390,6 +393,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             n.category_id,
             COALESCE(nc.name, '未分类') AS category_name,
             n.topic_id,
+            COALESCE(nt.topic_name, '') AS topic_name,
             n.source,
             n.editor,
             n.publish_time,
@@ -402,6 +406,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
+        LEFT JOIN news_topic nt ON nt.id = n.topic_id
         WHERE n.id = %s AND n.status = 1
         LIMIT 1
         """,
@@ -443,6 +448,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
+        LEFT JOIN news_topic nt ON nt.id = n.topic_id
         WHERE n.status = 1 AND n.category_id = %s AND n.id <> %s
         ORDER BY n.publish_time DESC, n.id DESC
         LIMIT 3
@@ -472,6 +478,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             {_news_source_url_select()}
         FROM news n
         LEFT JOIN news_category nc ON nc.id = n.category_id
+        LEFT JOIN news_topic nt ON nt.id = n.topic_id
         WHERE n.status = 1
     """
     _RECOMMEND_ORDER = "ORDER BY n.view_count DESC, n.comment_count DESC, n.like_count DESC, n.publish_time DESC, n.id DESC"

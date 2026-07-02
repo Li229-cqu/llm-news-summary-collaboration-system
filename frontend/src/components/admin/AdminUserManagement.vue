@@ -133,6 +133,15 @@ function openRoleDialog(row: UserItem) {
 
 async function confirmChangeRole() {
   if (!roleTarget.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认将用户“${roleTarget.value.username}”的角色修改为“${roleLabel(selectedRole.value)}”？`,
+      '确认修改角色',
+      { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
   changingRole.value = true
   try {
     const payload: AdminUserRoleRequest = { role: selectedRole.value as AdminUserRoleRequest['role'] }
@@ -308,14 +317,6 @@ onMounted(async () => {
           <el-descriptions-item label="最近更新">{{ detailData.updated_at || '--' }}</el-descriptions-item>
         </el-descriptions>
 
-        <el-alert
-          v-if="!userOptions?.last_login_supported"
-          title="最近登录时间字段暂不支持，当前数据库无 last_login_time 列。"
-          type="info"
-          :closable="false"
-          style="margin:12px 0"
-        />
-
         <h4 style="margin:16px 0 8px">行为统计</h4>
         <div class="behavior-grid">
           <div class="behavior-item">
@@ -340,12 +341,6 @@ onMounted(async () => {
           </div>
         </div>
 
-        <el-divider />
-        <el-tooltip content="密码重置将在后续阶段接入" placement="top">
-          <span>
-            <el-button type="primary" disabled style="width:100%">密码重置（后续阶段接入）</el-button>
-          </span>
-        </el-tooltip>
       </template>
     </el-drawer>
 

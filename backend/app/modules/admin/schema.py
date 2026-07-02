@@ -66,6 +66,7 @@ class PendingItem(BaseModel):
     submitter: str = ''
     source: str = ''
     category_name: str = ''
+    tags: list[str] = Field(default_factory=list)
     status: int = 0
     status_label: str = ''
     create_time: Optional[str] = None
@@ -795,6 +796,7 @@ class AdminAICallRecordListResponse(BaseModel):
     page: int = 1
     page_size: int = 10
     summary: AdminAICallRecordSummary = Field(default_factory=AdminAICallRecordSummary)
+    fallback_supported: bool = False
 
 
 # M11: System Operations & Operation Log schemas

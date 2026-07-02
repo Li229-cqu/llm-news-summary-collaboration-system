@@ -30,9 +30,9 @@
         {{ news.recommendation_reason }}
       </div>
 
-      <!-- 英文 tags（首页精简模式下隐藏） -->
-      <div v-if="!compactHome && news.tags?.length" class="news-card__tags">
-        <el-tag v-for="tag in news.tags" :key="tag" size="small" effect="light">
+      <!-- 内容标签（首页精简模式下隐藏） -->
+      <div v-if="!compactHome && cleanTags.length" class="news-card__tags">
+        <el-tag v-for="tag in cleanTags" :key="tag" size="small" effect="light">
           {{ tag }}
         </el-tag>
       </div>
@@ -68,6 +68,7 @@ export interface NewsCardItem {
   status?: number
   cover_image?: string
   tags?: string[]
+  topic_name?: string | null
   recommendation_reason?: string
   recommendation_score?: number
 }
@@ -84,6 +85,41 @@ const emit = defineEmits<{
 
 const imageFailed = ref(false)
 const hasImage = computed(() => Boolean(props.news.cover_image && !imageFailed.value))
+
+const COMMON_CATEGORY_CODES = new Set([
+  "politics", "society", "finance", "technology", "sports", "entertainment",
+  "world", "culture", "health", "education", "military", "science",
+  "china_news", "recommend",
+])
+
+const cleanTags = computed(() => {
+  const raw = props.news.tags
+  if (!raw?.length) return []
+  const exclude = new Set<string>()
+  // 排除 category_code
+  COMMON_CATEGORY_CODES.forEach(c => exclude.add(c))
+  // 排除 category_name
+  if (props.news.category_name) exclude.add(props.news.category_name)
+  // 排除 source
+  if (props.news.source) exclude.add(props.news.source)
+  // 排除 topic_name
+  if (props.news.topic_name) exclude.add(props.news.topic_name)
+
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const tag of raw) {
+    if (!tag || typeof tag !== 'string') continue
+    const t = tag.trim()
+    if (!t) continue
+    if (t.length < 2 || t.length > 20) continue
+    if (exclude.has(t)) continue
+    if (seen.has(t)) continue
+    seen.add(t)
+    result.push(t)
+    if (result.length >= 5) break
+  }
+  return result
+})
 
 watch(
   () => props.news.cover_image,
