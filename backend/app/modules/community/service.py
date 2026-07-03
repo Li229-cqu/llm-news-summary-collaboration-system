@@ -2669,39 +2669,6 @@ def get_hot_tags(limit: int = 10) -> list[dict[str, Any]]:
         return []
 
 
-def _get_all_categories() -> list[dict[str, Any]]:
-    try:
-        rows = execute_query(
-            """
-            SELECT id, name, code, description
-            FROM news_category
-            WHERE status = 1
-            ORDER BY sort ASC, id ASC
-            """
-        )
-        return rows or []
-    except Exception:  # noqa: BLE001
-        return []
-
-
-def _get_news_by_category(category_id: int, limit: int = 10) -> list[dict[str, Any]]:
-    try:
-        rows = execute_query(
-            """
-            SELECT n.id, n.title, n.summary, n.content, n.category_id, nc.name AS category_name
-            FROM news n
-            LEFT JOIN news_category nc ON nc.id = n.category_id
-            WHERE n.status = 1 AND n.category_id = %s
-            ORDER BY n.publish_time DESC, n.id DESC
-            LIMIT %s
-            """,
-            [category_id, limit],
-        )
-        return rows or []
-    except Exception:  # noqa: BLE001
-        return []
-
-
 async def ai_news_helper(question: str) -> AIHelperResponse:
     """AI 新闻助手：基于系统内容提供智能回答。"""
     import httpx
@@ -2710,60 +2677,38 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
     from app.modules.community.service import get_post_list, get_hot_search
 
     try:
-        news_list = get_news_list(page=1, page_size=50)
-        hot_news = get_hot_news(limit=20)
-        posts = get_post_list(page=1, page_size=30)
-        hot_topics = get_hot_search(limit=20)
-        categories = _get_all_categories()
+        news_list = get_news_list(page=1, page_size=10)
+        hot_news = get_hot_news(limit=5)
+        posts = get_post_list(page=1, page_size=10)
+        hot_topics = get_hot_search(limit=5)
 
         news_context = "\n".join([
-            f"新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:300]}"
-            for n in news_list.get("list", [])[:30]
+            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
+            for n in news_list.get("list", [])[:5]
         ])
 
         hot_news_context = "\n".join([
-            f"热点新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:150]}"
-            for n in hot_news[:15]
+            f"热点新闻 {n['id']}: {n['title']}"
+            for n in hot_news[:3]
         ])
 
         post_context = "\n".join([
-            f"社区帖子 {p.id}: {p.title} - {p.content[:200]}"
-            for p in posts.list[:15]
+            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}"
+            for p in posts.list[:5]
         ])
 
         topic_context = "\n".join([
             f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
-            for t in hot_topics[:15]
+            for t in hot_topics[:3]
         ])
-
-        category_context = "\n".join([
-            f"分类 {c['id']}: {c['name']} ({c['code']}) - {c.get('description', '')}"
-            for c in categories
-        ])
-
-        category_news_context = ""
-        for category in categories:
-            cat_news = _get_news_by_category(category["id"], limit=5)
-            if cat_news:
-                cat_news_lines = "\n".join([
-                    f"  - 新闻 {n['id']}: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:200]}"
-                    for n in cat_news
-                ])
-                category_news_context += f"\n【{category['name']}】\n{cat_news_lines}\n"
 
         system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
 
-【新闻分类】
-{category_context}
-
-【最新新闻】
+【系统新闻内容】
 {news_context}
 
 【热点新闻】
 {hot_news_context}
-
-【各分类新闻】
-{category_news_context}
 
 【社区讨论帖子】
 {post_context}
@@ -2775,7 +2720,7 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
 
         ai_service_url = f"{settings.ai_service_url}/ai/chat"
         logger.info(f"🚀 [REAL API] 调用 AI 服务生成新闻助手回答: {ai_service_url}")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 ai_service_url,
                 json={
@@ -2798,35 +2743,8 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
         logger.warning(f"❌ [REAL API] AI 服务调用失败，回退到关键词匹配：{exc}")
 
     logger.info("🤖 [FALLBACK] 使用关键词匹配回答")
-    news_list = get_news_list(page=1, page_size=50)
-    hot_topics = get_hot_search(limit=20)
-    categories = _get_all_categories()
-
-    matched_category = None
-    for category in categories:
-        if category["name"] in question or category["code"] in question:
-            matched_category = category
-            break
-
-    if matched_category:
-        cat_news = _get_news_by_category(matched_category["id"], limit=10)
-        if cat_news:
-            news_lines = []
-            for i, n in enumerate(cat_news[:5], 1):
-                content = (n.get("content", "") or n.get("summary", ""))[:100]
-                news_lines.append(f"{i}. **{n['title']}** - {content}")
-            news_text = "\n".join(news_lines)
-            return AIHelperResponse(
-                success=True,
-                message="success",
-                answer=f"根据系统数据，当前【{matched_category['name']}】分类下的新闻包括：\n\n{news_text}\n\n如需了解某条新闻的详细内容，请告诉我。"
-            )
-        else:
-            return AIHelperResponse(
-                success=True,
-                message="success",
-                answer=f"当前【{matched_category['name']}】分类下暂无新闻。"
-            )
+    news_list = get_news_list(page=1, page_size=10)
+    hot_topics = get_hot_search(limit=5)
 
     keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
     matched_keywords = [k for k in keywords if k in question]
@@ -2834,26 +2752,23 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
     if matched_keywords:
         if "新闻" in question or "摘要" in question:
             news_count = len(news_list.get("list", []))
-            cat_names = ", ".join([c["name"] for c in categories])
             return AIHelperResponse(
                 success=True,
                 message="success",
-                answer=f"系统目前有 {news_count} 条新闻，涵盖 {cat_names} 等分类。你可以在首页浏览新闻摘要，了解最新资讯。"
+                answer=f"系统目前有 {news_count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
             )
         if "热点" in question or "话题" in question:
-            topics = ", ".join([t.keyword for t in hot_topics[:5]])
+            topics = ", ".join([t.title for t in hot_topics[:3]])
             return AIHelperResponse(
                 success=True,
                 message="success",
                 answer=f"当前热点话题有：{topics}。点击查看详细内容。"
             )
         if "社区" in question or "帖子" in question:
-            posts = get_post_list(page=1, page_size=30)
-            post_count = len(posts.list)
             return AIHelperResponse(
                 success=True,
                 message="success",
-                answer=f"社区里有 {post_count} 条讨论帖子，你可以浏览热门话题，参与讨论。"
+                answer="社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
             )
 
     return AIHelperResponse(
@@ -2974,58 +2889,31 @@ def _build_community_context() -> str:
     from app.modules.news.service import get_news_list, get_hot_news
 
     try:
-        news_list = get_news_list(page=1, page_size=50)
-        hot_news = get_hot_news(limit=20)
-        posts = get_post_list(page=1, page_size=30)
-        hot_topics = get_hot_search(limit=20)
-        categories = _get_all_categories()
+        news_list = get_news_list(page=1, page_size=10)
+        hot_news = get_hot_news(limit=10)
+        posts = get_post_list(page=1, page_size=10)
+        hot_topics = get_hot_search(limit=5)
 
-        news_context = "\n".join([
-            f"新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:300]}"
-            for n in news_list.get("list", [])[:30]
-        ])
-
-        hot_news_context = "\n".join([
-            f"热点新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:150]}"
-            for n in hot_news[:15]
-        ])
-
-        post_context = "\n".join([
-            f"社区帖子 {p.id}: {p.title} - {p.content[:200]}"
-            for p in posts.list[:15]
-        ])
-
-        topic_context = "\n".join([
+        news_context = "\n".join(
+            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
+            for n in (news_list.get("list") or [])[:5]
+        )
+        hot_news_context = "\n".join(
+            f"热搜榜第{n['rank']}名: {n['title']}" for n in (hot_news or [])[:10]
+        )
+        post_context = "\n".join(
+            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}" for p in (posts.list or [])[:5]
+        )
+        topic_context = "\n".join(
             f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
-            for t in hot_topics[:15]
-        ])
+            for t in (hot_topics or [])[:3]
+        )
 
-        category_context = "\n".join([
-            f"分类 {c['id']}: {c['name']} ({c['code']}) - {c.get('description', '')}"
-            for c in categories
-        ])
-
-        category_news_context = ""
-        for category in categories:
-            cat_news = _get_news_by_category(category["id"], limit=5)
-            if cat_news:
-                cat_news_lines = "\n".join([
-                    f"  - 新闻 {n['id']}: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:200]}"
-                    for n in cat_news
-                ])
-                category_news_context += f"\n【{category['name']}】\n{cat_news_lines}\n"
-
-        return f"""【新闻分类】
-{category_context}
-
-【最新新闻】
+        return f"""【系统新闻内容】
 {news_context}
 
-【热点新闻】
+【首页热搜榜 Top10】
 {hot_news_context}
-
-【各分类新闻】
-{category_news_context}
 
 【社区讨论帖子】
 {post_context}
@@ -3088,42 +2976,19 @@ async def _call_ai_service(
     # fallback 关键词匹配
     from app.modules.news.service import get_news_list, get_hot_news
 
-    categories = _get_all_categories()
-    matched_category = None
-    for category in categories:
-        if category["name"] in question or category["code"] in question:
-            matched_category = category
-            break
-
-    if matched_category:
-        cat_news = _get_news_by_category(matched_category["id"], limit=10)
-        if cat_news:
-            news_lines = []
-            for i, n in enumerate(cat_news[:5], 1):
-                content = (n.get("content", "") or n.get("summary", ""))[:100]
-                news_lines.append(f"{i}. **{n['title']}** - {content}")
-            news_text = "\n".join(news_lines)
-            return f"根据系统数据，当前【{matched_category['name']}】分类下的新闻包括：\n\n{news_text}\n\n如需了解某条新闻的详细内容，请告诉我。"
-        else:
-            return f"当前【{matched_category['name']}】分类下暂无新闻。"
-
     keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
     matched = [k for k in keywords if k in question]
     if matched:
         if "新闻" in question or "摘要" in question:
-            news_list = get_news_list(page=1, page_size=50)
-            categories = _get_all_categories()
+            news_list = get_news_list(page=1, page_size=5)
             count = len(news_list.get("list") or [])
-            cat_names = ", ".join([c["name"] for c in categories])
-            return f"系统目前有 {count} 条新闻，涵盖 {cat_names} 等分类。你可以在首页浏览新闻摘要，了解最新资讯。"
+            return f"系统目前有 {count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
         if "热点" in question or "话题" in question:
-            hot_topics = get_hot_search(limit=5)
-            topics = ", ".join(t.keyword for t in hot_topics[:5])
+            hot_topics = get_hot_search(limit=3)
+            topics = ", ".join(t.title for t in hot_topics[:3])
             return f"当前热点话题有：{topics}。点击查看详细内容。"
         if "社区" in question or "帖子" in question:
-            posts = get_post_list(page=1, page_size=30)
-            post_count = len(posts.list)
-            return f"社区里有 {post_count} 条讨论帖子，你可以浏览热门话题，参与讨论。"
+            return "社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
 
     return "谢谢你的提问！我是 AI 新闻助手，可以帮你了解系统中的新闻内容、热点话题和社区讨论。请问有什么可以帮你的？"
 

@@ -78,12 +78,8 @@
           <span class="stats-value">{{ sourceNewsList.length }}</span>
           <span class="stats-label">篇来源新闻</span>
         </div>
-        <div class="stats-item">
-          <span class="stats-value">{{ sourceLabel }}</span>
-          <span class="stats-label">数据来源</span>
-        </div>
         <div v-if="updateTimeText" class="stats-item">
-          <span class="stats-value stats-value--small">{{ updateTimeText }}</span>
+          <span class="stats-value">{{ updateTimeText }}</span>
           <span class="stats-label">更新时间</span>
         </div>
       </div>
@@ -118,7 +114,7 @@
                 <span class="timeline-node__type-tag">{{ typeLabel(node.event_type) }}</span>
                 <span v-if="node.source_name" class="timeline-node__source-name">{{ node.source_name }}</span>
               </div>
-              <h4 class="timeline-node__card-title">{{ getTimelineShortEventTitle(node) }}</h4>
+              <h4 class="timeline-node__card-title">{{ node.source_title || node.event_title }}</h4>
               <div v-if="node.keywords?.length" class="timeline-node__card-keywords">
                 <span
                   v-for="(kw, kIdx) in node.keywords.slice(0, 3)"
@@ -140,34 +136,6 @@
                   查看新闻详情
                 </button>
                 <span v-else class="timeline-node__no-nav">暂无可跳转的来源新闻</span>
-                <button
-                  class="timeline-node__source-toggle"
-                  :class="{ 'timeline-node__source-toggle--active': expandedNodeId === node.event_id }"
-                  @click.stop="toggleNodeSource(node.event_id)"
-                >
-                  <span>{{ expandedNodeId === node.event_id ? '收起来源新闻' : '查看来源新闻' }}</span>
-                  <span class="source-toggle-arrow" :class="{ 'source-toggle-arrow--up': expandedNodeId === node.event_id }">▼</span>
-                </button>
-              </div>
-
-              <!-- 来源新闻展开区 -->
-              <div v-if="expandedNodeId === node.event_id" class="timeline-node__source-detail">
-                <div class="source-detail__header">
-                  <span class="source-detail__label">来源新闻</span>
-                  <span class="source-detail__meta">
-                    {{ getNodeSourceNews(node)?.source || node.source_name }} · {{ formatSourceTime(node) }}
-                  </span>
-                </div>
-                <h5 class="source-detail__title">{{ getNodeSourceNews(node)?.title || node.source_title }}</h5>
-                <div class="source-detail__actions">
-                  <button
-                    v-if="node.source_news_id"
-                    class="timeline-node__nav-btn timeline-node__nav-btn--small"
-                    @click.stop="handleNavigateToNews(node)"
-                  >
-                    查看新闻详情
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -253,40 +221,6 @@ function dotClass(importance?: number): string {
   return 'timeline-node__dot--normal'
 }
 
-// ── 来源新闻匹配与展开逻辑 ──
-
-/** 根据 source_news_id 匹配来源新闻列表 */
-function getNodeSourceNews(node: { source_news_id: number }): TimelineNewsItem | undefined {
-  return sourceNewsList.value.find((news) => news.id === node.source_news_id)
-}
-
-// ── 事件化短标题（后端已生成，前端原样展示）──
-
-function getTimelineShortEventTitle(node: {
-  event_title: string
-  source_news_id: number
-  event_type?: string
-}): string {
-  const title = (node.event_title || '').trim()
-  if (!title) return '事件进展'
-  // 后端已生成短标题，前端仅展示，不截断不加省略号
-  return title
-}
-
-/** 格式化来源新闻发布时间 */
-function formatSourceTime(node: { source_news_id: number; event_time: string }): string {
-  const news = getNodeSourceNews(node)
-  const time = news?.publish_time || node.event_time || ''
-  if (!time) return ''
-  // "2026-06-23 11:30:00" → "2026-06-23 11:30"
-  return time.slice(0, 16)
-}
-
-/** 展开/收起来源新闻（同一节点再点即收起，切换节点自动关闭前一个） */
-function toggleNodeSource(eventId: number): void {
-  expandedNodeId.value = expandedNodeId.value === eventId ? null : eventId
-}
-
 /** 跳转到新闻详情页（通过 emit 让父组件保存滚动位置） */
 const SESSION_KEY = 'timeline:return-state'
 
@@ -323,9 +257,6 @@ const pollCount = ref(0)
 const errorMessage = ref('')
 const timelineData = ref<TimelineResponse | null>(null)
 const sourceNewsList = ref<TimelineNewsItem[]>([])
-
-// 来源新闻展开状态（只允许同时展开一个节点）
-const expandedNodeId = ref<number | null>(null)
 
 // 返回高亮
 const highlightedNodeKey = ref<string | null>(null)
@@ -411,7 +342,6 @@ function resetState() {
   errorMessage.value = ''
   timelineData.value = null
   sourceNewsList.value = []
-  expandedNodeId.value = null
   stopPolling()
 }
 

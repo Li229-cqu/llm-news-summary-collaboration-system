@@ -75,7 +75,7 @@ const displayTopicName = computed(() => {
 
 // ── 返回 ──
 function goBackToList() {
-  router.push('/timeline')
+  router.back()
 }
 
 onMounted(() => {
