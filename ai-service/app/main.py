@@ -6,10 +6,13 @@ from app.core.config import settings
 from app.routers.chat import router as chat_router
 from app.routers.check import router as check_router
 from app.routers.comment_summary import router as comment_summary_router
+from app.routers.edit_suggestions import router as edit_suggestions_router
 from app.routers.evidence import router as evidence_router
 from app.routers.extract import router as extract_router
 from app.routers.generate import router as generate_router
 from app.routers.health import router as health_router
+from app.routers.judge_timeline import router as judge_timeline_router
+from app.routers.match_topic import router as match_topic_router
 from app.routers.profile_report import router as profile_report_router
 from app.routers.timeline import router as timeline_router
 
@@ -40,6 +43,9 @@ app.include_router(generate_router)
 app.include_router(evidence_router)
 app.include_router(extract_router)
 app.include_router(check_router)
+app.include_router(match_topic_router)
+app.include_router(judge_timeline_router)
+app.include_router(edit_suggestions_router)
 app.include_router(chat_router)
 app.include_router(comment_summary_router)
 app.include_router(profile_report_router)

@@ -29,6 +29,8 @@ from app.modules.news.router import router as news_router
 from app.modules.profile.router import router as profile_router
 from app.modules.timeline.router import router as timeline_router
 from app.modules.user.router import router as user_router
+from app.modules.news_editor_agent.router import router as news_editor_agent_router
+from app.modules.agent_analysis.router import router as agent_analysis_router
 
 app = FastAPI(
     title=f"{settings.project_name}后端服务",
@@ -111,3 +113,5 @@ app.include_router(timeline_router)
 app.include_router(community_router)
 app.include_router(profile_router)
 app.include_router(admin_router)
+app.include_router(news_editor_agent_router)
+app.include_router(agent_analysis_router)
