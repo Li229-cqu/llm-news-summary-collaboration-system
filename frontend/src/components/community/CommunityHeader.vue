@@ -95,6 +95,6 @@ function handleClear() {
 .search-input { flex: 1; }
 .search-input :deep(.el-input__wrapper) { height: 36px; border-radius: 8px; box-shadow: 0 4px 12px rgba(25, 64, 120, 0.06); }
 .tag-filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
-.filter-tag { min-width: 56px; height: 28px; justify-content: center; border-radius: 999px; background: #fff; box-shadow: 0 4px 10px rgba(31, 76, 130, 0.06); cursor: pointer; user-select: none; font-size: 12px; }
+.filter-tag { min-width: 56px; height: 28px; justify-content: center; border-radius: 999px; background: var(--color-bg-card); box-shadow: 0 4px 10px rgba(31, 76, 130, 0.06); cursor: pointer; user-select: none; font-size: 12px; }
 @media (max-width: 768px) { .header-top { flex-direction: column; } .header-search-bar { max-width: 100%; } }
 </style>

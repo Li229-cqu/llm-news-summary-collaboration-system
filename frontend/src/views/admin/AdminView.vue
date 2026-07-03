@@ -30,6 +30,14 @@ import { useUserStore } from '@/stores/user'
 type AdminSection = 'dashboard' | 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'hotTopics' | 'timelines' | 'users' | 'aiConfig' | 'config' | 'ops'
 
 const userStore = useUserStore()
+
+function normalizeAvatarUrl(url?: string | null): string {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  return base.replace(/\/+$/, '') + '/' + url.replace(/^\/+/, '')
+}
+
 const activeTab = ref<AdminSection>(userStore.isAdmin ? 'analytics' : 'pending')
 const pendingCenterKey = ref(0)
 const workbenchKey = ref(0)
@@ -87,7 +95,7 @@ async function handleTabChange(tabKey: string) {
         <aside class="admin-sidebar">
           <div class="sidebar-user-card">
             <div class="sidebar-avatar-col">
-              <el-avatar :size="72" :icon="User">
+              <el-avatar :size="72" :src="normalizeAvatarUrl(userStore.userInfo?.avatar)" :icon="User">
                 {{ userStore.userInfo?.nickname?.slice(0, 1) || 'A' }}
               </el-avatar>
             </div>
@@ -152,7 +160,7 @@ async function handleTabChange(tabKey: string) {
   display: flex;
   flex-direction: column;
   padding: 24px 18px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-right: 1px solid #f5dfdf;
   gap: 20px;
 }

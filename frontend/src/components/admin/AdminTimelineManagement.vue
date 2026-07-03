@@ -994,13 +994,13 @@ onMounted(async () => {
 .auto-cluster-summary { display:flex; flex-wrap:wrap; gap:12px 24px; font-size:13px; color:#64748b }
 .auto-cluster-summary span { white-space:nowrap }
 .auto-cluster-diagnosis-summary { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:12px 0 16px }
-.auto-cluster-diagnosis-summary article { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; background:#f8fafc; display:flex; flex-direction:column; gap:4px; min-width:0 }
+.auto-cluster-diagnosis-summary article { border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; background:var(--color-bg-hover); display:flex; flex-direction:column; gap:4px; min-width:0 }
 .auto-cluster-diagnosis-summary span { color:#64748b; font-size:12px }
 .auto-cluster-diagnosis-summary strong { font-size:18px; color:#111827 }
 .auto-cluster-section { margin-top:16px }
 .auto-cluster-section__title { display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:700; color:#111827 }
 .auto-topic-list { display:flex; flex-direction:column; gap:12px }
-.auto-topic-card { border:1px solid #e5e7eb; border-radius:8px; padding:14px; background:#fff }
+.auto-topic-card { border:1px solid var(--color-border); border-radius:8px; padding:14px; background:var(--color-bg-card) }
 .auto-topic-card--skipped { background:#fcfcfd }
 .auto-topic-card__header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px }
 .auto-topic-card__summary-line { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; margin-bottom:4px }
@@ -1021,7 +1021,7 @@ onMounted(async () => {
 .auto-topic-edit :deep(.el-form-item) { margin-bottom:10px }
 .auto-topic-edit :deep(.el-form-item:last-child) { margin-bottom:0 }
 .auto-topic-edit-alert { margin-bottom:10px }
-.auto-topic-metrics { margin-bottom:10px; padding:8px 10px; background:#f8fafc; border-radius:6px }
+.auto-topic-metrics { margin-bottom:10px; padding:8px 10px; background:var(--color-bg-hover); border-radius:6px }
 .auto-topic-entities,
 .auto-topic-flags,
 .auto-topic-reasons { margin-top:8px }
@@ -1032,7 +1032,7 @@ onMounted(async () => {
 .auto-topic-title-list li { word-break:break-word }
 .event-preview { margin-top:12px }
 .event-preview__list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px }
-.event-preview__item { border:1px solid #e5e7eb; border-radius:8px; padding:10px; background:#f8fafc; min-width:0 }
+.event-preview__item { border:1px solid var(--color-border); border-radius:8px; padding:10px; background:var(--color-bg-hover); min-width:0 }
 .event-preview__item { display:flex; flex-direction:column; gap:8px }
 .event-preview__item div { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
 .event-preview__item strong { font-size:13px; color:#111827; line-height:1.4; word-break:break-word }

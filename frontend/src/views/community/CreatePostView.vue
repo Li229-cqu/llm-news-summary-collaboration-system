@@ -294,7 +294,7 @@ onMounted(async () => {
 .input-title :deep(.el-input__wrapper) { height: 48px; border-radius: 8px; }
 .input-content :deep(.el-textarea__inner) { min-height: 200px; border-radius: 8px; }
 .tags-group { display: flex; flex-wrap: wrap; gap: 12px; }
-.form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+.form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
 .sidebar-card {
   border: 1px solid rgba(210, 222, 238, 0.86); border-radius: 12px;
   box-shadow: 0 8px 24px rgba(34, 78, 130, 0.08); background: rgba(255, 255, 255, 0.94);
@@ -309,7 +309,7 @@ onMounted(async () => {
 /* 图片上传 */
 .image-upload-area { width: 100%; }
 .image-preview-list { display: flex; flex-wrap: wrap; gap: 12px; }
-.image-preview-item { position: relative; width: 100px; height: 100px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; flex-shrink: 0; }
+.image-preview-item { position: relative; width: 100px; height: 100px; border-radius: 8px; overflow: hidden; border: 1px solid var(--color-border); flex-shrink: 0; }
 .preview-img { width: 100%; height: 100%; }
 .preview-remove { position: absolute; top: -6px; right: -6px; }
 .image-upload-trigger { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100px; height: 100px; border: 1px dashed #c0d4e8; border-radius: 8px; cursor: pointer; color: #9ca3af; font-size: 12px; gap: 4px; transition: all 0.2s; background: #fafcff; flex-shrink: 0; }

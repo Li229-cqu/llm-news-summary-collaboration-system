@@ -1734,7 +1734,7 @@ def _db_recommendations(user_id: int, limit: int = 10) -> Dict[str, Any] | None:
             LEFT JOIN news_topic nt ON nt.id = n.topic_id
             WHERE n.status = 1
                 AND n.id NOT IN (SELECT news_id FROM browse_history WHERE user_id = %s)
-            ORDER BY match_type, n.publish_time DESC
+            ORDER BY n.publish_time DESC, match_type, n.id DESC
             LIMIT %s
         """
 

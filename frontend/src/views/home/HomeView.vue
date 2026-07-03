@@ -20,15 +20,6 @@
               <h2 class="section-header__title">{{ sectionTitle }}</h2>
               <p class="section-header__desc">{{ sectionDescription }}</p>
             </div>
-            <button
-              class="refresh-btn"
-              :class="{ 'refresh-btn--spin': loadingNews }"
-              :disabled="loadingNews"
-              @click="handleRefresh"
-            >
-              <span class="refresh-btn__icon">↻</span>
-              <span>{{ isRecommendationFeed && !activeCategoryId && !searchKeyword && !isSubscriptionTab ? '刷新推荐' : '刷新内容' }}</span>
-            </button>
           </div>
 
           <!-- 骨架屏（首次加载中） -->
@@ -178,7 +169,8 @@ const loadingHot = ref(false)
 const isRecommendationFeed = ref(false)
 const recommendationHasMore = ref(false)
 const page = ref(1)
-const pageSize = ref(25)
+const pageSize = ref(35)
+const loadMoreSize = 34
 const total = ref(0)
 
 /** 分类列表缓存，用于热搜榜标题计算 */
@@ -338,28 +330,13 @@ function restoreFeedState(): boolean {
   return true
 }
 
-/** 刷新页号：每次手动刷新 +1，用于请求不同页的内容实现换一批效果 */
-const refreshOffset = ref(0)
-
 /** 手动刷新：清除缓存 + 换一批内容 */
-async function handleRefresh(): Promise<void> {
-  refreshOffset.value += 1
-  await loadNews({ force: true, reset: true })
-}
-
 async function loadNews(
   { force = false, reset = false }: { force?: boolean; reset?: boolean } = {},
 ) {
-  // 分类/搜索/tab 切换时重置页号（不是手动刷新，清零 refreshOffset）
-  if (reset && !force) {
-    refreshOffset.value = 0
+  // 分类/搜索/tab 切换时重置到第一页
+  if (reset) {
     page.value = 1
-  }
-
-  // 手动刷新时重置到第一页并清缓存
-  if (force) {
-    page.value = 1
-    feedStore.removeCache(feedCacheKey.value)
   }
 
   // 非强制且非重置时，优先从缓存恢复（从详情页返回首页的场景）
@@ -373,7 +350,7 @@ async function loadNews(
   recommendationHasMore.value = false
 
   // 计算有效页码：手动刷新时翻页获取不同内容
-  const effectivePage = page.value + (force ? refreshOffset.value : 0)
+  const effectivePage = page.value
 
   try {
     const keyword = searchKeyword.value || undefined
@@ -386,8 +363,7 @@ async function loadNews(
       })
       // 如果翻页无数据则回退到第 1 页
       if (force && !result.list.length && effectivePage > 1) {
-        refreshOffset.value = 0
-        const fallback = await searchNews({ keyword, page: 1, page_size: pageSize.value })
+        const fallback =await searchNews({ keyword, page: 1, page_size: pageSize.value })
         newsList.value = fallback.list
         total.value = fallback.total
         page.value = fallback.page
@@ -413,8 +389,7 @@ async function loadNews(
       })
       // 翻页无数据回退
       if (force && !result.list.length && effectivePage > 1) {
-        refreshOffset.value = 0
-        const fallback = await getSubscribedNews({ page: 1, page_size: pageSize.value })
+        const fallback =await getSubscribedNews({ page: 1, page_size: pageSize.value })
         newsList.value = fallback.list
         total.value = fallback.total
         page.value = fallback.page
@@ -432,7 +407,6 @@ async function loadNews(
           page_size: pageSize.value,
         })
         if (force && !result.list.length && effectivePage > 1) {
-          refreshOffset.value = 0
           const fallback = await getNewsList({ page: 1, page_size: pageSize.value })
           newsList.value = fallback.list
           total.value = fallback.total
@@ -446,32 +420,15 @@ async function loadNews(
         }
       } else {
         try {
-          // 推荐模式刷新：请求更多数据再取不同切片实现换一批
-          const maxLimit = 100
-          const offset = force ? refreshOffset.value : 0
-          const startIdx = offset * pageSize.value
-          const endIdx = startIdx + pageSize.value
-          const requestLimit = Math.min(endIdx, maxLimit)
-
-          const result = await getRecommendations(requestLimit)
+          // 推荐模式：请求 pageSize 条推荐新闻
+          const result = await getRecommendations(pageSize.value)
           if (result.list.length) {
-            let sliced = result.list.slice(startIdx, endIdx)
-
-            // 仅在目标切片确实为空时才重置（不再基于 total 提前重置）
-            if (force && sliced.length === 0 && offset > 0) {
-              refreshOffset.value = 0
-              const fallback = await getRecommendations(pageSize.value)
-              sliced = fallback.list.slice(0, pageSize.value)
-            }
-
-            newsList.value = sliced
+            newsList.value = result.list
             total.value = Math.max(result.total, result.list.length)
             page.value = 1
             isRecommendationFeed.value = true
-            // 刷新后也保持 hasMore：只要当前切片满一页且未达上限，就还有更多
-            recommendationHasMore.value = sliced.length >= pageSize.value && endIdx < maxLimit
+            recommendationHasMore.value = result.list.length >= pageSize.value
           } else {
-            refreshOffset.value = 0
             const fallback = await getNewsList({
               page: effectivePage,
               page_size: pageSize.value,
@@ -502,8 +459,7 @@ async function loadNews(
       })
 
       if (force && !result.list.length && effectivePage > 1) {
-        refreshOffset.value = 0
-        const fallback = await getNewsList({ category_id: activeCategoryId.value || undefined, page: 1, page_size: pageSize.value })
+        const fallback =await getNewsList({ category_id: activeCategoryId.value || undefined, page: 1, page_size: pageSize.value })
         newsList.value = fallback.list
         total.value = fallback.total
         page.value = fallback.page
@@ -564,7 +520,7 @@ async function handleLoadMore() {
   try {
     if (isRecommendationFeed.value && !activeCategoryId.value && !searchKeyword.value && !isSubscriptionTab.value) {
       const currentCount = newsList.value.length
-      const nextLimit = Math.min(currentCount + pageSize.value, 100)
+      const nextLimit = Math.min(currentCount + loadMoreSize, 200)
 
       if (nextLimit <= currentCount) {
         recommendationHasMore.value = false
@@ -884,18 +840,20 @@ onBeforeUnmount(() => {
 }
 
 .featured-news__reason {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
-  color: var(--color-primary);
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid rgba(185, 28, 28, 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: #b91c1c;
   font-size: 12px;
   line-height: 1.4;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .featured-news__meta {
@@ -1088,7 +1046,7 @@ onBeforeUnmount(() => {
   padding: 10px 28px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-bg-card);
   color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
@@ -1149,6 +1107,11 @@ onBeforeUnmount(() => {
    ======================================== */
 :root.dark .featured-news:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, .35);
+}
+
+:root.dark .featured-news__reason {
+  border-color: rgba(252, 165, 165, 0.55);
+  color: #fca5a5;
 }
 
 :root.dark .secondary-news__card:hover {

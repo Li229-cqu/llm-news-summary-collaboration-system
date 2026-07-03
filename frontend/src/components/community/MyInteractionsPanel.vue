@@ -252,7 +252,7 @@ onMounted(() => {
   gap: 32px;
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sub-tab {
@@ -305,7 +305,7 @@ onMounted(() => {
   padding: 14px 16px;
   border: 1px solid #e3edf9;
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-bg-card);
   transition: box-shadow 0.2s;
 }
 .interaction-card:hover {

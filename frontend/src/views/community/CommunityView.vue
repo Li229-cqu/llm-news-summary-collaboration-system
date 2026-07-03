@@ -321,7 +321,7 @@ async function pinNewPostToTop(postId: string | number) {
 .top-bar-search .search-input { flex: 1; }
 .top-bar-search :deep(.el-input__wrapper) { height: 34px; border-radius: 8px; }
 .top-bar-tags { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 300px; flex-wrap: wrap; }
-.filter-tag { height: 26px; min-width: 44px; justify-content: center; border-radius: 999px; background: #fff; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(31, 76, 130, 0.06); }
+.filter-tag { height: 26px; min-width: 44px; justify-content: center; border-radius: 999px; background: var(--color-bg-card); cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(31, 76, 130, 0.06); }
 .top-bar-btn { height: 36px; border-radius: 6px; font-size: 14px; font-weight: 600; flex-shrink: 0; }
 
 /* ── 主体 ── */

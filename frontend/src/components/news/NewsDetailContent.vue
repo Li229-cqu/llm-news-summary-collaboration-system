@@ -120,9 +120,11 @@ const hasMeta = computed(() =>
 
 .news-detail-content__cover {
   width: 100%;
-  max-height: 420px;
+  max-width: 100%;
+  height: auto;
+  max-height: 600px;
   border-radius: 16px;
-  object-fit: cover;
+  object-fit: contain;
   background: var(--color-bg);
 }
 
@@ -131,9 +133,17 @@ const hasMeta = computed(() =>
   gap: 20px;
 }
 
+.news-detail-content__body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+
 .news-detail-content__body p {
   margin: 0;
-  color: #374151;
+  color: var(--color-text-primary);
   font-size: 17px;
   line-height: 2;
   text-align: justify;

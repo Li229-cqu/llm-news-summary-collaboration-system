@@ -205,7 +205,7 @@ onMounted(() => {
   margin-bottom: 4px;
   border-radius: 22px;
   overflow: hidden;
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f1d4d4;
   box-shadow: 0 4px 24px rgba(217, 45, 32, 0.06);
 }
@@ -264,7 +264,7 @@ onMounted(() => {
   position: absolute;
   border-radius: 10px;
   border: 1px solid rgba(217, 45, 32, 0.12);
-  background: #fff;
+  background: var(--color-bg-card);
 }
 
 .timeline-hero__deco-card--1 {

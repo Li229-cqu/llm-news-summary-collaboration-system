@@ -166,7 +166,7 @@ function handleClick() {
 
 .news-card__cover {
   overflow: hidden;
-  min-height: 150px;
+  aspect-ratio: 16 / 10;
   border-radius: calc(var(--border-radius-card) - 4px);
   background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 16%, var(--color-bg-card)), var(--color-bg));
 }
@@ -175,6 +175,7 @@ function handleClick() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .news-card__content {
@@ -218,14 +219,16 @@ function handleClick() {
 }
 
 .news-card__reason {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 4px 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
   margin-top: 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
-  color: var(--color-primary);
+  border: 1px solid rgba(185, 28, 28, 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: #b91c1c;
   font-size: 12px;
   line-height: 1.4;
   overflow: hidden;
@@ -265,5 +268,10 @@ function handleClick() {
   .news-card {
     grid-template-columns: 1fr;
   }
+}
+
+:root.dark .news-card__reason {
+  border-color: rgba(252, 165, 165, 0.55);
+  color: #fca5a5;
 }
 </style>

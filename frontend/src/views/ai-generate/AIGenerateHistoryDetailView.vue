@@ -239,7 +239,7 @@ function handleExport() {
 }
 
 .page-header {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f1d4d4;
   border-radius: 22px;
   padding: 32px 40px;
@@ -295,7 +295,7 @@ function handleExport() {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -318,7 +318,7 @@ function handleExport() {
 /* 基本信息 */
 .info-section {
   padding: 20px 24px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -356,7 +356,7 @@ function handleExport() {
 /* 内容区 */
 .content-section {
   padding: 20px 24px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -432,7 +432,7 @@ function handleExport() {
   gap: 8px;
   padding: 60px 20px;
   text-align: center;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   color: #6b7280;

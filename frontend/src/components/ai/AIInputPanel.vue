@@ -151,7 +151,7 @@ const handleFileChange = async (event: Event) => {
   font-size: 14px;
   line-height: 1.6;
   color: #374151;
-  background-color: #ffffff;
+  background: var(--color-bg-card);
   resize: vertical;
   transition: border-color 0.2s ease;
   box-sizing: border-box;

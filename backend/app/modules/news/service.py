@@ -333,53 +333,44 @@ def _db_hot_news(limit: int = 10, category_id: Optional[int] = None) -> list[dic
     if normalized_limit == 0:
         return []
 
-    where_clauses = ["n.status = 1"]
-    params: list[Any] = []
+    base_where = "n.status = 1"
+    cat_where = "AND n.category_id = %s" if category_id is not None else ""
+    base_params = [category_id] if category_id is not None else []
 
-    if category_id is not None:
-        where_clauses.append("n.category_id = %s")
-        params.append(category_id)
+    def _query(time_condition: str, extra_params: list[Any]) -> list[dict[str, Any]]:
+        params = base_params + extra_params + [normalized_limit]
+        return execute_query(
+            f"""
+            SELECT n.id, n.title, n.cover_image, COALESCE(nc.name, '未分类') AS category_name,
+                   n.source, n.view_count, n.comment_count, n.like_count, n.favorite_count, n.publish_time,
+                   (COALESCE(n.view_count,0) + COALESCE(n.like_count,0)*5 + COALESCE(n.favorite_count,0)*4 + COALESCE(n.comment_count,0)*6) AS heat_score
+            FROM news n LEFT JOIN news_category nc ON nc.id = n.category_id
+            WHERE {base_where} {cat_where} {time_condition}
+            ORDER BY heat_score DESC, n.view_count DESC, n.like_count DESC, n.favorite_count DESC, n.comment_count DESC, n.publish_time DESC, n.id DESC
+            LIMIT %s
+            """, params) or []
 
-    where_sql = " AND ".join(where_clauses)
-    params.append(normalized_limit)
+    # 第一层：48小时
+    rows = _query("AND n.publish_time >= NOW() - INTERVAL 2 DAY", [])
+    # 第二层：7天 fallback
+    if len(rows) < normalized_limit:
+        seen_ids = {r["id"] for r in rows}
+        remaining = normalized_limit - len(rows)
+        more = _query("AND n.publish_time >= NOW() - INTERVAL 7 DAY", [])
+        for r in more:
+            if len(rows) >= normalized_limit: break
+            if r["id"] not in seen_ids:
+                rows.append(r)
+    # 第三层：全站补齐
+    if len(rows) < normalized_limit:
+        seen_ids = {r["id"] for r in rows}
+        more = _query("", [])
+        for r in more:
+            if len(rows) >= normalized_limit: break
+            if r["id"] not in seen_ids:
+                rows.append(r)
 
-    rows = execute_query(
-        f"""
-        SELECT
-            n.id,
-            n.title,
-            n.cover_image,
-            COALESCE(nc.name, '未分类') AS category_name,
-            n.source,
-            n.view_count,
-            n.comment_count,
-            n.like_count,
-            n.favorite_count,
-            n.publish_time,
-            (
-                COALESCE(n.view_count, 0)
-                + COALESCE(n.like_count, 0) * 5
-                + COALESCE(n.favorite_count, 0) * 4
-                + COALESCE(n.comment_count, 0) * 6
-            ) AS heat_score
-        FROM news n
-        LEFT JOIN news_category nc ON nc.id = n.category_id
-        WHERE {where_sql}
-        ORDER BY heat_score DESC,
-                 n.view_count DESC,
-                 n.like_count DESC,
-                 n.favorite_count DESC,
-                 n.comment_count DESC,
-                 n.publish_time DESC,
-                 n.id DESC
-        LIMIT %s
-        """,
-        params,
-    )
-    return [
-        _format_hot_row(row, rank=index)
-        for index, row in enumerate(rows, start=1)
-    ]
+    return [_format_hot_row(row, rank=i) for i, row in enumerate(rows[:normalized_limit], start=1)]
 
 def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[str, Any] | None:
     news = execute_one(

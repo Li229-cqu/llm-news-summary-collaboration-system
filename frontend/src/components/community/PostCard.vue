@@ -242,7 +242,7 @@ function truncateContent(content: string, maxLength: number) {
   height: 80px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 .post-image-item--single {
