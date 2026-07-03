@@ -135,7 +135,7 @@ async function refreshWorkbench() {
     }
     lastRefreshTime.value = new Date().toLocaleString()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '后台首页数据加载失败'
+    error.value = err instanceof Error ? err.message : '工作台数据加载失败'
     ElMessage.error(error.value)
   } finally {
     loading.value = false
@@ -152,16 +152,16 @@ onMounted(() => {
     <el-result
       v-if="!userStore.isAdmin"
       icon="warning"
-      title="当前账号无权访问后台首页"
-      sub-title="请使用管理员账号查看后台首页。"
+      title="当前账号无权访问工作台"
+      sub-title="请使用管理员账号查看工作台。"
     />
 
     <template v-else>
       <el-card class="hero-card" shadow="never">
         <div class="hero-main">
           <div>
-            <div class="hero-badge">管理后台 · 首页</div>
-            <h1>后台首页</h1>
+            <div class="hero-badge">管理后台 · 工作台</div>
+            <h1>工作台</h1>
             <p>这里仅保留关键指标、待办事项、服务状态和常用入口。详细趋势、排行和风险图表请进入“数据看板”。</p>
           </div>
           <div class="hero-actions">

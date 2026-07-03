@@ -181,16 +181,27 @@ def _deduplicate_titles(news_list: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _choose_topic_count(n_news: int, max_topics: int = 8) -> int:
-    """根据新闻数量自适应选择聚类数 k。"""
-    if n_news < 30:
-        return max(2, min(max_topics, n_news // 8))
-    if n_news < 100:
-        return max(3, min(max_topics, n_news // 20))
-    if n_news < 300:
-        return max(4, min(max_topics, n_news // 35))
-    if n_news < 600:
-        return max(6, min(max_topics, 8))
-    return max(7, min(max_topics, n_news // 70))
+    """Choose KMeans k with a wider candidate pool for timeline topic discovery."""
+    if n_news <= 0:
+        return 0
+
+    max_allowed = max(2, min(max_topics, 30, n_news))
+    sqrt_guess = max(2, int(math.sqrt(max(n_news, 1) / 2) * 1.8))
+
+    if n_news < 20:
+        base = min(3, max(2, n_news // 6 or 2))
+    elif n_news < 50:
+        base = max(3, min(6, sqrt_guess))
+    elif n_news < 100:
+        base = max(5, min(9, sqrt_guess))
+    elif n_news < 300:
+        base = max(8, min(15, sqrt_guess))
+    elif n_news < 600:
+        base = max(12, min(22, sqrt_guess))
+    else:
+        base = max(18, min(30, sqrt_guess))
+
+    return max(2, min(base, max_allowed))
 
 
 def _compute_news_heat(news: dict[str, Any]) -> float:
@@ -294,6 +305,25 @@ def _build_cluster_result(
 
     topic_name = _extract_topic_phrase(top_reps_for_name, keywords, cat_name)
 
+    original_n = n
+    core_entities = _extract_core_entities_from_news(cluster_news)
+    original_entity_purity, original_entity_hits = _compute_entity_purity(cluster_news, core_entities)
+    outlier_result = _filter_outlier_news(cluster_news, core_entities, topic_name)
+    kept_news = outlier_result["kept_news_items"]
+    removed_news_ids = outlier_result["removed_news_ids"]
+    removed_news_titles = outlier_result["removed_news_titles"]
+    kept_ids = {int(nw["id"]) for nw in kept_news if nw.get("id") is not None}
+    kept_indices = [i for i in indices if int(news_list[i]["id"]) in kept_ids]
+    if removed_news_ids:
+        cluster_news = kept_news
+        indices = kept_indices
+        n = len(cluster_news)
+        if indices:
+            cat_name, cat_purity, _ = _compute_category_purity(indices, news_list)
+        else:
+            cat_purity = 0.0
+    entity_purity, entity_hits = _compute_entity_purity(cluster_news, core_entities)
+
     # ── 摘要 ──
     if len(meaningful) >= 2:
         summary = f"围绕{meaningful[0]}、{meaningful[1]}等主题形成的热点话题，共 {n} 篇相关报道。"
@@ -331,11 +361,15 @@ def _build_cluster_result(
         })
 
     # ── 质量评分 ──
-    quality_score, quality_status = _compute_cluster_quality(
+    quality_score, quality_status, quality_flags, quality_reasons = _compute_cluster_quality(
         topic_name=topic_name,
         keywords=keywords,
         cat_purity=cat_purity,
         news_count=n,
+        core_entities=core_entities,
+        entity_purity=entity_purity,
+        removed_count=len(removed_news_ids),
+        original_news_count=original_n,
     )
 
     return {
@@ -346,11 +380,23 @@ def _build_cluster_result(
         "heat_score": topic_heat,
         "news_count": n,
         "news_ids": [int(news_list[i]["id"]) for i in indices],
+        "kept_indices": list(indices),
+        "original_news_count": original_n,
         "representative_news": representative_news,
         "category_name": cat_name,
         "category_purity": cat_purity,
+        "core_entities": core_entities,
+        "entity_purity": entity_purity,
+        "entity_hits": entity_hits,
+        "original_entity_purity": original_entity_purity,
+        "original_entity_hits": original_entity_hits,
+        "removed_news_ids": removed_news_ids,
+        "removed_news_titles": removed_news_titles,
+        "removed_count": len(removed_news_ids),
         "quality_score": quality_score,
         "quality_status": quality_status,
+        "quality_flags": quality_flags,
+        "quality_reasons": quality_reasons,
     }
 
 
@@ -394,6 +440,168 @@ _WEAK_TOPIC_WORDS = {
     "运动", "新华社", "开放", "展示",
     "中新社", "显示", "举办", "青年",
 }
+
+_BROAD_TOPIC_CLASS_WORDS = {
+    "国际", "国内", "社会", "财经", "体育", "科技", "娱乐", "军事", "教育", "健康",
+    "汽车", "房产", "时政", "民生", "全球", "多国", "多地",
+}
+
+_BROAD_TOPIC_WEAK_WORDS = {
+    "热点", "动态", "进展", "聚焦", "观察", "关注", "最新", "消息", "新闻", "局势",
+    "发展", "趋势", "综合", "速览", "事件", "相关", "持续", "更新", "报道", "市场",
+}
+
+_ENTITY_BOOST_WORDS = {
+    "伊朗", "以色列", "墨西哥", "美国", "中国", "俄罗斯", "乌克兰", "韩国", "日本",
+    "法国", "英国", "德国", "印度", "联合国", "北约", "欧盟", "世界杯", "国际足联",
+    "欧冠", "奥运会", "英伟达", "苹果", "微软", "特斯拉", "OpenAI", "谷歌",
+}
+
+
+def _json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            import json
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def _news_quality_text(news: dict[str, Any], content_limit: int = 200) -> str:
+    tags = _json_list(news.get("tags"))
+    tag_text = " ".join(str(t) for t in tags)
+    return " ".join([
+        _clean_text(news.get("title")),
+        _clean_text(news.get("summary")),
+        _clean_text(news.get("content"))[:content_limit],
+        tag_text,
+        _clean_text(news.get("category_name")),
+    ])
+
+
+def _strong_tokens(text: str) -> set[str]:
+    tokens = set(_tokenize(_clean_text(text)))
+    return {
+        t for t in tokens
+        if 2 <= len(t) <= 10
+        and t not in _STOP_WORDS
+        and t not in _GENERIC_WORDS_FOR_NAMING
+        and t not in _WEAK_TOPIC_WORDS
+        and t not in _BROAD_TOPIC_CLASS_WORDS
+        and t not in _BROAD_TOPIC_WEAK_WORDS
+    }
+
+
+def _extract_core_entities_from_news(news_items: list[dict[str, Any]], top_n: int = 6) -> list[str]:
+    """Extract local high-signal entities without external NER models."""
+    counter: Counter[str] = Counter()
+    for news in news_items:
+        text = _news_quality_text(news)
+        title = _clean_text(news.get("title"))
+        for token in _strong_tokens(text):
+            counter[token] += 2 if token in title else 1
+        for entity in _ENTITY_BOOST_WORDS:
+            if entity in text:
+                counter[entity] += 5
+
+    entities: list[str] = []
+    for word, _ in counter.most_common(top_n * 2):
+        if not (2 <= len(word) <= 10):
+            continue
+        if any(word != kept and word in kept for kept in entities):
+            continue
+        entities.append(word)
+        if len(entities) >= top_n:
+            break
+    return entities
+
+
+def _is_broad_topic_name(topic_name: str, core_entities: list[str] | None = None) -> tuple[bool, list[str]]:
+    """Return whether a topic name is too generic to represent one event thread."""
+    name = _clean_text(topic_name)
+    entities = [e for e in (core_entities or []) if e and e in name]
+    reasons: list[str] = []
+    if not name:
+        return True, ["empty_topic_name"]
+
+    class_hits = [w for w in _BROAD_TOPIC_CLASS_WORDS if w in name]
+    weak_hits = [w for w in _BROAD_TOPIC_WEAK_WORDS if w in name]
+    strong_tokens = _strong_tokens(name)
+    strong_non_entity = [t for t in strong_tokens if t not in _BROAD_TOPIC_CLASS_WORDS and t not in _BROAD_TOPIC_WEAK_WORDS]
+
+    if class_hits and weak_hits and not entities and len(strong_non_entity) <= 1:
+        reasons.append("class_word_plus_weak_word")
+    if len(weak_hits) >= 2 and not entities and len(strong_non_entity) <= 1:
+        reasons.append("weak_words_dominate")
+    if not entities and len(strong_non_entity) == 0:
+        reasons.append("missing_core_entity")
+
+    return bool(reasons), reasons
+
+
+def _compute_entity_purity(news_items: list[dict[str, Any]], core_entities: list[str]) -> tuple[float, dict[int, list[str]]]:
+    if not news_items or not core_entities:
+        return 0.0, {}
+
+    hits_by_news: dict[int, list[str]] = {}
+    matched = 0
+    for news in news_items:
+        text = _news_quality_text(news)
+        hits = [entity for entity in core_entities if entity and entity in text]
+        if hits:
+            matched += 1
+        try:
+            news_id = int(news["id"])
+        except Exception:
+            news_id = 0
+        hits_by_news[news_id] = hits
+
+    return round(matched / max(len(news_items), 1), 3), hits_by_news
+
+
+def _filter_outlier_news(
+    news_items: list[dict[str, Any]],
+    core_entities: list[str],
+    topic_name: str,
+    min_entity_overlap: int = 1,
+) -> dict[str, Any]:
+    if not news_items:
+        return {"kept_news_items": [], "removed_news_items": [], "removed_news_ids": [], "removed_news_titles": []}
+    if not core_entities:
+        return {
+            "kept_news_items": list(news_items),
+            "removed_news_items": [],
+            "removed_news_ids": [],
+            "removed_news_titles": [],
+        }
+
+    topic_tokens = _strong_tokens(topic_name)
+    strict_topic = any(w in topic_name for w in {"国际", "体育", "财经", "军事", "全球", "世界杯"})
+    kept: list[dict[str, Any]] = []
+    removed: list[dict[str, Any]] = []
+
+    for news in news_items:
+        text = _news_quality_text(news)
+        entity_hits = [e for e in core_entities if e in text]
+        token_hits = topic_tokens & _strong_tokens(text)
+        keep = len(entity_hits) >= min_entity_overlap or len(token_hits) >= 1
+        if strict_topic:
+            keep = len(entity_hits) >= min_entity_overlap or len(token_hits) >= 2
+        if keep:
+            kept.append(news)
+        else:
+            removed.append(news)
+
+    return {
+        "kept_news_items": kept,
+        "removed_news_items": removed,
+        "removed_news_ids": [int(n["id"]) for n in removed if n.get("id") is not None],
+        "removed_news_titles": [_clean_text(n.get("title")) for n in removed],
+    }
 
 
 def _extract_topic_phrase(rep_news: list[dict[str, Any]], keywords: list[str], cat_name: str) -> str:
@@ -515,11 +723,92 @@ def _compute_cluster_quality(
     return (score, "ok")
 
 
+def _compute_cluster_quality(
+    topic_name: str,
+    keywords: list[str],
+    cat_purity: float,
+    news_count: int,
+    core_entities: list[str] | None = None,
+    entity_purity: float = 0.0,
+    removed_count: int = 0,
+    original_news_count: int | None = None,
+) -> tuple[float, str, list[str], list[str]]:
+    """Score topic coherence and return (score, status, flags, reasons)."""
+    quality_flags: list[str] = []
+    quality_reasons: list[str] = []
+
+    broad, broad_reasons = _is_broad_topic_name(topic_name, core_entities)
+    if broad:
+        quality_flags.append("broad_topic")
+        quality_reasons.extend(broad_reasons)
+
+    weak_in_name = [w for w in _WEAK_TOPIC_WORDS if w in topic_name]
+    name_ok = len(weak_in_name) == 0
+
+    strong_kw = [
+        kw for kw in keywords
+        if kw not in _GENERIC_WORDS_FOR_NAMING
+        and kw not in _WEAK_TOPIC_WORDS
+        and kw not in _BROAD_TOPIC_CLASS_WORDS
+        and kw not in _BROAD_TOPIC_WEAK_WORDS
+    ]
+    kw_quality = min(1.0, len(strong_kw) / 4.0)
+    purity_score = min(1.0, cat_purity / 70.0)
+    entity_score = min(1.0, entity_purity / 0.7) if entity_purity else 0.0
+    score = round(
+        purity_score * 0.25
+        + kw_quality * 0.25
+        + entity_score * 0.3
+        + (0.2 if name_ok and not broad else 0.0),
+        2,
+    )
+
+    original_count = original_news_count or news_count
+    removed_ratio = removed_count / max(original_count, 1)
+    if removed_count > 0:
+        quality_flags.append("outlier_removed")
+        quality_reasons.append(f"removed_outliers:{removed_count}")
+    if removed_ratio > 0.4:
+        quality_flags.append("high_outlier_ratio")
+        quality_reasons.append(f"removed_ratio:{removed_ratio:.2f}")
+
+    category_threshold = 50.0 if news_count <= 5 else 55.0
+    strict_entity_threshold = 0.55 if any(
+        w in topic_name for w in {"国际", "体育", "财经", "军事", "全球", "世界杯"}
+    ) else 0.45
+
+    if news_count < 3:
+        status = "too_small_after_filter" if removed_count else "too_small"
+        quality_reasons.append(status)
+        return (score, status, quality_flags, quality_reasons)
+    if broad:
+        return (score, "broad_topic", quality_flags, quality_reasons)
+    if not name_ok:
+        quality_flags.append("weak_name")
+        quality_reasons.append("weak_topic_name")
+        return (score, "weak_name", quality_flags, quality_reasons)
+    if cat_purity < category_threshold:
+        quality_flags.append("mixed_category")
+        quality_reasons.append(f"category_purity:{cat_purity}")
+        return (score, "mixed_category", quality_flags, quality_reasons)
+    if entity_purity < strict_entity_threshold:
+        quality_flags.append("low_entity_purity")
+        quality_reasons.append(f"entity_purity:{entity_purity}")
+        return (score, "entity_mixed", quality_flags, quality_reasons)
+    if removed_ratio > 0.4:
+        return (score, "low_coherence", quality_flags, quality_reasons)
+    if score < 0.5:
+        quality_reasons.append(f"score:{score}")
+        return (score, "low_quality", quality_flags, quality_reasons)
+
+    return (score, "ok", quality_flags, quality_reasons)
+
+
 def _split_large_cluster(
     indices: list[int],
     news_list: list[dict[str, Any]],
     corpus: list[str],
-    max_size: int = 50,
+    max_size: int = 30,
 ) -> list[list[int]]:
     """对过大簇进行二次 KMeans 拆分。返回子簇列表。"""
     from sklearn.cluster import KMeans
@@ -530,7 +819,7 @@ def _split_large_cluster(
         return [indices]
 
     # 子簇数
-    n_sub = min(3, max(2, n // 30))
+    n_sub = min(6, max(2, math.ceil(n / 25)))
     sub_corpus = [corpus[i] for i in indices]
     tokenized = [" ".join(_tokenize(doc)) for doc in sub_corpus]
 
@@ -548,6 +837,99 @@ def _split_large_cluster(
     result = [s for s in sub_clusters.values() if len(s) >= 3]
     logger.info("大簇拆分：%d → %d 个子簇", n, len(result))
     return result if result else [indices]
+
+
+def _cluster_average_similarity(indices: list[int], tfidf_matrix: Any, sample_size: int = 40) -> float:
+    """Approximate intra-cluster cosine similarity."""
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    if len(indices) <= 1:
+        return 1.0
+    sample = indices[:sample_size]
+    matrix = tfidf_matrix[sample]
+    sim = cosine_similarity(matrix)
+    n = sim.shape[0]
+    if n <= 1:
+        return 1.0
+    upper_sum = float(np.triu(sim, k=1).sum())
+    pair_count = n * (n - 1) / 2
+    return round(upper_sum / max(pair_count, 1), 3)
+
+
+def _should_split_large_cluster(
+    indices: list[int],
+    news_list: list[dict[str, Any]],
+    tfidf_matrix: Any,
+    size_threshold: int = 30,
+) -> tuple[bool, dict[str, Any]]:
+    if len(indices) <= size_threshold:
+        return False, {
+            "cluster_avg_similarity": 1.0,
+            "cluster_entity_purity": 1.0,
+            "split_reason": "below_size_threshold",
+        }
+
+    cluster_news = [news_list[i] for i in indices]
+    core_entities = _extract_core_entities_from_news(cluster_news)
+    entity_purity, _ = _compute_entity_purity(cluster_news, core_entities)
+    avg_similarity = _cluster_average_similarity(indices, tfidf_matrix)
+    should_split = len(indices) > size_threshold and (
+        avg_similarity < 0.55 or entity_purity < 0.60 or len(indices) > size_threshold * 2
+    )
+    reason = "cohesive_large_cluster"
+    if should_split:
+        reasons = []
+        if avg_similarity < 0.55:
+            reasons.append("low_avg_similarity")
+        if entity_purity < 0.60:
+            reasons.append("low_entity_purity")
+        if len(indices) > size_threshold * 2:
+            reasons.append("oversized_cluster")
+        reason = ",".join(reasons)
+
+    return should_split, {
+        "cluster_avg_similarity": avg_similarity,
+        "cluster_entity_purity": entity_purity,
+        "split_reason": reason,
+        "split_core_entities": core_entities,
+    }
+
+
+def _is_strict_entity_topic(topic: dict[str, Any]) -> bool:
+    text = " ".join([
+        _clean_text(topic.get("topic_name")),
+        _clean_text(topic.get("category_name")),
+        " ".join(topic.get("keywords", []) or []),
+        " ".join(topic.get("core_entities", []) or []),
+    ])
+    strict_words = {
+        "国际", "体育", "财经", "军事", "世界杯", "战争", "冲突", "袭击",
+        "股市", "公司", "以色列", "伊朗", "墨西哥", "乌克兰", "俄罗斯",
+        "美国", "北约", "欧盟",
+    }
+    return any(word in text for word in strict_words)
+
+
+def _is_recommended_topic(topic: dict[str, Any]) -> bool:
+    if topic.get("quality_status") != "ok":
+        return False
+
+    flags = set(topic.get("quality_flags") or [])
+    if "high_outlier_ratio" in flags:
+        return False
+    if flags - {"outlier_removed"}:
+        return False
+
+    news_count = int(topic.get("news_count") or 0)
+    entity_threshold = 0.50 if news_count <= 5 else 0.55
+    if float(topic.get("entity_purity") or 0) < entity_threshold:
+        return False
+
+    category_threshold = 50.0 if news_count <= 5 else 55.0
+    if float(topic.get("category_purity") or 0) < category_threshold:
+        return False
+
+    return True
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -612,7 +994,9 @@ def _aggregate_event_points(
     tfidf_matrix: Any,
     max_event_points: int = 6,
     max_news_per_event: int = 5,
-    similarity_threshold: float = 0.45,
+    similarity_threshold: float = 0.56,
+    news_entity_map: dict[int, set[str]] | None = None,
+    strict_entity_match: bool = False,
 ) -> list[dict[str, Any]]:
     """话题内新闻合并为事件点。
 
@@ -665,7 +1049,14 @@ def _aggregate_event_points(
             # 关键词重合检查
             other_tokens = set(_tokenize(_clean_text(news_list[selected_indices[other_pos]].get("title", ""))))
             token_overlap = len(seed_tokens & other_tokens)
-            if token_overlap >= 2 or sim >= 0.65:
+            seed_news_id = int(news_list[selected_indices[seed_pos]].get("id") or 0)
+            other_news_id = int(news_list[selected_indices[other_pos]].get("id") or 0)
+            seed_entities = (news_entity_map or {}).get(seed_news_id, set())
+            other_entities = (news_entity_map or {}).get(other_news_id, set())
+            entity_overlap = bool(seed_entities and other_entities and (seed_entities & other_entities))
+            if seed_entities and other_entities and strict_entity_match and not entity_overlap:
+                continue
+            if token_overlap >= 2 or sim >= 0.68 or entity_overlap:
                 cluster_positions.append(other_pos)
                 if len(cluster_positions) >= max_news_per_event:
                     break
@@ -687,6 +1078,16 @@ def _aggregate_event_points(
     return event_points
 
 
+def _clean_event_point_title(title: str, keywords: list[str] | None = None) -> str:
+    cleaned = _clean_text(title)
+    for suffix in ["相关消息", "持续关注", "最新动态", "热点新闻", "相关动态", "最新消息"]:
+        cleaned = cleaned.replace(suffix, "")
+    cleaned = cleaned.strip(" -_，。；;：:")
+    if not cleaned and keywords:
+        cleaned = f"{keywords[0]}事件出现新进展"
+    return cleaned
+
+
 def _build_event_point(news_items: list[dict[str, Any]]) -> dict[str, Any]:
     """从一组新闻构建单个事件点。"""
     if not news_items:
@@ -695,12 +1096,18 @@ def _build_event_point(news_items: list[dict[str, Any]]) -> dict[str, Any]:
     # 代表新闻：选热度最高的
     best = max(news_items, key=lambda nw: _compute_news_heat(nw))
 
-    # event_title = 代表新闻标题（过长截断）
+    # event_title = 使用统一短标题函数生成 8～14 字事件化标题
     raw_title = _clean_text(best.get("title"))
-    if len(raw_title) > 28:
-        event_title = raw_title[:26] + "..."
-    else:
-        event_title = raw_title
+    # 尝试获取聚类上下文：从调用链提供，通过闭包或注册机制
+    # 此处 cluster_service 调用时使用 service.py 中导出的 build_short_event_title
+    from app.modules.timeline.service import build_short_event_title  # noqa: PLC0415
+
+    event_title = build_short_event_title(
+        raw_title=raw_title,
+        topic_name=None,
+        core_entities=None,
+        category_name=_clean_text(best.get("category_name", "")),
+    )
 
     # event_summary = 代表新闻 summary，fallback 正文第一句
     summary = _clean_text(best.get("summary"))
@@ -840,7 +1247,7 @@ def _validate_polished_result(original: dict[str, Any], polished: dict[str, Any]
 def _polish_topic_with_llm(
     topic: dict[str, Any],
     ai_service_url: str,
-    timeout: float = 45.0,
+    timeout: float = 8.0,
 ) -> dict[str, Any]:
     """调用 ai-service /ai/polish-timeline-topic 对单个话题进行文本润色。
 
@@ -978,7 +1385,7 @@ def cluster_news_topics(
     max_news: int = 1000,
     min_news_to_cluster: int = 20,
     min_cluster_size: int = 3,
-    max_topics: int = 8,
+    max_topics: int = 30,
     use_llm_polish: bool = False,
 ) -> list[dict[str, Any]]:
     """从数据库读取新闻并自动聚类为热点话题。
@@ -1059,8 +1466,14 @@ def cluster_news_topics(
             continue
 
         # ── 大簇二次拆分 ──
-        if len(indices) > 50:
-            sub_indices_list = _split_large_cluster(indices, news_list, corpus, max_size=50)
+        should_split, split_meta = _should_split_large_cluster(
+            indices=indices,
+            news_list=news_list,
+            tfidf_matrix=tfidf_matrix,
+            size_threshold=30,
+        )
+        if should_split:
+            sub_indices_list = _split_large_cluster(indices, news_list, corpus, max_size=30)
             logger.info("大簇 %d（%d条）拆分为 %d 个子簇", cid, len(indices), len(sub_indices_list))
         else:
             sub_indices_list = [indices]
@@ -1081,23 +1494,46 @@ def cluster_news_topics(
                 cluster_centroid=sub_centroid,
             )
             if result is not None:
+                result.update({
+                    "cluster_size_raw": len(sub_indices),
+                    "cluster_size_after_filter": result.get("news_count", 0),
+                    "split_from_large_cluster": should_split,
+                    "k_used": n_clusters,
+                    "cluster_avg_similarity": split_meta.get("cluster_avg_similarity", 1.0),
+                    "cluster_entity_purity": split_meta.get("cluster_entity_purity", 1.0),
+                    "split_reason": split_meta.get("split_reason", ""),
+                    "split_core_entities": split_meta.get("split_core_entities", []),
+                })
+                event_indices = result["kept_indices"] if "kept_indices" in result else sub_indices
+                event_vecs = tfidf_matrix[event_indices].toarray()
+                event_centroid = event_vecs.mean(axis=0) if len(event_vecs) > 0 else sub_centroid
                 # ── 第二级聚合：话题内新闻 → 事件点 ──
                 selected = _select_news_for_cluster(
-                    indices=sub_indices,
+                    indices=event_indices,
                     news_list=news_list,
                     tfidf_matrix=tfidf_matrix,
-                    cluster_centroid=sub_centroid,
+                    cluster_centroid=event_centroid,
                     max_news=30,
                 )
                 result["selected_news_count"] = len(selected)
+                strict_entity_match = _is_strict_entity_topic(result)
+                event_merge_threshold = 0.60 if strict_entity_match else 0.56
+                news_entity_map = {
+                    int(news_id): set(entities)
+                    for news_id, entities in (result.get("entity_hits") or {}).items()
+                }
                 result["event_points"] = _aggregate_event_points(
                     selected_indices=selected,
                     news_list=news_list,
                     tfidf_matrix=tfidf_matrix,
                     max_event_points=6,
                     max_news_per_event=5,
-                    similarity_threshold=0.45,
+                    similarity_threshold=event_merge_threshold,
+                    news_entity_map=news_entity_map,
+                    strict_entity_match=strict_entity_match,
                 )
+                result["event_merge_threshold"] = event_merge_threshold
+                result["strict_entity_match"] = strict_entity_match
                 for ei, ep in enumerate(result["event_points"]):
                     ep["event_id"] = ei + 1
                 results.append(result)
@@ -1112,22 +1548,39 @@ def cluster_news_topics(
         from app.core.config import settings
 
         ai_url = settings.ai_service_url
-        polished_count = 0
-        for r in results:
-            r["llm_used"] = False
-            r["polish_source"] = "none"
-            # 只对 "ok" 的话题调用 LLM
-            if r.get("quality_status") != "ok":
-                continue
-            if r.get("news_count", 0) < 3:
-                continue
-            if not r.get("event_points"):
-                continue
-            r = _polish_topic_with_llm(r, ai_url)
-            if r.get("llm_used"):
-                polished_count += 1
 
-        logger.info("LLM 润色完成：%d/%d 个话题已润色", polished_count, len(results))
+        # 预检 ai-service 是否存活，避免逐个 topic 超时空等
+        ai_available = False
+        try:
+            import httpx
+            with httpx.Client(timeout=2.0) as client:
+                ping = client.get(f"{ai_url.rstrip('/')}/ai/ping")
+                ai_available = ping.status_code == 200
+        except Exception:
+            logger.warning("ai-service 不可达(%s)，跳过 LLM 润色", ai_url)
+
+        if not ai_available:
+            for r in results:
+                r["llm_used"] = False
+                r["polish_source"] = "none"
+                r["fallback_reason"] = "ai-service 不可达"
+        else:
+            polished_count = 0
+            for r in results:
+                r["llm_used"] = False
+                r["polish_source"] = "none"
+                # 只对 "ok" 的话题调用 LLM
+                if r.get("quality_status") != "ok":
+                    continue
+                if r.get("news_count", 0) < 3:
+                    continue
+                if not r.get("event_points"):
+                    continue
+                r = _polish_topic_with_llm(r, ai_url)
+                if r.get("llm_used"):
+                    polished_count += 1
+
+            logger.info("LLM 润色完成：%d/%d 个话题已润色", polished_count, len(results))
 
     # ── 9. 质量日志 ──
     if results:
@@ -1149,20 +1602,25 @@ def preview_auto_cluster_write(
     max_news: int = 1000,
     use_llm_polish: bool = True,
     max_write_topics: int = 8,
+    results: list | None = None,
 ) -> dict[str, Any]:
     """dry-run 预演：计算自动话题写库内容，但不执行任何 SQL。
 
     返回将在真写库时插入/更新的数据预览。
-    """
-    results = cluster_news_topics(
-        days=days, max_news=max_news, use_llm_polish=use_llm_polish,
-    )
 
-    recommended = [r for r in results if r.get("quality_status") == "ok"]
+    当外部已计算好 results 时传入，避免重复聚类。
+    """
+    if results is None:
+        results = cluster_news_topics(
+            days=days, max_news=max_news, use_llm_polish=use_llm_polish,
+        )
+
+    recommended = [r for r in results if _is_recommended_topic(r)]
     recommended.sort(key=lambda r: r["heat_score"], reverse=True)
     recommended = recommended[:max_write_topics]
 
-    skipped = [r for r in results if r.get("quality_status") != "ok"]
+    recommended_ids = {id(r) for r in recommended}
+    skipped = [r for r in results if id(r) not in recommended_ids]
 
     topics_to_insert: list[dict[str, Any]] = []
     news_topic_updates: list[dict[str, Any]] = []
@@ -1170,18 +1628,40 @@ def preview_auto_cluster_write(
 
     for r in recommended:
         # topic 预览
-        topics_to_insert.append({
+        topic_item = {
             "topic_name": r["topic_name"],
             "summary": r.get("summary", ""),
             "keyword_list": r.get("keywords", []),
             "heat_score": r["heat_score"],
             "news_count": r["news_count"],
+            "news_ids": r.get("news_ids", []),
             "event_point_count": len(r.get("event_points", [])),
             "source_news_ids": r.get("news_ids", []),
             "quality_score": r.get("quality_score", 0),
             "quality_status": r.get("quality_status", ""),
+            "quality_flags": r.get("quality_flags", []),
+            "quality_reasons": r.get("quality_reasons", []),
+            "category_purity": r.get("category_purity", 0),
+            "entity_purity": r.get("entity_purity", 0),
+            "core_entities": r.get("core_entities", []),
+            "removed_count": r.get("removed_count", 0),
+            "removed_news_ids": r.get("removed_news_ids", []),
+            "removed_news_titles": r.get("removed_news_titles", []),
+            "cluster_size_raw": r.get("cluster_size_raw", r.get("original_news_count", r.get("news_count", 0))),
+            "cluster_size_after_filter": r.get("cluster_size_after_filter", r.get("news_count", 0)),
+            "split_from_large_cluster": r.get("split_from_large_cluster", False),
+            "k_used": r.get("k_used", 0),
+            "cluster_avg_similarity": r.get("cluster_avg_similarity", 0),
+            "cluster_entity_purity": r.get("cluster_entity_purity", 0),
+            "split_reason": r.get("split_reason", ""),
+            "event_merge_threshold": r.get("event_merge_threshold", 0),
+            "strict_entity_match": r.get("strict_entity_match", False),
             "llm_used": r.get("llm_used", False),
-        })
+            "llm_polished": bool(r.get("llm_used", False)),
+            "representative_titles": [nw.get("title", "") for nw in r.get("representative_news", [])[:5]],
+            "event_points": r.get("event_points", [])[:6],
+        }
+        topics_to_insert.append(topic_item)
 
         # news.topic_id 更新预览
         news_ids = r.get("news_ids", [])
@@ -1205,7 +1685,7 @@ def preview_auto_cluster_write(
                 "source_news_ids": ep.get("source_news_ids", []),
                 "source_title": ep.get("related_news", [{}])[0].get("title", "") if ep.get("related_news") else "",
                 "source_name": ep.get("related_news", [{}])[0].get("source", "") if ep.get("related_news") else "",
-                "event_type": "auto",
+                "event_type": "other",
                 "importance": min(5, max(3, ep.get("news_count", 1))),
                 "event_detail": ep.get("event_summary", ""),
                 "keywords": ep.get("keywords", []),
@@ -1221,7 +1701,29 @@ def preview_auto_cluster_write(
         })
 
     skipped_info = [
-        {"topic_name": r["topic_name"], "reason": r.get("quality_status", "?")}
+        {
+            "topic_name": r["topic_name"],
+            "reason": r.get("quality_status", "?"),
+            "quality_status": r.get("quality_status", "?"),
+            "quality_score": r.get("quality_score", 0),
+            "quality_flags": r.get("quality_flags", []),
+            "quality_reasons": r.get("quality_reasons", []),
+            "category_purity": r.get("category_purity", 0),
+            "entity_purity": r.get("entity_purity", 0),
+            "core_entities": r.get("core_entities", []),
+            "removed_count": r.get("removed_count", 0),
+            "removed_news_ids": r.get("removed_news_ids", []),
+            "removed_news_titles": r.get("removed_news_titles", []),
+            "cluster_size_raw": r.get("cluster_size_raw", r.get("original_news_count", r.get("news_count", 0))),
+            "cluster_size_after_filter": r.get("cluster_size_after_filter", r.get("news_count", 0)),
+            "split_from_large_cluster": r.get("split_from_large_cluster", False),
+            "k_used": r.get("k_used", 0),
+            "cluster_avg_similarity": r.get("cluster_avg_similarity", 0),
+            "cluster_entity_purity": r.get("cluster_entity_purity", 0),
+            "split_reason": r.get("split_reason", ""),
+            "event_merge_threshold": r.get("event_merge_threshold", 0),
+            "strict_entity_match": r.get("strict_entity_match", False),
+        }
         for r in skipped
     ]
 
@@ -1230,17 +1732,317 @@ def preview_auto_cluster_write(
         "total_candidates": len(results),
         "recommended_count": len(recommended),
         "skipped_count": len(skipped),
+        "topics": topics_to_insert,
         "topics_to_insert": topics_to_insert,
         "news_topic_updates": news_topic_updates,
         "timelines_to_write": timelines_to_write,
         "skipped_topics": skipped_info,
+        "summary": {
+            "manual_topic_count": 0,
+            "auto_active_count": 0,
+            "write_topic_count": len(recommended),
+            "updated_news_count": sum(len(r.get("news_ids", [])) for r in recommended),
+        },
         "warnings": [
             "当前未真实写入数据库",
             "当前未覆盖或删除任何人工话题",
-            "当前数据库 news_topic 缺少 source_type 字段，正式写库前建议新增以区分 manual/auto",
             "正式写库时应先清理旧的 auto 话题再写入新话题",
         ],
     }
+
+
+def _sanitize_confirmed_keywords(value: Any) -> list[str]:
+    if isinstance(value, str):
+        raw_items = re.split(r"[,，、\s]+", value)
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = []
+
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        kw = _clean_text(str(item))[:20]
+        if not kw or kw in seen:
+            continue
+        seen.add(kw)
+        keywords.append(kw)
+        if len(keywords) >= 10:
+            break
+    return keywords
+
+
+def _sanitize_confirmed_news_ids(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    ids: list[int] = []
+    seen: set[int] = set()
+    for item in value:
+        try:
+            news_id = int(item)
+        except Exception:
+            continue
+        if news_id <= 0 or news_id in seen:
+            continue
+        seen.add(news_id)
+        ids.append(news_id)
+    return ids
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _sanitize_confirmed_event_points(value: Any, allowed_news_ids: set[int]) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    event_points: list[dict[str, Any]] = []
+    for idx, raw in enumerate(value[:10], start=1):
+        if not isinstance(raw, dict):
+            continue
+        title = _clean_text(raw.get("event_title") or raw.get("title") or raw.get("name"))[:80]
+        if not title:
+            continue
+        summary = _clean_text(raw.get("event_summary") or raw.get("summary") or raw.get("description"))[:300]
+        source_news_ids = [
+            news_id for news_id in _sanitize_confirmed_news_ids(raw.get("source_news_ids"))
+            if news_id in allowed_news_ids
+        ]
+        representative_news_id = 0
+        try:
+            representative_news_id = int(raw.get("representative_news_id") or raw.get("source_news_id") or 0)
+        except Exception:
+            representative_news_id = 0
+        if representative_news_id not in allowed_news_ids:
+            representative_news_id = source_news_ids[0] if source_news_ids else next(iter(allowed_news_ids), 0)
+        if not source_news_ids and representative_news_id:
+            source_news_ids = [representative_news_id]
+
+        event_points.append({
+            "event_id": idx,
+            "event_time": _clean_text(raw.get("event_time") or raw.get("time") or raw.get("date") or raw.get("publish_time")),
+            "event_title": title,
+            "event_summary": summary,
+            "source_news_ids": source_news_ids,
+            "representative_news_id": representative_news_id,
+            "event_type": "other",
+            "importance": min(5, max(1, _safe_int(raw.get("importance"), 3))),
+            "keywords": _sanitize_confirmed_keywords(raw.get("keywords")),
+        })
+    return event_points
+
+
+def _fetch_existing_news_rows(news_ids: list[int]) -> dict[int, dict[str, Any]]:
+    if not news_ids:
+        return {}
+    rows_by_id: dict[int, dict[str, Any]] = {}
+    for i in range(0, len(news_ids), 200):
+        batch = news_ids[i:i + 200]
+        placeholders = ",".join(["%s"] * len(batch))
+        rows = execute_query(
+            f"SELECT id, title, source, publish_time FROM news WHERE id IN ({placeholders})",
+            batch,
+        )
+        for row in rows or []:
+            rows_by_id[int(row["id"])] = row
+    return rows_by_id
+
+
+def _sanitize_confirmed_topics(confirmed_topics: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    if not isinstance(confirmed_topics, list):
+        return [], ["confirmed_topics 格式无效，已忽略管理员编辑结果"]
+
+    candidate_ids: list[int] = []
+    for raw in confirmed_topics:
+        if isinstance(raw, dict):
+            candidate_ids.extend(_sanitize_confirmed_news_ids(raw.get("news_ids")))
+    existing_news = _fetch_existing_news_rows(list(dict.fromkeys(candidate_ids)))
+
+    sanitized: list[dict[str, Any]] = []
+    for index, raw in enumerate(confirmed_topics, start=1):
+        if not isinstance(raw, dict):
+            warnings.append(f"第 {index} 个话题格式无效，已跳过")
+            continue
+
+        topic_name = _clean_text(raw.get("topic_name"))[:50]
+        if len(topic_name) < 2:
+            warnings.append(f"第 {index} 个话题名称为空或过短，已跳过")
+            continue
+
+        raw_news_ids = _sanitize_confirmed_news_ids(raw.get("news_ids"))
+        news_ids = [news_id for news_id in raw_news_ids if news_id in existing_news]
+        missing_count = len(raw_news_ids) - len(news_ids)
+        if missing_count > 0:
+            warnings.append(f"话题「{topic_name}」有 {missing_count} 条新闻不存在，已忽略")
+        if len(news_ids) < 2:
+            warnings.append(f"话题「{topic_name}」有效新闻少于 2 条，已跳过")
+            continue
+
+        keywords = _sanitize_confirmed_keywords(raw.get("keyword_list") or raw.get("keywords"))
+        event_points = _sanitize_confirmed_event_points(raw.get("event_points"), set(news_ids))
+        sanitized.append({
+            "topic_name": topic_name,
+            "summary": _clean_text(raw.get("summary"))[:300],
+            "keywords": keywords,
+            "keyword_list": keywords,
+            "heat_score": _safe_int(raw.get("heat_score"), 0),
+            "news_count": len(news_ids),
+            "news_ids": news_ids,
+            "event_points": event_points,
+            "quality_score": raw.get("quality_score", 0),
+            "quality_status": _clean_text(raw.get("quality_status")),
+            "quality_flags": raw.get("quality_flags") if isinstance(raw.get("quality_flags"), list) else [],
+            "quality_reasons": raw.get("quality_reasons") if isinstance(raw.get("quality_reasons"), list) else [],
+            "core_entities": raw.get("core_entities") if isinstance(raw.get("core_entities"), list) else [],
+            "entity_purity": raw.get("entity_purity", 0),
+            "category_purity": raw.get("category_purity", 0),
+            "removed_news_ids": _sanitize_confirmed_news_ids(raw.get("removed_news_ids")),
+            "removed_count": _safe_int(raw.get("removed_count"), 0),
+            "existing_news": existing_news,
+        })
+
+    return sanitized, warnings
+
+
+def _write_confirmed_topics(
+    confirmed_topics: list[dict[str, Any]],
+    metadata_json_supported: bool,
+) -> dict[str, Any]:
+    import json as json_mod
+    from datetime import datetime
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    warnings: list[str] = []
+    conn = get_connection()
+    conn.begin()
+    inserted_topic_ids: dict[str, int] = {}
+    updated_news_count = 0
+    written_timeline_count = 0
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM news_topic WHERE source_type = 'auto' AND status = 1")
+        old_auto_ids = [int(r["id"]) for r in cursor.fetchall()]
+
+        if old_auto_ids:
+            placeholders = ",".join(["%s"] * len(old_auto_ids))
+            cursor.execute(f"UPDATE news SET topic_id = NULL WHERE topic_id IN ({placeholders})", old_auto_ids)
+            cursor.execute(f"DELETE FROM event_timeline WHERE topic_id IN ({placeholders})", old_auto_ids)
+            cursor.execute(f"UPDATE news_topic SET status = 0 WHERE id IN ({placeholders})", old_auto_ids)
+
+        for r in confirmed_topics:
+            kw_json = json_mod.dumps(r.get("keywords", []), ensure_ascii=False)
+            cursor.execute(
+                "INSERT INTO news_topic (topic_name, keyword_list, heat_score, summary, status, source_type, auto_generated_at) VALUES (%s, %s, %s, %s, 1, 'auto', %s)",
+                [r["topic_name"], kw_json, int(r.get("heat_score") or 0), r.get("summary", ""), now_str],
+            )
+            inserted_topic_ids[r["topic_name"]] = int(cursor.lastrowid)
+
+        for r in confirmed_topics:
+            tid = inserted_topic_ids[r["topic_name"]]
+            for i in range(0, len(r.get("news_ids", [])), 200):
+                batch = r.get("news_ids", [])[i:i + 200]
+                if not batch:
+                    continue
+                batch_ph = ",".join(["%s"] * len(batch))
+                if old_auto_ids:
+                    old_ph = ",".join(["%s"] * len(old_auto_ids))
+                    cursor.execute(
+                        f"UPDATE news SET topic_id = %s WHERE id IN ({batch_ph}) AND (topic_id IS NULL OR topic_id IN ({old_ph}))",
+                        [tid] + batch + old_auto_ids,
+                    )
+                else:
+                    cursor.execute(
+                        f"UPDATE news SET topic_id = %s WHERE id IN ({batch_ph}) AND topic_id IS NULL",
+                        [tid] + batch,
+                    )
+                updated_news_count += cursor.rowcount
+
+        for r in confirmed_topics:
+            tid = inserted_topic_ids[r["topic_name"]]
+            news_lookup = r.get("existing_news", {})
+            timeline_nodes = []
+            all_ep_news_ids: list[int] = []
+            for ep in r.get("event_points", [])[:10]:
+                source_news_ids = [int(nid) for nid in ep.get("source_news_ids", []) if int(nid) in set(r.get("news_ids", []))]
+                all_ep_news_ids.extend(source_news_ids)
+                source_news_id = int(ep.get("representative_news_id") or (source_news_ids[0] if source_news_ids else 0))
+                source_row = news_lookup.get(source_news_id, {})
+                node = {
+                    "event_id": ep.get("event_id", len(timeline_nodes) + 1),
+                    "event_time": ep.get("event_time", ""),
+                    "event_title": ep.get("event_title", ""),
+                    "event_summary": ep.get("event_summary", ""),
+                    "source_news_id": source_news_id,
+                    "source_news_ids": source_news_ids,
+                    "source_title": source_row.get("title", ""),
+                    "source_name": source_row.get("source", ""),
+                    "event_type": "other",
+                    "importance": ep.get("importance", 3),
+                    "event_detail": ep.get("event_summary", ""),
+                    "keywords": ep.get("keywords", []),
+                    "related_news": [],
+                }
+                timeline_nodes.append(node)
+
+            tl_json = json_mod.dumps(timeline_nodes, ensure_ascii=False)
+            src_json = json_mod.dumps(list(dict.fromkeys(r.get("news_ids", []) or all_ep_news_ids)), ensure_ascii=False)
+            metadata_json = json_mod.dumps({
+                "generate_mode": "auto_cluster",
+                "source": "auto_cluster_admin_confirmed",
+                "edited_by_admin": True,
+                "manual_adjusted_at": now_str,
+                "original_quality_score": r.get("quality_score", 0),
+                "original_quality_status": r.get("quality_status", ""),
+                "original_quality_flags": r.get("quality_flags", []),
+                "quality_reasons": r.get("quality_reasons", []),
+                "core_entities": r.get("core_entities", []),
+                "entity_purity": r.get("entity_purity", 0),
+                "category_purity": r.get("category_purity", 0),
+                "removed_news_ids": r.get("removed_news_ids", []),
+                "removed_count": r.get("removed_count", 0),
+            }, ensure_ascii=False)
+            cursor.execute("DELETE FROM event_timeline WHERE topic_id = %s", [tid])
+            if metadata_json_supported:
+                cursor.execute(
+                    "INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, metadata_json, generate_status, generated_at, updated_at) VALUES (%s, %s, %s, %s, 'auto', %s, %s)",
+                    [tid, tl_json, src_json, metadata_json, now_str, now_str],
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, generate_status, generated_at, updated_at) VALUES (%s, %s, %s, 'auto', %s, %s)",
+                    [tid, tl_json, src_json, now_str, now_str],
+                )
+            written_timeline_count += 1
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {
+            "success": True,
+            "mode": "admin_confirmed_write",
+            "inserted_topics": len(inserted_topic_ids),
+            "updated_news_topic_id": updated_news_count,
+            "written_timelines": written_timeline_count,
+            "cleaned_old_auto_topics": len(old_auto_ids),
+            "topic_names": list(inserted_topic_ids.keys()),
+            "manual_topics_preserved": True,
+            "warnings": warnings,
+        }
+    except Exception as e:
+        conn.rollback()
+        logger.exception("管理员确认写库失败，已回滚: %s", e)
+        return {"success": False, "reason": "write_failed", "message": str(e)[:200]}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def apply_auto_cluster_write(
@@ -1250,6 +2052,7 @@ def apply_auto_cluster_write(
     max_write_topics: int = 8,
     min_news_to_cluster: int = 20,
     dry_run: bool = True,
+    confirmed_topics: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """执行自动话题写库。默认 dry_run=True 防止误写。
 
@@ -1273,8 +2076,42 @@ def apply_auto_cluster_write(
         return {"success": False, "reason": "db_error", "message": "无法检查 source_type 字段"}
 
     # 聚类
+    metadata_json_supported = False
+    try:
+        metadata_cols = execute_query("SHOW COLUMNS FROM event_timeline LIKE 'metadata_json'")
+        metadata_json_supported = bool(metadata_cols)
+    except Exception:
+        metadata_json_supported = False
+
+    if not dry_run and confirmed_topics is not None:
+        if len(confirmed_topics) == 0:
+            return {
+                "success": False,
+                "reason": "no_confirmed_topics",
+                "message": "没有可发布的管理员确认话题",
+                "inserted_topics": 0,
+                "updated_news_topic_id": 0,
+                "written_timelines": 0,
+                "warnings": ["confirmed_topics 为空，未执行旧自动聚类发布流程"],
+            }
+        sanitized_topics, sanitize_warnings = _sanitize_confirmed_topics(confirmed_topics)
+        if not sanitized_topics:
+            return {
+                "success": False,
+                "reason": "no_confirmed_topics",
+                "message": "没有可发布的管理员确认话题",
+                "warnings": sanitize_warnings,
+            }
+        result = _write_confirmed_topics(
+            confirmed_topics=sanitized_topics[:max_write_topics],
+            metadata_json_supported=metadata_json_supported,
+        )
+        if sanitize_warnings:
+            result["warnings"] = list(dict.fromkeys(result.get("warnings", []) + sanitize_warnings))
+        return result
+
     results = cluster_news_topics(days=days, max_news=max_news, use_llm_polish=use_llm_polish)
-    recommended = [r for r in results if r.get("quality_status") == "ok"]
+    recommended = [r for r in results if _is_recommended_topic(r)]
     recommended.sort(key=lambda r: r["heat_score"], reverse=True)
     recommended = recommended[:max_write_topics]
 
@@ -1289,7 +2126,10 @@ def apply_auto_cluster_write(
 
     # ── dry-run 直接返回预览 ──
     if dry_run:
-        preview = preview_auto_cluster_write(days=days, max_news=max_news, use_llm_polish=use_llm_polish, max_write_topics=max_write_topics)
+        preview = preview_auto_cluster_write(
+            days=days, max_news=max_news, use_llm_polish=use_llm_polish,
+            max_write_topics=max_write_topics, results=results,
+        )
         preview["success"] = True
         preview["mode"] = "dry_run"
         return preview
@@ -1365,7 +2205,7 @@ def apply_auto_cluster_write(
                     "source_news_ids": ep.get("source_news_ids", []),
                     "source_title": ep.get("related_news", [{}])[0].get("title", "") if ep.get("related_news") else "",
                     "source_name": ep.get("related_news", [{}])[0].get("source", "") if ep.get("related_news") else "",
-                    "event_type": "auto",
+                    "event_type": "other",
                     "importance": min(5, max(3, ep.get("news_count", 1))),
                     "event_detail": ep.get("event_summary", ""),
                     "keywords": ep.get("keywords", []),
@@ -1374,13 +2214,32 @@ def apply_auto_cluster_write(
                 timeline_nodes.append(node)
 
             tl_json = json_mod.dumps(timeline_nodes, ensure_ascii=False)
-            src_json = json_mod.dumps(list(set(all_ep_news_ids)), ensure_ascii=False)
+            source_ids = r.get("news_ids", []) or list(set(all_ep_news_ids))
+            src_json = json_mod.dumps(list(dict.fromkeys(source_ids)), ensure_ascii=False)
+            metadata_json = json_mod.dumps({
+                "generate_mode": "auto_cluster",
+                "quality_score": r.get("quality_score", 0),
+                "quality_status": r.get("quality_status", ""),
+                "quality_flags": r.get("quality_flags", []),
+                "quality_reasons": r.get("quality_reasons", []),
+                "core_entities": r.get("core_entities", []),
+                "entity_purity": r.get("entity_purity", 0),
+                "category_purity": r.get("category_purity", 0),
+                "removed_news_ids": r.get("removed_news_ids", []),
+                "removed_count": r.get("removed_count", 0),
+            }, ensure_ascii=False)
             # 删除可能存在的旧条目（防止失败运行残留），再插入新条目
             cursor.execute("DELETE FROM event_timeline WHERE topic_id = %s", [tid])
-            cursor.execute(
-                "INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, generate_status, generated_at, updated_at) VALUES (%s, %s, %s, 'auto', %s, %s)",
-                [tid, tl_json, src_json, now_str, now_str],
-            )
+            if metadata_json_supported:
+                cursor.execute(
+                    "INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, metadata_json, generate_status, generated_at, updated_at) VALUES (%s, %s, %s, %s, 'auto', %s, %s)",
+                    [tid, tl_json, src_json, metadata_json, now_str, now_str],
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO event_timeline (topic_id, timeline_json, source_news_ids, generate_status, generated_at, updated_at) VALUES (%s, %s, %s, 'auto', %s, %s)",
+                    [tid, tl_json, src_json, now_str, now_str],
+                )
             written_timeline_count += 1
 
         # 全部成功 → 提交事务
@@ -1446,8 +2305,8 @@ if __name__ == "__main__":
         print(f"总覆盖: {total_news} 条新闻")
 
         # ── 分类：建议写库 vs 不建议 ──
-        recommended = [r for r in results if r.get("quality_status") == "ok"]
-        not_recommended = [r for r in results if r.get("quality_status") != "ok"]
+        recommended = [r for r in results if _is_recommended_topic(r)]
+        not_recommended = [r for r in results if not _is_recommended_topic(r)]
 
         print(f"\n{'='*60}")
         print(f"[建议写库话题] {len(recommended)} 个")

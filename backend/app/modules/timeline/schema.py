@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import List, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -102,3 +102,4 @@ class AutoClusterRequest(BaseModel):
     use_llm_polish: bool = Field(default=True, description="是否启用 LLM 润色")
     dry_run: bool = Field(default=True, description="是否只预览不写库")
     confirm: bool = Field(default=False, description="正式发布确认开关，dry_run=false 时必须为 true")
+    confirmed_topics: list[dict[str, Any]] | None = Field(default=None, description="管理员确认发布的编辑后话题")
