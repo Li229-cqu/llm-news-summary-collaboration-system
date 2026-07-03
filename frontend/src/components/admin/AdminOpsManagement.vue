@@ -9,28 +9,24 @@ import {
   type AdminOpsDatabaseResponse,
   type AdminOpsStatusPart,
   type AdminOpsStatusResponse,
-  type AdminStorageResponse,
   getAdminOpsBackups,
   getAdminOpsDatabase,
   getAdminOpsLogDetail,
   getAdminOpsLogs,
   getAdminOpsStatus,
-  getAdminOpsStorage,
 } from '@/api/admin'
 
-type OpsTab = 'status' | 'database' | 'storage' | 'logs'
+type OpsTab = 'status' | 'database' | 'logs'
 
 const activeTab = ref<OpsTab>('status')
 const statusLoading = ref(false)
 const databaseLoading = ref(false)
 const backupLoading = ref(false)
-const storageLoading = ref(false)
 const logsLoading = ref(false)
 const logDetailLoading = ref(false)
 
 const statusData = ref<AdminOpsStatusResponse | null>(null)
 const databaseData = ref<AdminOpsDatabaseResponse | null>(null)
-const storageData = ref<AdminStorageResponse | null>(null)
 
 const backupItems = ref<AdminBackupRecordItem[]>([])
 const backupTotal = ref(0)
@@ -191,15 +187,6 @@ const statusCards = computed(() => [
   { key: 'ai_service', title: 'AI 服务', data: statusData.value?.ai_service },
 ])
 
-// ══════ Utility ══════
-
-function formatSize(size: number) {
-  if (!size) return '0 B'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
-
 // ══════ Loaders ══════
 
 async function loadStatus() {
@@ -235,17 +222,6 @@ async function loadBackups() {
     ElMessage.error(error instanceof Error ? error.message : '加载备份记录失败')
   } finally {
     backupLoading.value = false
-  }
-}
-
-async function loadStorage() {
-  storageLoading.value = true
-  try {
-    storageData.value = await getAdminOpsStorage()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '加载文件存储状态失败')
-  } finally {
-    storageLoading.value = false
   }
 }
 
@@ -296,7 +272,6 @@ async function handleTabChange(tab: string | number) {
   const name = String(tab) as OpsTab
   if (name === 'status') await loadStatus()
   if (name === 'database') await loadDatabase()
-  if (name === 'storage') await loadStorage()
   if (name === 'logs') await loadLogs()
 }
 
@@ -310,7 +285,7 @@ onMounted(async () => {
     <el-card class="ops-header" shadow="never">
       <div>
         <h2>系统运维</h2>
-        <p>查看服务运行状态、数据库信息、备份记录、文件存储与管理员操作日志。</p>
+        <p>查看服务运行状态、数据库信息、备份记录与管理员操作日志。</p>
       </div>
       <el-button :icon="Refresh" :loading="statusLoading" @click="loadStatus">刷新状态</el-button>
     </el-card>
@@ -369,29 +344,7 @@ onMounted(async () => {
 
         </el-tab-pane>
 
-        <!-- ══════ Tab 3: 文件存储 ══════ -->
-        <el-tab-pane label="文件存储" name="storage">
-          <div class="toolbar-row">
-            <div>
-              <h3>文件存储</h3>
-              <p>仅统计 upload_file 表中的记录，不执行全盘扫描，不删除文件。</p>
-            </div>
-            <el-button :icon="Refresh" :loading="storageLoading" @click="loadStorage">刷新存储</el-button>
-          </div>
-          <el-alert v-if="storageData && !storageData.supported" :title="storageData.message || '当前项目暂未接入统一文件存储管理。'" type="warning" show-icon :closable="false" />
-          <el-descriptions v-if="storageData" class="db-desc" :column="3" border>
-            <el-descriptions-item label="是否支持">{{ storageData.supported ? '是' : '否' }}</el-descriptions-item>
-            <el-descriptions-item label="文件总数">{{ storageData.total_files }}</el-descriptions-item>
-            <el-descriptions-item label="文件总大小">{{ formatSize(storageData.total_size) }}</el-descriptions-item>
-            <el-descriptions-item label="图片数量">{{ storageData.image_count }}</el-descriptions-item>
-            <el-descriptions-item label="文档数量">{{ storageData.document_count }}</el-descriptions-item>
-            <el-descriptions-item label="异常文件数">{{ storageData.abnormal_count }}</el-descriptions-item>
-            <el-descriptions-item label="最近上传时间" :span="3">{{ storageData.last_upload_time || '-' }}</el-descriptions-item>
-          </el-descriptions>
-          <el-empty v-if="storageData && storageData.supported && storageData.total_files === 0" description="当前暂无上传文件。" />
-        </el-tab-pane>
-
-        <!-- ══════ Tab 4: 操作日志 ══════ -->
+        <!-- ══════ Tab 3: 操作日志 ══════ -->
         <el-tab-pane label="操作日志" name="logs">
           <div class="log-filter">
             <el-input v-model="logFilters.operator_keyword" placeholder="操作人关键词" clearable />

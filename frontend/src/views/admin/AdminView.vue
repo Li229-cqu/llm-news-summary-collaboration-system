@@ -30,14 +30,14 @@ import { useUserStore } from '@/stores/user'
 type AdminSection = 'dashboard' | 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'hotTopics' | 'timelines' | 'users' | 'aiConfig' | 'config' | 'ops'
 
 const userStore = useUserStore()
-const activeTab = ref<AdminSection>(userStore.isAdmin ? 'dashboard' : 'pending')
+const activeTab = ref<AdminSection>(userStore.isAdmin ? 'analytics' : 'pending')
 const pendingCenterKey = ref(0)
 const workbenchKey = ref(0)
 
 const sidebarSections = computed(() => {
   const all = [
-    { key: 'dashboard', label: '后台首页', icon: Grid },
     { key: 'analytics', label: '数据看板', icon: DataBoard },
+    { key: 'dashboard', label: '工作台', icon: Grid },
     { key: 'pending', label: '待审核中心', icon: Warning },
     { key: 'news', label: '新闻管理', icon: Files },
     { key: 'hotTopics', label: '热搜运营', icon: TrendCharts },

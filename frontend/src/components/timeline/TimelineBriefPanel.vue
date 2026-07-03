@@ -109,14 +109,16 @@
             <!-- 节点卡片（CSS grid-column 由父级 --left / --right 控制左右放置） -->
             <div
               class="timeline-node__card"
-              :class="{ 'timeline-node__card--key': (node.importance ?? 3) >= 4 }"
+              :class="{
+                'timeline-node__card--key': (node.importance ?? 3) >= 4,
+                'timeline-node--highlight': highlightedNodeKey === String(node.event_id)
+              }"
             >
               <div class="timeline-node__card-header">
                 <span class="timeline-node__type-tag">{{ typeLabel(node.event_type) }}</span>
                 <span v-if="node.source_name" class="timeline-node__source-name">{{ node.source_name }}</span>
               </div>
-              <h4 class="timeline-node__card-title">{{ node.event_title }}</h4>
-              <p class="timeline-node__card-summary">{{ node.event_summary }}</p>
+              <h4 class="timeline-node__card-title">{{ getTimelineShortEventTitle(node) }}</h4>
               <div v-if="node.keywords?.length" class="timeline-node__card-keywords">
                 <span
                   v-for="(kw, kIdx) in node.keywords.slice(0, 3)"
@@ -125,20 +127,30 @@
                 >#{{ kw }}</span>
               </div>
               <div class="timeline-node__card-footer">
+                <span class="timeline-node__event-time">{{ formatNodeTime(node.event_time) }}</span>
+                <span v-if="node.source_name" class="timeline-node__source-name-inline">{{ node.source_name }}</span>
                 <span v-if="node.importance" class="timeline-node__importance">
-                  重要度 {{ '★'.repeat(Math.min(node.importance, 5)) }}
+                  {{ '★'.repeat(Math.min(node.importance, 5)) }}
                 </span>
+                <button
+                  v-if="node.source_news_id"
+                  class="timeline-node__nav-btn"
+                  @click.stop="handleNavigateToNews(node)"
+                >
+                  查看新闻详情
+                </button>
+                <span v-else class="timeline-node__no-nav">暂无可跳转的来源新闻</span>
                 <button
                   class="timeline-node__source-toggle"
                   :class="{ 'timeline-node__source-toggle--active': expandedNodeId === node.event_id }"
                   @click.stop="toggleNodeSource(node.event_id)"
                 >
-                  <span>{{ expandedNodeId === node.event_id ? '收起来源摘要' : '查看来源摘要' }}</span>
+                  <span>{{ expandedNodeId === node.event_id ? '收起来源新闻' : '查看来源新闻' }}</span>
                   <span class="source-toggle-arrow" :class="{ 'source-toggle-arrow--up': expandedNodeId === node.event_id }">▼</span>
                 </button>
               </div>
 
-              <!-- 来源新闻摘要展开区 -->
+              <!-- 来源新闻展开区 -->
               <div v-if="expandedNodeId === node.event_id" class="timeline-node__source-detail">
                 <div class="source-detail__header">
                   <span class="source-detail__label">来源新闻</span>
@@ -147,7 +159,15 @@
                   </span>
                 </div>
                 <h5 class="source-detail__title">{{ getNodeSourceNews(node)?.title || node.source_title }}</h5>
-                <p class="source-detail__summary">{{ getSourceSummary(node) }}</p>
+                <div class="source-detail__actions">
+                  <button
+                    v-if="node.source_news_id"
+                    class="timeline-node__nav-btn timeline-node__nav-btn--small"
+                    @click.stop="handleNavigateToNews(node)"
+                  >
+                    查看新闻详情
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -165,8 +185,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   generateTimeline,
   getTimeline,
@@ -174,6 +195,8 @@ import {
   type TimelineNewsItem,
   type TimelineResponse,
 } from '@/api/timeline'
+
+const router = useRouter()
 
 const props = withDefaults(
   defineProps<{
@@ -216,6 +239,12 @@ function formatNodeDate(eventTime: string): string {
   return datePart
 }
 
+/** 格式化节点时间为完整展示 */
+function formatNodeTime(eventTime: string): string {
+  if (!eventTime) return ''
+  return eventTime.slice(0, 16)
+}
+
 /** 根据重要程度返回中轴圆点尺寸 class */
 function dotClass(importance?: number): string {
   const imp = importance ?? 3
@@ -226,28 +255,22 @@ function dotClass(importance?: number): string {
 
 // ── 来源新闻匹配与展开逻辑 ──
 
-/** 文本截断 */
-function truncateText(text: string, maxLen: number): string {
-  if (!text) return ''
-  if (text.length <= maxLen) return text
-  return text.slice(0, maxLen) + '...'
-}
-
 /** 根据 source_news_id 匹配来源新闻列表 */
 function getNodeSourceNews(node: { source_news_id: number }): TimelineNewsItem | undefined {
   return sourceNewsList.value.find((news) => news.id === node.source_news_id)
 }
 
-/** 获取来源新闻摘要（优先级：news.summary → news.content 截断 → node 自身兜底） */
-function getSourceSummary(node: {
-  event_summary: string
+// ── 事件化短标题（后端已生成，前端原样展示）──
+
+function getTimelineShortEventTitle(node: {
+  event_title: string
   source_news_id: number
+  event_type?: string
 }): string {
-  const news = getNodeSourceNews(node)
-  const text = news?.summary || news?.content || node.event_summary || ''
-  const trimmed = text.trim()
-  if (!trimmed) return '暂无来源摘要，已根据事件节点生成概述。'
-  return truncateText(trimmed, 150)
+  const title = (node.event_title || '').trim()
+  if (!title) return '事件进展'
+  // 后端已生成短标题，前端仅展示，不截断不加省略号
+  return title
 }
 
 /** 格式化来源新闻发布时间 */
@@ -259,9 +282,38 @@ function formatSourceTime(node: { source_news_id: number; event_time: string }):
   return time.slice(0, 16)
 }
 
-/** 展开/收起来源摘要（同一节点再点即收起，切换节点自动关闭前一个） */
+/** 展开/收起来源新闻（同一节点再点即收起，切换节点自动关闭前一个） */
 function toggleNodeSource(eventId: number): void {
   expandedNodeId.value = expandedNodeId.value === eventId ? null : eventId
+}
+
+/** 跳转到新闻详情页（通过 emit 让父组件保存滚动位置） */
+const SESSION_KEY = 'timeline:return-state'
+
+function handleNavigateToNews(node: { source_news_id: number; event_id: number }) {
+  if (!node.source_news_id) return
+  // 保存滚动位置（优先用 .admin-main 容器，普通视图用 window）
+  const adminMain = document.querySelector('.admin-main')
+  const scrollY = adminMain ? adminMain.scrollTop : window.scrollY
+  const state = {
+    topicId: props.topicId,
+    routeFullPath: router.currentRoute.value.fullPath,
+    scrollY,
+    nodeKey: String(node.event_id),
+    newsId: node.source_news_id,
+    savedAt: Date.now(),
+  }
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(state))
+  } catch { /* sessionStorage 不可用时静默失败 */ }
+  router.push({
+    path: `/news/${node.source_news_id}`,
+    query: {
+      from: 'timeline',
+      topicId: String(props.topicId ?? ''),
+      nodeKey: String(node.event_id),
+    },
+  })
 }
 
 // ── 状态 ──
@@ -272,8 +324,43 @@ const errorMessage = ref('')
 const timelineData = ref<TimelineResponse | null>(null)
 const sourceNewsList = ref<TimelineNewsItem[]>([])
 
-// 来源摘要展开状态（只允许同时展开一个节点）
+// 来源新闻展开状态（只允许同时展开一个节点）
 const expandedNodeId = ref<number | null>(null)
+
+// 返回高亮
+const highlightedNodeKey = ref<string | null>(null)
+
+/** 恢复返回状态：滚动位置 + 节点高亮 */
+function restoreTimelineReturnState() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (!saved || saved.topicId !== props.topicId) return
+    if (Date.now() - saved.savedAt > 10 * 60 * 1000) {
+      sessionStorage.removeItem(SESSION_KEY)
+      return
+    }
+    // 恢复滚动位置（优先用 .admin-main 容器，普通视图用 window）
+    if (typeof saved.scrollY === 'number' && saved.scrollY > 0) {
+      const adminMain = document.querySelector('.admin-main')
+      if (adminMain) {
+        adminMain.scrollTop = saved.scrollY
+      } else {
+        window.scrollTo({ top: saved.scrollY, behavior: 'auto' })
+      }
+    }
+    // 短暂高亮
+    if (saved.nodeKey) {
+      highlightedNodeKey.value = String(saved.nodeKey)
+      setTimeout(() => {
+        highlightedNodeKey.value = null
+      }, 3000)
+    }
+    // 标记已消费
+    sessionStorage.removeItem(SESSION_KEY)
+  } catch { /* 解析失败静默忽略 */ }
+}
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let timeoutTimer: ReturnType<typeof setTimeout> | null = null
@@ -409,6 +496,10 @@ async function loadTimelineData() {
       loading.value = false
       return
     }
+
+    // 数据加载完成后恢复返回状态
+    await nextTick()
+    restoreTimelineReturnState()
 
     // 无缓存 → 触发生成
     try {
@@ -962,25 +1053,17 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   font-size: 15px;
   font-weight: 700;
-  line-height: 1.45;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+  display: block;
 }
 
-/* ── 卡片摘要 ── */
+/* ── 摘要（已废弃展示，保留 CSS 以防后端仍有值） ── */
 .timeline-node__card-summary {
-  margin: 0 0 8px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  display: none;
 }
 
 /* ── 关键词 ── */
@@ -1008,16 +1091,69 @@ onUnmounted(() => {
 .timeline-node__card-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
+}
+
+.timeline-node__event-time {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.timeline-node__source-name-inline {
+  color: var(--color-text-secondary);
+  font-size: 11px;
 }
 
 .timeline-node__importance {
   color: #9d8b6c;
   font-size: 11px;
   letter-spacing: 0.03em;
+  margin-left: auto;
+}
+
+/* ── 查看新闻详情按钮 ── */
+.timeline-node__nav-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 14px;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    opacity 0.18s ease;
+  white-space: nowrap;
+}
+
+.timeline-node__nav-btn:hover {
+  background: #b91c1c;
+}
+
+.timeline-node__nav-btn--small {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.timeline-node__no-nav {
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ── 返回高亮 ── */
+.timeline-node--highlight {
+  border-color: #f56c6c !important;
+  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.18) !important;
+  background: rgba(245, 108, 108, 0.04) !important;
+  transition: all 0.3s ease;
 }
 
 /* ========================================
@@ -1111,18 +1247,15 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .source-detail__summary {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  line-height: 1.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  display: none;
 }
 
 /* ========================================
@@ -1284,6 +1417,18 @@ onUnmounted(() => {
 
 :root.dark .source-detail__title {
   color: #e5e7eb;
+}
+
+/* 暗色：来源新闻展开中的按钮 */
+:root.dark .source-detail__actions {
+  margin-top: 8px;
+}
+
+/* 暗色：高亮 */
+:root.dark .timeline-node--highlight {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25) !important;
+  background: rgba(248, 113, 113, 0.08) !important;
 }
 
 :root.dark .source-detail__summary {

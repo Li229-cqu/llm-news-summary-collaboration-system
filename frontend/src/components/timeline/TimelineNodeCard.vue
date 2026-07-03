@@ -11,22 +11,9 @@
     </div>
 
     <div class="timeline-node-card__title">{{ node.event_title }}</div>
-    <p class="timeline-node-card__summary">{{ node.event_summary }}</p>
-
-    <div v-if="node.event_detail" class="timeline-node-card__detail">
-      <div class="detail-toggle" @click="showDetail = !showDetail">
-        <span>{{ showDetail ? '收起详情' : '展开详情' }}</span>
-        <el-icon :size="14">
-          <component :is="showDetail ? ArrowUp : ArrowDown" />
-        </el-icon>
-      </div>
-      <div v-if="showDetail" class="detail-content">
-        {{ node.event_detail }}
-      </div>
-    </div>
 
     <div v-if="node.keywords?.length" class="timeline-node-card__keywords">
-      <el-tag v-for="(keyword, index) in node.keywords" :key="index" size="small" effect="plain">{{ keyword }}</el-tag>
+      <el-tag v-for="(keyword, index) in node.keywords.slice(0, 3)" :key="index" size="small" effect="plain">{{ keyword }}</el-tag>
     </div>
 
     <div class="timeline-node-card__footer">
@@ -34,22 +21,20 @@
         <span class="timeline-node-card__source-name">{{ node.source_name }}</span>
         <span class="timeline-node-card__source-title">{{ node.source_title }}</span>
       </div>
-      <el-button type="primary" link @click="handleViewSource">查看原文</el-button>
+      <el-button v-if="node.source_news_id" type="primary" link @click="handleViewSource">查看新闻详情</el-button>
+      <span v-else class="timeline-node-card__no-nav">暂无可跳转的来源新闻</span>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import type { TimelineNode } from '@/api/timeline'
 
 const props = defineProps<{
   node: TimelineNode
 }>()
-
-const showDetail = ref(false)
 
 const router = useRouter()
 
@@ -68,6 +53,7 @@ const eventTypeTag = computed(() => {
 })
 
 function handleViewSource() {
+  if (!props.node.source_news_id) return
   router.push(`/news/${props.node.source_news_id}`)
 }
 </script>
@@ -109,36 +95,10 @@ function handleViewSource() {
   font-size: 16px;
   font-weight: 700;
   line-height: 1.5;
-}
-
-.timeline-node-card__summary {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-.timeline-node-card__detail {
-  margin-top: 4px;
-}
-
-.detail-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--color-primary);
-  cursor: pointer;
-}
-
-.detail-content {
-  margin-top: 8px;
-  padding: 12px;
-  background: var(--color-bg);
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.8;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
 }
 
 .timeline-node-card__keywords {
@@ -162,15 +122,19 @@ function handleViewSource() {
 
 .timeline-node-card__source-name,
 .timeline-node-card__source-title {
-  overflow: hidden;
   color: var(--color-text-secondary);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .timeline-node-card__source-title {
   color: var(--color-text-primary);
+}
+
+.timeline-node-card__no-nav {
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
