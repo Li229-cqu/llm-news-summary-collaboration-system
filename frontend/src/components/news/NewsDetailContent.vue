@@ -92,6 +92,8 @@ const hasMeta = computed(() =>
   color: var(--color-text-primary);
   font-size: 30px;
   line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* 分类/话题/标签 */
