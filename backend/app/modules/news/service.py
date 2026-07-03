@@ -455,7 +455,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
         """,
         [news.get("category_id"), news_id],
     )
-    # Build recommended_news with 3-tier fallback: same topic → same category → hot
+    # Build recommended_news with 3-tier fallback: same topic → same category → hot (max 9)
     _RECOMMEND_SELECT = f"""
         SELECT
             n.id,
@@ -489,7 +489,7 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
     category_id = news.get("category_id")
     if topic_id is not None:
         topic_rows = execute_query(
-            _RECOMMEND_SELECT + " AND n.topic_id = %s AND n.id <> %s " + _RECOMMEND_ORDER + " LIMIT 5",
+            _RECOMMEND_SELECT + " AND n.topic_id = %s AND n.id <> %s " + _RECOMMEND_ORDER + " LIMIT 9",
             [topic_id, news_id],
         )
         for row in topic_rows:
@@ -501,8 +501,8 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
                 used_ids.add(row_id)
         logger.info("[recommended_news] same topic_id=%d: got %d items", topic_id, len(recommended_news))
 
-    if len(recommended_news) < 5 and category_id is not None:
-        remaining = 5 - len(recommended_news)
+    if len(recommended_news) < 9 and category_id is not None:
+        remaining = 9 - len(recommended_news)
         exclude_ids = list(used_ids)
         placeholders = ",".join(["%s"] * len(exclude_ids))
         category_rows = execute_query(
@@ -516,8 +516,8 @@ def _db_news_detail(news_id: int, current_user: Optional[Any] = None) -> dict[st
             used_ids.add(int(row["id"]))
         logger.info("[recommended_news] same category_id=%d: got %d items (total=%d)", category_id, len(category_rows), len(recommended_news))
 
-    if len(recommended_news) < 5:
-        remaining = 5 - len(recommended_news)
+    if len(recommended_news) < 9:
+        remaining = 9 - len(recommended_news)
         exclude_ids = list(used_ids)
         placeholders = ",".join(["%s"] * len(exclude_ids))
         hot_rows = execute_query(

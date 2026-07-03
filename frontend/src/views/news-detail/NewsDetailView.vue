@@ -518,6 +518,11 @@ onMounted(() => {
   width: 320px;
   flex: 0 0 320px;
   min-width: 0;
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 
 .news-detail-card {
