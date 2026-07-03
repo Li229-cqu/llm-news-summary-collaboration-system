@@ -382,7 +382,7 @@ onMounted(async () => {
 .panel-header p { margin:4px 0 0; color:#909399; font-size:13px }
 
 .summary-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:16px }
-.summary-card { background:#f5f7fa; border-radius:8px; padding:14px 12px; display:flex; flex-direction:column; gap:4px }
+.summary-card { background: var(--color-bg); border-radius:8px; padding:14px 12px; display:flex; flex-direction:column; gap:4px }
 .summary-card span { font-size:12px; color:#909399 }
 .summary-card strong { font-size:20px }
 
@@ -390,7 +390,7 @@ onMounted(async () => {
 .pager { margin-top:16px; justify-content:flex-end }
 
 .behavior-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px }
-.behavior-item { background:#f5f7fa; border-radius:8px; padding:16px 12px; text-align:center; display:flex; flex-direction:column; gap:4px }
+.behavior-item { background: var(--color-bg); border-radius:8px; padding:16px 12px; text-align:center; display:flex; flex-direction:column; gap:4px }
 .behavior-num { font-size:22px; font-weight:600; color:#303133 }
 .behavior-label { font-size:12px; color:#909399 }
 </style>

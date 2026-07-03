@@ -194,7 +194,7 @@ defineExpose({ reset, activate })
   background: #fee2e2;
 }
 .trigger-desc {
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-left: auto;
 }
@@ -204,7 +204,7 @@ defineExpose({ reset, activate })
   border: 1px solid #f5dfdf;
   border-radius: 8px;
   padding: 12px;
-  background: #fafcff;
+  background: var(--color-bg-hover);
 }
 
 .search-inline {
@@ -229,7 +229,7 @@ defineExpose({ reset, activate })
   justify-content: center;
   gap: 8px;
   padding: 24px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -272,7 +272,7 @@ defineExpose({ reset, activate })
 
 .result-summary {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -280,7 +280,7 @@ defineExpose({ reset, activate })
 
 .result-meta {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .result-cover {
@@ -336,6 +336,6 @@ defineExpose({ reset, activate })
 
 .selected-news-source {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 </style>

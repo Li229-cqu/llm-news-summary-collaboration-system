@@ -283,12 +283,12 @@ onMounted(async () => {
 .create-main { min-width: 0; width: 100%; min-height: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
 .create-card {
   border: 1px solid rgba(210, 222, 238, 0.86); border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(34, 78, 130, 0.08); background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(34, 78, 130, 0.08); background: var(--color-bg-card);
   width: 100%;
   flex-shrink: 0;
 }
 .create-card :deep(.el-card__body) { padding: 28px 32px; }
-.create-title { font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 24px; }
+.create-title { font-size: 22px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 24px; }
 .form-section { margin-bottom: 24px; }
 .section-label { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 10px; }
 .input-title :deep(.el-input__wrapper) { height: 48px; border-radius: 8px; }
@@ -297,14 +297,14 @@ onMounted(async () => {
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
 .sidebar-card {
   border: 1px solid rgba(210, 222, 238, 0.86); border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(34, 78, 130, 0.08); background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(34, 78, 130, 0.08); background: var(--color-bg-card);
   width: 100%;
   flex-shrink: 0;
 }
 .sidebar-card :deep(.el-card__body) { padding: 18px 32px; }
-.sidebar-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0 0 12px; }
+.sidebar-title { font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 12px; }
 .tip-list { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 24px; }
-.tip-list li { font-size: 13px; color: #6b7280; line-height: 1.6; }
+.tip-list li { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }
 
 /* 图片上传 */
 .image-upload-area { width: 100%; }
@@ -312,10 +312,12 @@ onMounted(async () => {
 .image-preview-item { position: relative; width: 100px; height: 100px; border-radius: 8px; overflow: hidden; border: 1px solid var(--color-border); flex-shrink: 0; }
 .preview-img { width: 100%; height: 100%; }
 .preview-remove { position: absolute; top: -6px; right: -6px; }
-.image-upload-trigger { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100px; height: 100px; border: 1px dashed #c0d4e8; border-radius: 8px; cursor: pointer; color: #9ca3af; font-size: 12px; gap: 4px; transition: all 0.2s; background: #fafcff; flex-shrink: 0; }
+.image-upload-trigger { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100px; height: 100px; border: 1px dashed #c0d4e8; border-radius: 8px; cursor: pointer; color: var(--color-text-muted); font-size: 12px; gap: 4px; transition: all 0.2s; background: var(--color-bg-hover); flex-shrink: 0; }
 .image-upload-trigger:hover { border-color: #dc2626; color: #dc2626; }
-.image-upload-hint { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+.image-upload-hint { font-size: 12px; color: var(--color-text-muted); margin-top: 8px; }
 
 @media (max-width: 1100px) { .tip-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 768px) { .create-post-page { padding: 12px; } .create-main { padding-right: 0; } .create-card :deep(.el-card__body), .sidebar-card :deep(.el-card__body) { padding: 18px; } .tip-list { grid-template-columns: 1fr; } }
+
+:root.dark .create-post-page { background: var(--color-bg); }
 </style>

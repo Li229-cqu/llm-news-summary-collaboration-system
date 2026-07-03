@@ -733,6 +733,6 @@ onMounted(loadCategories)
 }
 
 :root.dark .app-sidebar__timeline-desc {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 </style>

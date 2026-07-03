@@ -132,7 +132,7 @@ function handleViewSource() {
 }
 
 .timeline-node-card__no-nav {
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 11px;
   white-space: nowrap;
 }

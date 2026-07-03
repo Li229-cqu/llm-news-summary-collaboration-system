@@ -237,7 +237,7 @@ function handleReloadComments() {
 }
 
 .comment-summary-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-border-light) 100%);
   border-radius: 10px;
   padding: 16px;
   margin-bottom: 8px;
@@ -262,7 +262,7 @@ function handleReloadComments() {
 }
 
 .comment-summary-card__content p {
-  color: #333;
+  color: var(--color-text-primary);
   line-height: 1.6;
   margin: 0;
 }

@@ -461,12 +461,12 @@ onMounted(() => {
 .section-alert { margin-bottom: 16px; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
 .summary-grid { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-.summary-card { background: #f5f7fa; border-radius: 6px; padding: 14px 20px; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.summary-card { background: var(--color-bg); border-radius: 6px; padding: 14px 20px; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .sc-label { font-size: 13px; color: #909399; }
 .sc-value { font-size: 24px; font-weight: 600; color: #303133; }
 .hint-text { color: #909399; font-size: 13px; margin-left: 8px; }
 .mt16 { margin-top: 16px; }
 .mr8 { margin-right: 8px; }
 .mb8 { margin-bottom: 8px; }
-.json-view { background: #f5f7fa; padding: 12px; border-radius: 4px; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+.json-view { background: var(--color-bg); padding: 12px; border-radius: 4px; font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
 </style>

@@ -372,7 +372,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .empty-state {
   padding: 40px 20px;
   text-align: center;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   border: 1px dashed #e5e7eb;
 }
@@ -387,7 +387,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .empty-description {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .result-content {
@@ -418,7 +418,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
   flex-wrap: wrap;
   gap: 16px;
   padding: 12px 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
 }
 
@@ -430,7 +430,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .risk-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -466,7 +466,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .coverage-text {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   min-width: 35px;
 }
 
@@ -481,7 +481,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
   align-items: flex-start;
   justify-content: space-between;
   padding: 10px 12px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   border: 1px solid #f3f4f6;
   transition: border-color 0.2s ease;
@@ -501,7 +501,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .title-number {
   flex-shrink: 0;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -516,7 +516,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .copy-button {
   flex-shrink: 0;
   margin-left: 8px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   padding: 4px 8px;
   font-size: 12px;
 
@@ -528,7 +528,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .summary-item {
   position: relative;
   padding: 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
 }
 
@@ -558,7 +558,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 .copy-button-summary {
   display: block;
   margin-top: 10px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   padding: 4px 8px;
   font-size: 12px;
 
@@ -606,7 +606,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .evidence-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-weight: 500;
   margin-bottom: 4px;
   display: block;
@@ -617,7 +617,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
   line-height: 1.6;
   color: #374151;
   padding: 12px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   margin: 0;
 }
@@ -642,7 +642,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .evidence-item {
   padding: 12px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
 }
 
@@ -661,12 +661,12 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .evidence-confidence {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .evidence-position {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
@@ -679,7 +679,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .evidence-similarity {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #f3f4f6;
@@ -687,10 +687,10 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
 
 .no-evidence {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   text-align: center;
   padding: 24px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
 }
 </style>

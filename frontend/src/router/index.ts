@@ -41,7 +41,19 @@ const routes: RouteRecordRaw[] = [
         path: 'ai-generate',
         name: 'ai-generate',
         component: () => import('@/views/ai-generate/AIGenerateView.vue'),
-        meta: { title: 'AI 标题摘要生成', requiresAuth: true },
+        meta: { title: 'AI 新闻智能编辑', requiresAuth: true },
+      },
+      {
+        path: 'ai/news-editor',
+        name: 'news-editor-agent',
+        component: () => import('@/views/news-editor/NewsEditorAgentView.vue'),
+        meta: { title: 'AI 新闻智能编辑', requiresAuth: true },
+      },
+      {
+        path: 'ai/agent-observability',
+        name: 'agent-observability',
+        component: () => import('@/views/agent/AgentObservabilityDashboard.vue'),
+        meta: { title: 'Agent 可观测面板', requiresAuth: true },
       },
       {
         path: 'ai-generate/history',

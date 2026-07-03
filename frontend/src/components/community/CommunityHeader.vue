@@ -85,7 +85,7 @@ function handleClear() {
 <style scoped>
 .community-header { margin-bottom: 0; flex-shrink: 0; padding: 12px 32px 0; }
 .header-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.community-title { margin: 0; color: #111827; font-size: 20px; font-weight: 800; line-height: 1.3; display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.community-title { margin: 0; color: var(--color-text-primary); font-size: 20px; font-weight: 800; line-height: 1.3; display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
 .title-icon { color: #dc2626; font-size: 16px; }
 .community-desc { display: none; }
 .action-btn { height: 36px; border-radius: 6px; font-size: 14px; font-weight: 600; flex-shrink: 0; }

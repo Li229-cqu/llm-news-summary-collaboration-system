@@ -120,11 +120,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 
 const router = useRouter()
+
+const SCROLL_KEY = 'timeline:list-scroll'
 
 // ── 事件话题 ──
 const topics = ref<TimelineTopic[]>([])
@@ -164,7 +166,15 @@ async function loadTopics() {
   }
 }
 
+function getScrollY(): number {
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+}
+
 function handleViewTopic(topic: TimelineTopic) {
+  // 保存滚动位置
+  try {
+    sessionStorage.setItem(SCROLL_KEY, String(getScrollY()))
+  } catch { /* ignore */ }
   router.push({
     name: 'timeline-detail',
     params: { topicId: topic.topic_id },
@@ -172,8 +182,46 @@ function handleViewTopic(topic: TimelineTopic) {
   })
 }
 
-onMounted(() => {
-  void loadTopics()
+/** 恢复滚动位置（重试最多 5 次直到页面高度足够） */
+function restoreScroll() {
+  try {
+    const saved = sessionStorage.getItem(SCROLL_KEY)
+    if (!saved) return
+    const y = parseInt(saved, 10)
+    if (y <= 0) return
+    sessionStorage.removeItem(SCROLL_KEY)
+
+    let attempts = 0
+    const maxAttempts = 5
+    function tryScroll() {
+      attempts++
+      const maxY = Math.max(
+        document.documentElement.scrollHeight - window.innerHeight,
+        document.body.scrollHeight - window.innerHeight,
+        0,
+      )
+      if (attempts >= maxAttempts || maxY >= y) {
+        // 页面已足够高，或已达最大重试次数
+        window.scrollTo({ top: y, behavior: 'auto' })
+        document.documentElement.scrollTop = y
+      } else {
+        // 页面还不够高，等一等再试
+        setTimeout(tryScroll, 200)
+      }
+    }
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        setTimeout(tryScroll, 100)
+      })
+    })
+  } catch { /* ignore */ }
+}
+
+onMounted(async () => {
+  await loadTopics()
+  // 数据加载 + DOM 更新后再恢复滚动
+  await nextTick()
+  restoreScroll()
 })
 </script>
 
@@ -341,7 +389,7 @@ onMounted(() => {
 
 .timeline-hero__subtitle {
   margin: 8px 0 0;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -351,7 +399,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-top: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -607,7 +655,7 @@ onMounted(() => {
 }
 
 :root.dark .timeline-topic-card__summary {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .timeline-topic-card__keyword {

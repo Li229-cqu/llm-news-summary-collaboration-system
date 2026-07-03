@@ -200,14 +200,14 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   letter-spacing: -0.5px;
 }
 
 .header-text p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #666666;
+  color: var(--color-text-secondary);
 }
 
 .main-content {
@@ -245,7 +245,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .record-count {
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 /* 空状态 */
@@ -275,7 +275,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 .empty-desc {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 /* 加载中 */
@@ -285,7 +285,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   justify-content: center;
   gap: 8px;
   padding: 60px 20px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 14px;
   background: var(--color-bg-card);
   border-radius: 10px;
@@ -329,7 +329,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 .card-ai-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
@@ -338,7 +338,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .card-source-title {
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
   white-space: nowrap;
   overflow: hidden;
@@ -354,7 +354,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .meta-text {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 
 .card-actions {
@@ -366,7 +366,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 .card-actions :deep(.el-button) {
   padding: 4px 10px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .card-actions :deep(.el-button:hover) {
@@ -397,7 +397,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s ease;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
 }
 
 .format-item:hover {
@@ -425,7 +425,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .format-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 
