@@ -134,6 +134,7 @@ export interface AdminPendingItem {
   submitter: string
   source: string
   category_name: string
+  tags?: string[]
   status: number
   status_label: string
   create_time?: string | null
@@ -603,6 +604,7 @@ export interface AdminAICallRecordListResponse {
   page: number
   page_size: number
   summary: AdminAICallRecordSummary
+  fallback_supported: boolean
 }
 
 export interface AdminAICallRecordQueryParams {
@@ -1105,14 +1107,6 @@ export async function updateAdminHotTopicRank(hotId: number, rankNo: number): Pr
   return request.post(`/api/admin/hot-topics/${hotId}/rank`, { rank_no: rankNo })
 }
 
-export async function pinAdminHotTopic(hotId: number): Promise<AdminHotTopicActionResult> {
-  return request.post(`/api/admin/hot-topics/${hotId}/pin`)
-}
-
-export async function unpinAdminHotTopic(hotId: number): Promise<AdminHotTopicActionResult> {
-  return request.delete(`/api/admin/hot-topics/${hotId}/pin`)
-}
-
 export async function hideAdminHotTopic(hotId: number): Promise<AdminHotTopicActionResult> {
   return request.post(`/api/admin/hot-topics/${hotId}/hide`)
 }
@@ -1509,10 +1503,6 @@ export async function getAdminOpsBackups(params: AdminBackupQueryParams = {}): P
       page_size: params.page_size ?? 10,
     },
   })
-}
-
-export async function createAdminOpsBackup(): Promise<AdminBackupActionResult> {
-  return request.post('/api/admin/ops/backups')
 }
 
 export async function getAdminOpsStorage(): Promise<AdminStorageResponse> {

@@ -21,7 +21,7 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 
 const route = useRoute()
-const isHomeRoute = computed(() => route.name === 'home' || route.path === '/home')
+const isHomeRoute = computed(() => route.name === 'home' || route.path === '/home' || route.path.startsWith('/timeline'))
 const isCommunityRoute = computed(() => route.name === 'community' || route.name === 'community-create-post')
 const isAdminRoute = computed(() => route.name === 'admin')
 </script>

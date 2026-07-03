@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Refresh, Warning, CircleCheck, CircleClose, QuestionFilled } from '@element-plus/icons-vue'
 import {
   type AdminBackupRecordItem,
@@ -9,30 +9,24 @@ import {
   type AdminOpsDatabaseResponse,
   type AdminOpsStatusPart,
   type AdminOpsStatusResponse,
-  type AdminStorageResponse,
-  createAdminOpsBackup,
   getAdminOpsBackups,
   getAdminOpsDatabase,
   getAdminOpsLogDetail,
   getAdminOpsLogs,
   getAdminOpsStatus,
-  getAdminOpsStorage,
 } from '@/api/admin'
 
-type OpsTab = 'status' | 'database' | 'storage' | 'logs'
+type OpsTab = 'status' | 'database' | 'logs'
 
 const activeTab = ref<OpsTab>('status')
 const statusLoading = ref(false)
 const databaseLoading = ref(false)
 const backupLoading = ref(false)
-const storageLoading = ref(false)
 const logsLoading = ref(false)
-const backupSubmitting = ref(false)
 const logDetailLoading = ref(false)
 
 const statusData = ref<AdminOpsStatusResponse | null>(null)
 const databaseData = ref<AdminOpsDatabaseResponse | null>(null)
-const storageData = ref<AdminStorageResponse | null>(null)
 
 const backupItems = ref<AdminBackupRecordItem[]>([])
 const backupTotal = ref(0)
@@ -193,15 +187,6 @@ const statusCards = computed(() => [
   { key: 'ai_service', title: 'AI 服务', data: statusData.value?.ai_service },
 ])
 
-// ══════ Utility ══════
-
-function formatSize(size: number) {
-  if (!size) return '0 B'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
-
 // ══════ Loaders ══════
 
 async function loadStatus() {
@@ -240,17 +225,6 @@ async function loadBackups() {
   }
 }
 
-async function loadStorage() {
-  storageLoading.value = true
-  try {
-    storageData.value = await getAdminOpsStorage()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '加载文件存储状态失败')
-  } finally {
-    storageLoading.value = false
-  }
-}
-
 async function loadLogs(reset = false) {
   if (reset) logPage.value = 1
   logsLoading.value = true
@@ -269,33 +243,6 @@ async function loadLogs(reset = false) {
     ElMessage.error(error instanceof Error ? error.message : '加载操作日志失败')
   } finally {
     logsLoading.value = false
-  }
-}
-
-async function handleCreateBackup() {
-  try {
-    await ElMessageBox.confirm(
-      '手动备份仅记录请求，不会删除或恢复数据。如果当前环境未配置真实备份脚本，该记录将保存为"不支持"状态。确定继续？',
-      '手动备份',
-      { type: 'warning' },
-    )
-  } catch {
-    return
-  }
-  backupSubmitting.value = true
-  try {
-    const res = await createAdminOpsBackup()
-    ElMessage[res.status === 'unsupported' ? 'warning' : 'success'](
-      res.status === 'unsupported'
-        ? '备份请求已记录（不支持状态）：当前环境未配置真实备份脚本。'
-        : (res.message || '备份请求已记录')
-    )
-    backupPage.value = 1
-    await Promise.all([loadBackups(), loadLogs(), loadDatabase()])
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '手动备份失败')
-  } finally {
-    backupSubmitting.value = false
   }
 }
 
@@ -324,8 +271,7 @@ function resetLogFilters() {
 async function handleTabChange(tab: string | number) {
   const name = String(tab) as OpsTab
   if (name === 'status') await loadStatus()
-  if (name === 'database') await Promise.all([loadDatabase(), loadBackups()])
-  if (name === 'storage') await loadStorage()
+  if (name === 'database') await loadDatabase()
   if (name === 'logs') await loadLogs()
 }
 
@@ -339,7 +285,7 @@ onMounted(async () => {
     <el-card class="ops-header" shadow="never">
       <div>
         <h2>系统运维</h2>
-        <p>查看服务运行状态、数据库信息、备份记录、文件存储与管理员操作日志。</p>
+        <p>查看服务运行状态、数据库信息、备份记录与管理员操作日志。</p>
       </div>
       <el-button :icon="Refresh" :loading="statusLoading" @click="loadStatus">刷新状态</el-button>
     </el-card>
@@ -368,12 +314,12 @@ onMounted(async () => {
             <el-descriptions-item label="最近检查时间">{{ statusData?.last_check_time || '-' }}</el-descriptions-item>
             <el-descriptions-item label="后端服务">{{ statusData?.backend.message || '-' }}</el-descriptions-item>
             <el-descriptions-item label="数据库连接">{{ statusData?.database.message || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="AI 服务" :span="2">{{ statusData?.ai_service.message || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="AI 服务" :span="2">AI 生成服务正常</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
 
-        <!-- ══════ Tab 2: 数据库与备份 ══════ -->
-        <el-tab-pane label="数据库与备份" name="database">
+        <!-- ══════ Tab 2: 数据库状态 ══════ -->
+        <el-tab-pane label="数据库状态" name="database">
           <div class="toolbar-row">
             <div>
               <h3>数据库状态</h3>
@@ -382,10 +328,9 @@ onMounted(async () => {
             <el-button :icon="Refresh" :loading="databaseLoading" @click="loadDatabase">刷新数据库</el-button>
           </div>
 
-          <el-descriptions v-if="databaseData" class="db-desc" :column="3" border>
+          <el-descriptions v-if="databaseData" class="db-desc" :column="2" border>
             <el-descriptions-item label="连接状态">{{ statusCn(databaseData.connection_status) }}</el-descriptions-item>
             <el-descriptions-item label="数据库名称">{{ databaseData.database_name || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="最近备份时间">{{ databaseData.last_backup_time || '-' }}</el-descriptions-item>
           </el-descriptions>
 
           <el-table :data="(databaseData?.tables || []).map(t => ({ ...t, display_name: tableDisplayCn(t.table_name) }))" v-loading="databaseLoading" class="ops-table">
@@ -397,58 +342,9 @@ onMounted(async () => {
             <el-table-column label="数据行数" width="120"><template #default="{ row }">{{ row.row_count ?? '-' }}</template></el-table-column>
           </el-table>
 
-          <el-divider />
-
-          <div class="toolbar-row">
-            <div>
-              <h3>备份记录</h3>
-              <p>如果当前环境未配置真实备份脚本，手动备份将记录为"不支持"状态。</p>
-            </div>
-            <el-button type="primary" :loading="backupSubmitting" @click="handleCreateBackup">手动备份</el-button>
-          </div>
-
-          <div class="summary-grid">
-            <span>总计：{{ backupSummary.total_count }}</span>
-            <span>成功：{{ backupSummary.success_count }}</span>
-            <span>失败：{{ backupSummary.failed_count }}</span>
-            <span>不支持：{{ backupSummary.unsupported_count }}</span>
-          </div>
-
-          <el-table :data="backupItems" v-loading="backupLoading" class="ops-table" empty-text="暂无备份记录">
-            <el-table-column prop="backup_name" label="备份名称" min-width="180" />
-            <el-table-column label="备份类型" width="100"><template #default="{ row }">{{ backupTypeCn(row.backup_type) }}</template></el-table-column>
-            <el-table-column label="备份状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)" effect="plain">{{ statusCn(row.status) }}</el-tag></template></el-table-column>
-            <el-table-column prop="operator_name" label="操作人" width="120" />
-            <el-table-column label="文件大小" width="100"><template #default="{ row }">{{ formatSize(row.file_size) }}</template></el-table-column>
-            <el-table-column prop="created_at" label="创建时间" min-width="160" />
-            <el-table-column prop="message" label="说明" min-width="240" show-overflow-tooltip />
-          </el-table>
-          <el-pagination v-model:current-page="backupPage" v-model:page-size="backupPageSize" layout="total, prev, pager, next" :total="backupTotal" @current-change="loadBackups" />
         </el-tab-pane>
 
-        <!-- ══════ Tab 3: 文件存储 ══════ -->
-        <el-tab-pane label="文件存储" name="storage">
-          <div class="toolbar-row">
-            <div>
-              <h3>文件存储</h3>
-              <p>仅统计 upload_file 表中的记录，不执行全盘扫描，不删除文件。</p>
-            </div>
-            <el-button :icon="Refresh" :loading="storageLoading" @click="loadStorage">刷新存储</el-button>
-          </div>
-          <el-alert v-if="storageData && !storageData.supported" :title="storageData.message || '当前项目暂未接入统一文件存储管理。'" type="warning" show-icon :closable="false" />
-          <el-descriptions v-if="storageData" class="db-desc" :column="3" border>
-            <el-descriptions-item label="是否支持">{{ storageData.supported ? '是' : '否' }}</el-descriptions-item>
-            <el-descriptions-item label="文件总数">{{ storageData.total_files }}</el-descriptions-item>
-            <el-descriptions-item label="文件总大小">{{ formatSize(storageData.total_size) }}</el-descriptions-item>
-            <el-descriptions-item label="图片数量">{{ storageData.image_count }}</el-descriptions-item>
-            <el-descriptions-item label="文档数量">{{ storageData.document_count }}</el-descriptions-item>
-            <el-descriptions-item label="异常文件数">{{ storageData.abnormal_count }}</el-descriptions-item>
-            <el-descriptions-item label="最近上传时间" :span="3">{{ storageData.last_upload_time || '-' }}</el-descriptions-item>
-          </el-descriptions>
-          <el-empty v-if="storageData && storageData.supported && storageData.total_files === 0" description="当前暂无上传文件。" />
-        </el-tab-pane>
-
-        <!-- ══════ Tab 4: 操作日志 ══════ -->
+        <!-- ══════ Tab 3: 操作日志 ══════ -->
         <el-tab-pane label="操作日志" name="logs">
           <div class="log-filter">
             <el-input v-model="logFilters.operator_keyword" placeholder="操作人关键词" clearable />

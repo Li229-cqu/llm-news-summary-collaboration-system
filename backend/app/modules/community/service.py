@@ -96,6 +96,23 @@ def _db_post_comment_has_media_json() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
+def _community_post_has_images_column() -> bool:
+    try:
+        row = execute_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'community_post'
+              AND column_name = 'images'
+            """,
+        )
+        return bool(int(row.get("cnt") or 0)) if row else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _normalize_media_json(value: Any) -> Any:
     if value in (None, ""):
         return None
@@ -263,6 +280,7 @@ def _post_row_to_item(
         normalize_text(row.get("author")),
     )
     tags = _parse_json_list(row.get("tags"))
+    images = _parse_json_list(row.get("images"))
 
     return {
         "id": int(row.get("id") or 0),
@@ -275,6 +293,7 @@ def _post_row_to_item(
         "related_news_id": row.get("related_news_id"),
         "related_news_title": normalize_text(row.get("related_news_title")),
         "topic_id": row.get("topic_id"),
+        "images": images,
         "like_count": like_count,
         "comment_count": comment_count,
         "favorite_count": favorite_count,
@@ -468,13 +487,19 @@ def _db_comment_liked_ids(user_id: int, comment_ids: list[int]) -> set[int]:
     return {int(row["target_id"]) for row in rows}
 
 
-def _db_posts_total(keyword: Optional[str] = None) -> int:
+def _db_posts_total(
+    keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+) -> int:
     where_sql = ["cp.status = 1"]
     params: list[Any] = []
     if keyword and keyword.strip():
         like_value = f"%{keyword.strip()}%"
         where_sql.append("(cp.title LIKE %s OR cp.content LIKE %s)")
         params.extend([like_value, like_value])
+    if tag and tag.strip():
+        where_sql.append("JSON_CONTAINS(cp.tags, %s)")
+        params.append(json.dumps(tag))
     row = execute_one(
         f"""
         SELECT COUNT(*) AS total
@@ -490,9 +515,11 @@ def _db_get_posts(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> dict[str, Any] | None:
-    total = _db_posts_total(keyword=keyword)
+    total = _db_posts_total(keyword=keyword, tag=tag)
     if total == 0:
         return None
 
@@ -504,7 +531,22 @@ def _db_get_posts(
         like_value = f"%{keyword.strip()}%"
         clauses.append("(cp.title LIKE %s OR cp.content LIKE %s)")
         params.extend([like_value, like_value])
+    if tag and tag.strip():
+        clauses.append("JSON_CONTAINS(cp.tags, %s)")
+        params.append(json.dumps(tag))
 
+    # 排序方式
+    if sort == "latest":
+        order_clause = "cp.created_at DESC, cp.id DESC"
+    else:
+        order_clause = """COALESCE(cp.heat_score, 0) DESC,
+                         COALESCE(cp.comment_count, 0) DESC,
+                         COALESCE(cp.like_count, 0) DESC,
+                         COALESCE(cp.favorite_count, 0) DESC,
+                         cp.created_at DESC,
+                         cp.id DESC"""
+
+    images_expr = "cp.images" if _community_post_has_images_column() else "'[]'"
     rows = execute_query(
         f"""
         SELECT
@@ -518,6 +560,7 @@ def _db_get_posts(
             cp.related_news_id,
             COALESCE(n.title, '') AS related_news_title,
             cp.topic_id,
+            {images_expr} AS images,
             cp.like_count,
             cp.comment_count,
             cp.favorite_count,
@@ -531,7 +574,7 @@ def _db_get_posts(
         LEFT JOIN `user` u ON u.id = cp.user_id
         LEFT JOIN news n ON n.id = cp.related_news_id
         WHERE {" AND ".join(clauses)}
-        ORDER BY cp.heat_score DESC, cp.created_at DESC, cp.id DESC
+        ORDER BY {order_clause}
         LIMIT %s OFFSET %s
         """,
         params + [normalized_page_size, (normalized_page - 1) * normalized_page_size],
@@ -577,8 +620,10 @@ def _db_get_posts(
 
 
 def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, Any] | None:
+    images_expr = "cp.images" if _community_post_has_images_column() else "'[]'"
+    tags_expr = "cp.tags" if _community_post_has_tags_column() else "NULL"
     row = execute_one(
-        """
+        f"""
         SELECT
             cp.id,
             cp.user_id,
@@ -598,13 +643,14 @@ def _db_get_post(post_id: int, current_user: Optional[Any] = None) -> dict[str, 
             cp.status,
             cp.created_at AS create_time,
             cp.updated_at AS update_time,
-            {tags_expr} AS tags
+            {tags_expr} AS tags,
+            {images_expr} AS images
         FROM community_post cp
         LEFT JOIN `user` u ON u.id = cp.user_id
         LEFT JOIN news n ON n.id = cp.related_news_id
         WHERE cp.id = %s AND cp.status = 1
         LIMIT 1
-        """.format(tags_expr="cp.tags" if _community_post_has_tags_column() else "NULL"),
+        """,
         [post_id],
     )
     if row is None:
@@ -1102,6 +1148,7 @@ def _post_create_row_from_request(request: CreatePostRequest, current_user: Opti
         "create_time": _now_text(),
         "update_time": _now_text(),
         "tags": request.tags or [],
+        "images": request.images or [],
         "author": _current_user_name(current_user),
         "author_id": user_id or 0,
         "created_at": _now_text(),
@@ -1122,28 +1169,50 @@ def _insert_post_db(request: CreatePostRequest, current_user: Optional[Any]) -> 
         raise AppException(code=401, message="未登录或登录状态已失效")
 
     validated_tags = _validate_tags(request.tags or [])
+    images_json = json.dumps(request.images or [], ensure_ascii=False) if request.images else "[]"
 
     connection = get_connection()
     try:
         with connection.cursor() as cursor:
             if _community_post_has_tags_column():
-                cursor.execute(
-                    """
-                    INSERT INTO community_post (
-                        user_id, title, content, related_news_id, topic_id,
-                        like_count, comment_count, favorite_count, heat_score,
-                        status, created_at, updated_at, tags
-                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
-                    """,
-                    [
-                        user_id,
-                        request.title,
-                        request.content,
-                        request.related_news_id,
-                        request.topic_id,
-                        json.dumps(validated_tags, ensure_ascii=False),
-                    ],
-                )
+                has_images = _community_post_has_images_column()
+                if has_images:
+                    cursor.execute(
+                        """
+                        INSERT INTO community_post (
+                            user_id, title, content, related_news_id, topic_id,
+                            like_count, comment_count, favorite_count, heat_score,
+                            status, created_at, updated_at, tags, images
+                        ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s, %s)
+                        """,
+                        [
+                            user_id,
+                            request.title,
+                            request.content,
+                            request.related_news_id,
+                            request.topic_id,
+                            json.dumps(validated_tags, ensure_ascii=False),
+                            images_json,
+                        ],
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO community_post (
+                            user_id, title, content, related_news_id, topic_id,
+                            like_count, comment_count, favorite_count, heat_score,
+                            status, created_at, updated_at, tags
+                        ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, NOW(), NOW(), %s)
+                        """,
+                        [
+                            user_id,
+                            request.title,
+                            request.content,
+                            request.related_news_id,
+                            request.topic_id,
+                            json.dumps(validated_tags, ensure_ascii=False),
+                        ],
+                    )
             else:
                 cursor.execute(
                     """
@@ -1212,6 +1281,7 @@ def create_post(request: CreatePostRequest, current_user: Optional[Any] = None) 
             "create_time": post["create_time"],
             "update_time": post["update_time"],
             "tags": request.tags or [],
+            "images": request.images or [],
         }
     )
     return CommunityPost(**post)
@@ -1221,10 +1291,12 @@ def get_post_list(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> PostListResponse:
     try:
-        result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+        result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, tag=tag, sort=sort, current_user=current_user)
         if result is not None:
             return PostListResponse(**result)
     except Exception as exc:  # noqa: BLE001
@@ -2008,6 +2080,7 @@ def _mock_create_post(request: CreatePostRequest, current_user: Optional[Any]) -
         "create_time": now,
         "update_time": now,
         "tags": validated_tags,
+        "images": request.images or [],
         "author": _current_user_name(current_user),
         "author_id": _current_user_id(current_user) or 0,
         "created_at": now,
@@ -2272,11 +2345,13 @@ def get_post_list(
     page: int = 1,
     page_size: int = 10,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = "hot",
     current_user: Optional[Any] = None,
 ) -> PostListResponse:
     try:
         if _db_has_posts():
-            result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, current_user=current_user)
+            result = _db_get_posts(page=page, page_size=page_size, keyword=keyword, tag=tag, sort=sort, current_user=current_user)
             if result is not None:
                 return PostListResponse(**result)
     except Exception as exc:  # noqa: BLE001
@@ -2594,6 +2669,39 @@ def get_hot_tags(limit: int = 10) -> list[dict[str, Any]]:
         return []
 
 
+def _get_all_categories() -> list[dict[str, Any]]:
+    try:
+        rows = execute_query(
+            """
+            SELECT id, name, code, description
+            FROM news_category
+            WHERE status = 1
+            ORDER BY sort ASC, id ASC
+            """
+        )
+        return rows or []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _get_news_by_category(category_id: int, limit: int = 10) -> list[dict[str, Any]]:
+    try:
+        rows = execute_query(
+            """
+            SELECT n.id, n.title, n.summary, n.content, n.category_id, nc.name AS category_name
+            FROM news n
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            WHERE n.status = 1 AND n.category_id = %s
+            ORDER BY n.publish_time DESC, n.id DESC
+            LIMIT %s
+            """,
+            [category_id, limit],
+        )
+        return rows or []
+    except Exception:  # noqa: BLE001
+        return []
+
+
 async def ai_news_helper(question: str) -> AIHelperResponse:
     """AI 新闻助手：基于系统内容提供智能回答。"""
     import httpx
@@ -2602,38 +2710,60 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
     from app.modules.community.service import get_post_list, get_hot_search
 
     try:
-        news_list = get_news_list(page=1, page_size=10)
-        hot_news = get_hot_news(limit=5)
-        posts = get_post_list(page=1, page_size=10)
-        hot_topics = get_hot_search(limit=5)
+        news_list = get_news_list(page=1, page_size=50)
+        hot_news = get_hot_news(limit=20)
+        posts = get_post_list(page=1, page_size=30)
+        hot_topics = get_hot_search(limit=20)
+        categories = _get_all_categories()
 
         news_context = "\n".join([
-            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
-            for n in news_list.get("list", [])[:5]
+            f"新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:300]}"
+            for n in news_list.get("list", [])[:30]
         ])
 
         hot_news_context = "\n".join([
-            f"热点新闻 {n['id']}: {n['title']}"
-            for n in hot_news[:3]
+            f"热点新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:150]}"
+            for n in hot_news[:15]
         ])
 
         post_context = "\n".join([
-            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}"
-            for p in posts.list[:5]
+            f"社区帖子 {p.id}: {p.title} - {p.content[:200]}"
+            for p in posts.list[:15]
         ])
 
         topic_context = "\n".join([
             f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
-            for t in hot_topics[:3]
+            for t in hot_topics[:15]
         ])
+
+        category_context = "\n".join([
+            f"分类 {c['id']}: {c['name']} ({c['code']}) - {c.get('description', '')}"
+            for c in categories
+        ])
+
+        category_news_context = ""
+        for category in categories:
+            cat_news = _get_news_by_category(category["id"], limit=5)
+            if cat_news:
+                cat_news_lines = "\n".join([
+                    f"  - 新闻 {n['id']}: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:200]}"
+                    for n in cat_news
+                ])
+                category_news_context += f"\n【{category['name']}】\n{cat_news_lines}\n"
 
         system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
 
-【系统新闻内容】
+【新闻分类】
+{category_context}
+
+【最新新闻】
 {news_context}
 
 【热点新闻】
 {hot_news_context}
+
+【各分类新闻】
+{category_news_context}
 
 【社区讨论帖子】
 {post_context}
@@ -2645,7 +2775,7 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
 
         ai_service_url = f"{settings.ai_service_url}/ai/chat"
         logger.info(f"🚀 [REAL API] 调用 AI 服务生成新闻助手回答: {ai_service_url}")
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 ai_service_url,
                 json={
@@ -2668,8 +2798,35 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
         logger.warning(f"❌ [REAL API] AI 服务调用失败，回退到关键词匹配：{exc}")
 
     logger.info("🤖 [FALLBACK] 使用关键词匹配回答")
-    news_list = get_news_list(page=1, page_size=10)
-    hot_topics = get_hot_search(limit=5)
+    news_list = get_news_list(page=1, page_size=50)
+    hot_topics = get_hot_search(limit=20)
+    categories = _get_all_categories()
+
+    matched_category = None
+    for category in categories:
+        if category["name"] in question or category["code"] in question:
+            matched_category = category
+            break
+
+    if matched_category:
+        cat_news = _get_news_by_category(matched_category["id"], limit=10)
+        if cat_news:
+            news_lines = []
+            for i, n in enumerate(cat_news[:5], 1):
+                content = (n.get("content", "") or n.get("summary", ""))[:100]
+                news_lines.append(f"{i}. **{n['title']}** - {content}")
+            news_text = "\n".join(news_lines)
+            return AIHelperResponse(
+                success=True,
+                message="success",
+                answer=f"根据系统数据，当前【{matched_category['name']}】分类下的新闻包括：\n\n{news_text}\n\n如需了解某条新闻的详细内容，请告诉我。"
+            )
+        else:
+            return AIHelperResponse(
+                success=True,
+                message="success",
+                answer=f"当前【{matched_category['name']}】分类下暂无新闻。"
+            )
 
     keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
     matched_keywords = [k for k in keywords if k in question]
@@ -2677,23 +2834,26 @@ async def ai_news_helper(question: str) -> AIHelperResponse:
     if matched_keywords:
         if "新闻" in question or "摘要" in question:
             news_count = len(news_list.get("list", []))
+            cat_names = ", ".join([c["name"] for c in categories])
             return AIHelperResponse(
                 success=True,
                 message="success",
-                answer=f"系统目前有 {news_count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
+                answer=f"系统目前有 {news_count} 条新闻，涵盖 {cat_names} 等分类。你可以在首页浏览新闻摘要，了解最新资讯。"
             )
         if "热点" in question or "话题" in question:
-            topics = ", ".join([t.title for t in hot_topics[:3]])
+            topics = ", ".join([t.keyword for t in hot_topics[:5]])
             return AIHelperResponse(
                 success=True,
                 message="success",
                 answer=f"当前热点话题有：{topics}。点击查看详细内容。"
             )
         if "社区" in question or "帖子" in question:
+            posts = get_post_list(page=1, page_size=30)
+            post_count = len(posts.list)
             return AIHelperResponse(
                 success=True,
                 message="success",
-                answer="社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
+                answer=f"社区里有 {post_count} 条讨论帖子，你可以浏览热门话题，参与讨论。"
             )
 
     return AIHelperResponse(
@@ -2814,31 +2974,58 @@ def _build_community_context() -> str:
     from app.modules.news.service import get_news_list, get_hot_news
 
     try:
-        news_list = get_news_list(page=1, page_size=10)
-        hot_news = get_hot_news(limit=5)
-        posts = get_post_list(page=1, page_size=10)
-        hot_topics = get_hot_search(limit=5)
+        news_list = get_news_list(page=1, page_size=50)
+        hot_news = get_hot_news(limit=20)
+        posts = get_post_list(page=1, page_size=30)
+        hot_topics = get_hot_search(limit=20)
+        categories = _get_all_categories()
 
-        news_context = "\n".join(
-            f"新闻 {n['id']}: {n['title']} - {n.get('summary', '')[:100]}"
-            for n in (news_list.get("list") or [])[:5]
-        )
-        hot_news_context = "\n".join(
-            f"热点新闻 {n['id']}: {n['title']}" for n in (hot_news or [])[:3]
-        )
-        post_context = "\n".join(
-            f"社区帖子 {p.id}: {p.title} - {p.content[:100]}" for p in (posts.list or [])[:5]
-        )
-        topic_context = "\n".join(
+        news_context = "\n".join([
+            f"新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:300]}"
+            for n in news_list.get("list", [])[:30]
+        ])
+
+        hot_news_context = "\n".join([
+            f"热点新闻 {n['id']} [{n.get('category_name', '')}]: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:150]}"
+            for n in hot_news[:15]
+        ])
+
+        post_context = "\n".join([
+            f"社区帖子 {p.id}: {p.title} - {p.content[:200]}"
+            for p in posts.list[:15]
+        ])
+
+        topic_context = "\n".join([
             f"热点话题 {t.id}: {t.keyword} (搜索量: {t.search_count})"
-            for t in (hot_topics or [])[:3]
-        )
+            for t in hot_topics[:15]
+        ])
 
-        return f"""【系统新闻内容】
+        category_context = "\n".join([
+            f"分类 {c['id']}: {c['name']} ({c['code']}) - {c.get('description', '')}"
+            for c in categories
+        ])
+
+        category_news_context = ""
+        for category in categories:
+            cat_news = _get_news_by_category(category["id"], limit=5)
+            if cat_news:
+                cat_news_lines = "\n".join([
+                    f"  - 新闻 {n['id']}: {n['title']} - {(n.get('content', '') or n.get('summary', ''))[:200]}"
+                    for n in cat_news
+                ])
+                category_news_context += f"\n【{category['name']}】\n{cat_news_lines}\n"
+
+        return f"""【新闻分类】
+{category_context}
+
+【最新新闻】
 {news_context}
 
 【热点新闻】
 {hot_news_context}
+
+【各分类新闻】
+{category_news_context}
 
 【社区讨论帖子】
 {post_context}
@@ -2901,19 +3088,42 @@ async def _call_ai_service(
     # fallback 关键词匹配
     from app.modules.news.service import get_news_list, get_hot_news
 
+    categories = _get_all_categories()
+    matched_category = None
+    for category in categories:
+        if category["name"] in question or category["code"] in question:
+            matched_category = category
+            break
+
+    if matched_category:
+        cat_news = _get_news_by_category(matched_category["id"], limit=10)
+        if cat_news:
+            news_lines = []
+            for i, n in enumerate(cat_news[:5], 1):
+                content = (n.get("content", "") or n.get("summary", ""))[:100]
+                news_lines.append(f"{i}. **{n['title']}** - {content}")
+            news_text = "\n".join(news_lines)
+            return f"根据系统数据，当前【{matched_category['name']}】分类下的新闻包括：\n\n{news_text}\n\n如需了解某条新闻的详细内容，请告诉我。"
+        else:
+            return f"当前【{matched_category['name']}】分类下暂无新闻。"
+
     keywords = ["新闻", "摘要", "热点", "话题", "社区", "帖子", "讨论"]
     matched = [k for k in keywords if k in question]
     if matched:
         if "新闻" in question or "摘要" in question:
-            news_list = get_news_list(page=1, page_size=5)
+            news_list = get_news_list(page=1, page_size=50)
+            categories = _get_all_categories()
             count = len(news_list.get("list") or [])
-            return f"系统目前有 {count} 条新闻。你可以在首页浏览新闻摘要，了解最新资讯。"
+            cat_names = ", ".join([c["name"] for c in categories])
+            return f"系统目前有 {count} 条新闻，涵盖 {cat_names} 等分类。你可以在首页浏览新闻摘要，了解最新资讯。"
         if "热点" in question or "话题" in question:
-            hot_topics = get_hot_search(limit=3)
-            topics = ", ".join(t.title for t in hot_topics[:3])
+            hot_topics = get_hot_search(limit=5)
+            topics = ", ".join(t.keyword for t in hot_topics[:5])
             return f"当前热点话题有：{topics}。点击查看详细内容。"
         if "社区" in question or "帖子" in question:
-            return "社区里有很多有趣的讨论帖子，你可以浏览热门话题，参与讨论。"
+            posts = get_post_list(page=1, page_size=30)
+            post_count = len(posts.list)
+            return f"社区里有 {post_count} 条讨论帖子，你可以浏览热门话题，参与讨论。"
 
     return "谢谢你的提问！我是 AI 新闻助手，可以帮你了解系统中的新闻内容、热点话题和社区讨论。请问有什么可以帮你的？"
 
@@ -3214,6 +3424,316 @@ async def send_ai_message(
     )
 
 
+# ─── AI Session Streaming (SSE) ──────────────────────────────────
+
+
+async def _call_ai_service_stream(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+):
+    """流式调用 AI 服务，逐 chunk yield dict（token/done/error）。"""
+    import httpx
+    from app.core.config import settings
+
+    system_context = _build_community_context()
+
+    history_text = ""
+    if history:
+        parts = []
+        for h in history[-8:]:
+            role_label = "用户" if h["role"] == "user" else "AI助手"
+            content = h["content"][:200]
+            parts.append(f"{role_label}：{content}")
+        if parts:
+            history_text = "\n".join(parts) + "\n"
+
+    system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
+
+{system_context}
+
+【对话历史】
+{history_text}
+
+请根据以上内容回答用户的问题。如果问题与系统内容相关，请引用具体信息进行回答。如果问题与系统内容无关，请礼貌地告知用户当前系统的数据范围。回答要简洁、准确、有价值。"""
+
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/chat/stream"
+        logger.info("🚀 [AI SESSION STREAM] 调用 AI 服务: %s", ai_service_url)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                ai_service_url,
+                json={"question": question, "context": system_prompt},
+            ) as response:
+                if response.status_code != 200:
+                    yield {"error": f"AI 服务返回错误: {response.status_code}", "done": True}
+                    return
+
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        raw = line[len("data: "):]
+                        try:
+                            chunk = json.loads(raw)
+                            yield chunk
+                            if chunk.get("done") or chunk.get("error"):
+                                return
+                        except json.JSONDecodeError:
+                            logger.warning("SSE JSON 解析失败: %s", raw[:100])
+                            continue
+    except Exception as exc:
+        logger.warning("❌ [AI SESSION STREAM] AI 服务调用失败：%s", exc)
+        yield {"error": f"AI 服务不可用: {str(exc)}", "done": True}
+
+
+async def send_ai_message_stream(
+    session_id: int,
+    request: CommunityAiMessageCreate,
+    current_user: UserInfo,
+):
+    """SSE 流式：在已有会话中追问，实时返回 token。"""
+    from fastapi.responses import StreamingResponse
+
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    # 校验 session
+    session_row = execute_one(
+        "SELECT * FROM community_ai_session WHERE id = %s AND status = 'active'",
+        [session_id],
+    )
+    if session_row is None:
+        raise AppException(code=404, message="会话不存在")
+    if int(session_row["user_id"]) != user_id:
+        raise AppException(code=403, message="无权访问该会话")
+
+    # 插入 user 消息
+    user_msg_id = execute_insert(
+        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+         VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+        [session_id, user_id, request.question],
+    )
+
+    # 获取历史消息
+    history_rows = _db_get_recent_messages(session_id, limit=10)
+    history = [{"role": r["role"], "content": r["content"]} for r in history_rows]
+
+    async def event_generator():
+        full_answer: list[str] = []
+
+        try:
+            async for chunk in _call_ai_service_stream(request.question, history):
+                if chunk.get("error"):
+                    # 保存部分内容（如有）
+                    partial = "".join(full_answer)
+                    if partial.strip():
+                        try:
+                            execute_insert(
+                                """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                                 VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                                [session_id, user_id, partial, chunk.get("error", "")],
+                            )
+                            execute_update(
+                                "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                                [session_id],
+                            )
+                        except Exception as db_exc:
+                            logger.error("保存部分 AI 回答失败: %s", db_exc)
+                    yield f"data: {json.dumps({'error': chunk['error'], 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                if chunk.get("done"):
+                    # 保存完整回答到 DB
+                    answer_text = "".join(full_answer) or "AI 服务暂时无回复"
+                    try:
+                        assistant_msg_id = execute_insert(
+                            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+                             VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+                            [session_id, user_id, answer_text],
+                        )
+                        execute_update(
+                            "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                            [session_id],
+                        )
+
+                        # 重新读取 session
+                        updated_row = execute_one(
+                            "SELECT * FROM community_ai_session WHERE id = %s", [session_id]
+                        )
+                        message_count = _db_get_session_message_count(session_id)
+                        last_msg = _db_get_session_last_message(session_id)
+                        preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+                        session_item = CommunityAiSessionItem(
+                            **_session_row_to_item(updated_row, message_count=message_count, last_message_preview=preview)
+                        )
+
+                        yield f"data: {json.dumps({'done': True, 'message_id': assistant_msg_id, 'session_id': session_id, 'content': answer_text, 'session': session_item.model_dump()}, ensure_ascii=False)}\n\n"
+                    except Exception as db_exc:
+                        logger.error("保存 AI 回答失败: %s", db_exc)
+                        yield f"data: {json.dumps({'error': f'保存失败: {str(db_exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                token = chunk.get("token", "")
+                if token:
+                    full_answer.append(token)
+                    yield f"data: {json.dumps({'token': token, 'done': False}, ensure_ascii=False)}\n\n"
+
+        except Exception as exc:
+            logger.error("SSE 流异常: %s", exc)
+            # 保存部分内容
+            partial = "".join(full_answer)
+            if partial.strip():
+                try:
+                    execute_insert(
+                        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                         VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                        [session_id, user_id, partial, str(exc)],
+                    )
+                    execute_update(
+                        "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                        [session_id],
+                    )
+                except Exception:
+                    pass
+            yield f"data: {json.dumps({'error': f'流异常: {str(exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+async def create_ai_session_stream(
+    request: CommunityAiSessionCreate,
+    current_user: UserInfo,
+):
+    """SSE 流式：创建 AI 会话并可选携带首条问题，实时返回 token。"""
+    from fastapi.responses import StreamingResponse
+
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    title = request.question[:30] if request.question else "新的社区 AI 会话"
+    if request.question and len(request.question) > 30:
+        title = request.question[:27] + "..."
+
+    # 插入 session
+    session_id = execute_insert(
+        """INSERT INTO community_ai_session
+         (user_id, title, summary, source_type, source_post_id, source_news_id, status, last_message_at, created_at, updated_at)
+         VALUES (%s, %s, %s, %s, %s, %s, 'active', NOW(), NOW(), NOW())""",
+        [user_id, title, "", request.source_type, request.source_post_id, request.source_news_id],
+    )
+
+    async def event_generator():
+        full_answer: list[str] = []
+
+        if not request.question:
+            # 无首问，直接返回 session 信息
+            row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+            session_item = CommunityAiSessionItem(
+                **_session_row_to_item(row, message_count=0, last_message_preview="")
+            )
+            yield f"data: {json.dumps({'done': True, 'session_id': session_id, 'content': '', 'session': session_item.model_dump(), 'messages': []}, ensure_ascii=False)}\n\n"
+            return
+
+        # 插入 user 消息
+        user_msg_id = execute_insert(
+            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+             VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+            [session_id, user_id, request.question],
+        )
+
+        try:
+            async for chunk in _call_ai_service_stream(request.question):
+                if chunk.get("error"):
+                    partial = "".join(full_answer)
+                    if partial.strip():
+                        try:
+                            execute_insert(
+                                """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                                 VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                                [session_id, user_id, partial, chunk.get("error", "")],
+                            )
+                            execute_update(
+                                "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                                [session_id],
+                            )
+                        except Exception:
+                            pass
+                    yield f"data: {json.dumps({'error': chunk['error'], 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                if chunk.get("done"):
+                    answer_text = "".join(full_answer) or "AI 服务暂时无回复"
+                    try:
+                        assistant_msg_id = execute_insert(
+                            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+                             VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+                            [session_id, user_id, answer_text],
+                        )
+                        execute_update(
+                            "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                            [session_id],
+                        )
+
+                        row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+                        message_count = _db_get_session_message_count(session_id)
+                        last_msg = _db_get_session_last_message(session_id)
+                        preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+                        session_item = CommunityAiSessionItem(
+                            **_session_row_to_item(row, message_count=message_count, last_message_preview=preview)
+                        )
+
+                        yield f"data: {json.dumps({'done': True, 'message_id': assistant_msg_id, 'session_id': session_id, 'content': answer_text, 'session': session_item.model_dump()}, ensure_ascii=False)}\n\n"
+                    except Exception as db_exc:
+                        logger.error("保存 AI 回答失败: %s", db_exc)
+                        yield f"data: {json.dumps({'error': f'保存失败: {str(db_exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                token = chunk.get("token", "")
+                if token:
+                    full_answer.append(token)
+                    yield f"data: {json.dumps({'token': token, 'done': False}, ensure_ascii=False)}\n\n"
+
+        except Exception as exc:
+            logger.error("SSE 流异常: %s", exc)
+            partial = "".join(full_answer)
+            if partial.strip():
+                try:
+                    execute_insert(
+                        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                         VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                        [session_id, user_id, partial, str(exc)],
+                    )
+                    execute_update(
+                        "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                        [session_id],
+                    )
+                except Exception:
+                    pass
+            yield f"data: {json.dumps({'error': f'流异常: {str(exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 def delete_ai_session(
     session_id: int,
     current_user: UserInfo | None = None,
@@ -3246,6 +3766,7 @@ def _my_post_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
     """将 community_post 行转为 MyCommunityPostItem 格式。"""
     content = normalize_text(row.get("content") or "")
     related_news_title = normalize_text(row.get("related_news_title") or "")
+    images = _parse_json_list(row.get("images"))
     return {
         "id": int(row.get("id") or 0),
         "title": normalize_text(row.get("title") or ""),
@@ -3257,6 +3778,7 @@ def _my_post_row_to_item(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": _format_datetime(row.get("create_time") or row.get("created_at")),
         "updated_at": _format_datetime(row.get("update_time") or row.get("updated_at")),
         "tags": _parse_json_list(row.get("tags")),
+        "images": images,
         "status": int(row.get("status") or 0),
         "view_count": int(row.get("view_count") or 0),
         "like_count": int(row.get("like_count") or 0),

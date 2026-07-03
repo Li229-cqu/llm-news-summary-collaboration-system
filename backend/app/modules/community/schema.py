@@ -19,6 +19,7 @@ class CommunityPost(BaseModel):
     related_news_id: int | None = None
     related_news_title: str = ""
     topic_id: int | None = None
+    images: list[str] = Field(default_factory=list, description="帖子图片URL列表")
     like_count: int = 0
     comment_count: int = 0
     favorite_count: int = 0
@@ -50,6 +51,7 @@ class CreatePostRequest(BaseModel):
     related_news_id: int | None = Field(default=None, description="关联新闻 ID")
     topic_id: int | None = Field(default=None, description="关联话题 ID")
     tags: list[str] = Field(default_factory=list, description="标签列表")
+    images: list[str] = Field(default_factory=list, description="帖子图片URL列表", max_length=9)
 
 
 class PostListResponse(BaseModel):
@@ -137,6 +139,12 @@ class TagCount(BaseModel):
     name: str
     count: int
     create_time: str | datetime | None = None
+
+
+class PostMediaUploadResponse(BaseModel):
+    url: str
+    filename: str
+    size: int
 
 
 class AIHelperResponse(BaseModel):
@@ -257,6 +265,7 @@ class MyCommunityPostItem(BaseModel):
     created_at: str | datetime | None = None
     updated_at: str | datetime | None = None
     tags: list[str] = Field(default_factory=list)
+    images: list[str] = Field(default_factory=list, description="帖子图片URL列表")
     status: int = 1
     view_count: int = 0
     like_count: int = 0

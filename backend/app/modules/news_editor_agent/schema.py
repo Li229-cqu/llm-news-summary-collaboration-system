@@ -1,7 +1,6 @@
 """News Editor Agent — Pydantic 数据模型。
 
-Phase 2：新增 AgentContext 全流程上下文 + StepMeta 元信息。
-保持 Phase 1 所有模型不变，确保 API 兼容。
+新增 AgentContext 全流程上下文 + StepMeta 元信息。
 """
 
 from __future__ import annotations

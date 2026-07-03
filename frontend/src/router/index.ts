@@ -35,6 +35,10 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'ai/title-summary',
+        redirect: '/ai-generate',
+      },
+      {
+        path: 'ai-generate',
         name: 'ai-generate',
         component: () => import('@/views/ai-generate/AIGenerateView.vue'),
         meta: { title: 'AI 新闻智能编辑', requiresAuth: true },
@@ -50,6 +54,18 @@ const routes: RouteRecordRaw[] = [
         name: 'agent-observability',
         component: () => import('@/views/agent/AgentObservabilityDashboard.vue'),
         meta: { title: 'Agent 可观测面板', requiresAuth: true },
+      },
+      {
+        path: 'ai-generate/history',
+        name: 'ai-generate-history',
+        component: () => import('@/views/ai-generate/AIGenerateHistoryListView.vue'),
+        meta: { title: 'AI 生成历史', requiresAuth: true },
+      },
+      {
+        path: 'ai-generate/history/:id',
+        name: 'ai-generate-history-detail',
+        component: () => import('@/views/ai-generate/AIGenerateHistoryDetailView.vue'),
+        meta: { title: 'AI 生成历史详情', requiresAuth: true },
       },
       {
         path: 'community',
@@ -68,6 +84,18 @@ const routes: RouteRecordRaw[] = [
         name: 'community-create-post',
         component: () => import('@/views/community/CreatePostView.vue'),
         meta: { title: '发布帖子', requiresAuth: true },
+      },
+      {
+        path: 'timeline',
+        name: 'timeline-list',
+        component: () => import('@/views/timeline/TimelineListView.vue'),
+        meta: { title: '事件脉络', requiresAuth: false },
+      },
+      {
+        path: 'timeline/:topicId',
+        name: 'timeline-detail',
+        component: () => import('@/views/timeline/TimelineDetailView.vue'),
+        meta: { title: '事件脉络详情', requiresAuth: false },
       },
       {
         path: 'profile',

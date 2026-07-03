@@ -1,4 +1,4 @@
-﻿"""RSS 新闻爬虫（DB3.5 增量版）
+"""RSS 新闻爬虫（DB3.5 增量版）
 
 特性：
 - 优先按 source_url 去重
@@ -115,6 +115,8 @@ RSS_SOURCES: dict[str, list[dict[str, str]]] = {
 ENABLE_PEOPLE_RSS = True  # 启用人民网 RSS 源以获得更多数据
 DEFAULT_MAX_ITEMS = 10
 DEFAULT_SOURCE_MODE = "all"  # 使用所有 RSS 源
+DUPLICATE_IMAGE_MIN_COUNT = 2
+MIN_CONTENT_LENGTH = 200
 
 logger = logging.getLogger("rss_news_crawler")
 
@@ -314,6 +316,9 @@ BAD_IMAGE_KEYWORDS = [
 # 通用图片特征（RSS 默认图、栏目图、视频默认图）
 GENERIC_IMAGE_PATTERNS = [
     r"U\d+P\d+T\d+D\d+F\d+DT\d+\.jpg",  # 中国新闻网通用图格式
+    r"U\d+P\d+T\d+D\d+F\d+DT\d+\.(?:png|jpe?g|webp)",
+    r"/U\d+P\d+T\d+D\d+F\d+DT\d+\.",
+    r"/simg/ypt/\d+/\d+/[a-f0-9-]+(?:_\d+x\d+)?_zsite(?:_sl)?\.(?:jpe?g|png|webp)",
     r"/fileftp/",  # 备份/通用图
     r"default",
     r"placeholder",
@@ -383,6 +388,75 @@ def is_generic_image(image_url: str) -> bool:
     return False
 
 
+def is_same_url(left: str | None, right: str | None) -> bool:
+    return normalize_url(left or "") == normalize_url(right or "")
+
+
+def is_image_used_by_other_news(
+    connection: pymysql.connections.Connection,
+    image_url: str,
+    *,
+    source_url: str | None = None,
+    title: str | None = None,
+    exclude_news_id: int | None = None,
+) -> bool:
+    if not image_url:
+        return False
+
+    where = ["cover_image = %s"]
+    params: list[Any] = [image_url]
+    if exclude_news_id is not None:
+        where.append("id <> %s")
+        params.append(exclude_news_id)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT id, title, source_url
+              FROM news
+             WHERE {' AND '.join(where)}
+             LIMIT 5
+            """,
+            params,
+        )
+        rows = cursor.fetchall()
+
+    for row in rows:
+        if source_url and is_same_url(row.get("source_url"), source_url):
+            continue
+        if title and normalize_whitespace(str(row.get("title") or "")) == normalize_whitespace(title):
+            continue
+        return True
+    return False
+
+
+def sanitize_cover_image_for_db(
+    connection: pymysql.connections.Connection,
+    item: ParsedNewsItem,
+    *,
+    existing_news_id: int | None = None,
+) -> ParsedNewsItem:
+    image_url = item.cover_image
+    if not image_url:
+        return item
+
+    if is_generic_image(image_url):
+        logger.info("过滤通用封面图：%s | %s", image_url[:80], item.title[:60])
+        item.cover_image = ""
+        return item
+
+    if is_image_used_by_other_news(
+        connection,
+        image_url,
+        source_url=item.source_url,
+        title=item.title,
+        exclude_news_id=existing_news_id,
+    ):
+        logger.info("过滤已被其他新闻使用的封面图：%s | %s", image_url[:80], item.title[:60])
+        item.cover_image = ""
+    return item
+
+
 def is_video_news(entry: Any, title: str, html_text: str) -> bool:
     """识别是否是视频新闻"""
     video_keywords_in_title = ["视频", "video", "播放", "点播"]
@@ -443,6 +517,10 @@ def is_noisy_content(content: str) -> bool:
 
 def normalize_whitespace(text: str) -> str:
     return " ".join(str(text).split()).strip()
+
+
+def content_length(text: str) -> int:
+    return len(re.findall(r"\S", text or ""))
 
 
 def looks_mojibake(text: str) -> bool:
@@ -592,17 +670,132 @@ def match_topic_id(topics: list[dict[str, Any]], title: str, summary: str) -> in
     return None
 
 
-def build_tags(category_code: str, topic_name: str | None, source_name: str) -> list[str]:
-    tags = [category_code, source_name]
-    if topic_name:
-        tags.insert(1, topic_name)
-    result: list[str] = []
+def extract_meta_tags(html_text: str, title: str) -> list[str]:
+    """从新闻详情页 HTML 中提取 meta 关键词标签。"""
+    if not html_text:
+        return []
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+        tags: list[str] = []
+
+        # 优先级1: meta[name="keywords"] / meta[name="Keywords"]
+        for meta in soup.find_all("meta"):
+            name = (meta.get("name") or "").lower()
+            prop = (meta.get("property") or "").lower()
+            content = (meta.get("content") or "").strip()
+            if not content:
+                continue
+            if name == "keywords" or name == "news_keywords" or prop == "article:tag":
+                # 用逗号、顿号、分号、空格 分割
+                for sep in [",", "，", "、", ";", ";", " "]:
+                    if sep in content:
+                        parts = [p.strip() for p in content.split(sep) if p.strip()]
+                        tags.extend(parts)
+                        break
+                else:
+                    tags.append(content)
+
+        if tags:
+            return tags
+    except Exception:
+        pass
+    return []
+
+
+def normalize_tags(
+    raw_tags: list[str],
+    category_code: str = "",
+    source_name: str = "",
+    topic_name: str | None = None,
+) -> list[str]:
+    """清洗和标准化 tags 列表。
+
+    规则：
+    - 去除空字符串、None
+    - 去除重复项
+    - 去除 category_code
+    - 去除 source_name
+    - 去除 topic_name（整体匹配）
+    - 去除过长文本（超过 20 个字符）
+    - 去除过短文本（少于 2 个字符）
+    - 限制最多 5 个
+    """
     seen: set[str] = set()
-    for tag in tags:
-        if tag and tag not in seen:
-            seen.add(tag)
-            result.append(tag)
+    result: list[str] = []
+
+    # 用于排除的集合
+    exclude_set: set[str] = {category_code, source_name}
+    if topic_name:
+        exclude_set.add(topic_name)
+
+    for tag in raw_tags:
+        if not tag or not tag.strip():
+            continue
+        tag = tag.strip()
+        if tag in exclude_set:
+            continue
+        if tag in seen:
+            continue
+        if len(tag) > 20:
+            continue
+        if len(tag) < 2:
+            continue
+        seen.add(tag)
+        result.append(tag)
+        if len(result) >= 5:
+            break
+
     return result
+
+
+def build_tags(
+    category_code: str,
+    topic_name: str | None,
+    source_name: str,
+    rss_entry: Any = None,
+    html_text: str = "",
+    title: str = "",
+    summary: str = "",
+) -> list[str]:
+    """生成新闻内容关键词标签。
+
+    优先级：
+    1. 从 RSS item 的 category/tags 元素提取
+    2. 从新闻详情页 HTML 的 meta 标签提取
+    3. 从标题(title)和摘要(summary)中轻量提取
+    4. 若都无法提取，返回 []
+    """
+    raw_tags: list[str] = []
+
+    # 优先级1: 从 RSS item 提取
+    if rss_entry is not None:
+        rss_categories = getattr(rss_entry, "tags", None) or getattr(rss_entry, "categories", None)
+        if rss_categories:
+            for cat in rss_categories:
+                term = ""
+                if isinstance(cat, str):
+                    term = cat.strip()
+                elif hasattr(cat, "term") and cat.term:
+                    term = cat.term.strip()
+                elif isinstance(cat, dict):
+                    term = (cat.get("term") or "").strip()
+                if term and len(term) >= 2 and len(term) <= 20:
+                    raw_tags.append(term)
+
+    # 优先级2: 从 HTML meta 标签提取
+    if not raw_tags and html_text:
+        raw_tags = extract_meta_tags(html_text, title)
+
+    # 优先级3: 从 title + summary 提取轻量关键词
+    if not raw_tags:
+        combined = f"{title} {summary}".strip()
+        for sep in ["：", "，", "、", " ", "　", "|", "/", "·", "」", "「", "】", "【", "！", "？"]:
+            if sep in combined:
+                parts = [p.strip() for p in combined.split(sep) if p.strip()]
+                raw_tags = [p for p in parts if len(p) >= 2 and len(p) <= 12]
+                break
+
+    return normalize_tags(raw_tags, category_code, source_name, topic_name)
 
 
 def extract_text_block(node: Any) -> str:
@@ -896,7 +1089,7 @@ def parse_item(
         comment_count=0,
         favorite_count=0,
         status=1,
-        tags=build_tags(category_code, topic_name, feed_source["source_name"]),
+        tags=build_tags(category_code, topic_name, feed_source["source_name"], rss_entry=entry, html_text=html_text, title=title, summary=summary),
         source_url=link or None,
     )
 
@@ -932,12 +1125,13 @@ def should_update_existing(existing_row: dict[str, Any], item: ParsedNewsItem, u
     existing_title = str(existing_row.get("title") or "")
     existing_image = str(existing_row.get("cover_image") or "")
     existing_url = str(existing_row.get("source_url") or "")
+    image_changed = bool(item.cover_image) and existing_image != item.cover_image
     return (
         is_noisy_content(existing_content)
         or looks_mojibake(existing_title)
         or looks_mojibake(existing_content)
         or cut_boilerplate_tail(existing_content) != existing_content.strip()
-        or existing_image != item.cover_image
+        or image_changed
         or (bool(item.source_url) and existing_url != item.source_url)
     )
 
@@ -1000,7 +1194,6 @@ def update_news(
         "`title` = %s",
         "`summary` = %s",
         "`content` = %s",
-        "`cover_image` = %s",
         "`category_id` = %s",
         "`topic_id` = %s",
         "`source` = %s",
@@ -1014,7 +1207,6 @@ def update_news(
         item.title,
         item.summary,
         item.content,
-        item.cover_image,
         item.category_id,
         item.topic_id,
         item.source,
@@ -1024,6 +1216,9 @@ def update_news(
         json.dumps(item.tags, ensure_ascii=False),
         item.publish_time,
     ]
+    if item.cover_image:
+        set_clauses.insert(3, "`cover_image` = %s")
+        values.insert(3, item.cover_image)
     if has_source_url and item.source_url:
         set_clauses.insert(4, "`source_url` = COALESCE(%s, `source_url`)")
         values.insert(4, item.source_url)
@@ -1125,6 +1320,16 @@ def crawl_source(
                 item = parse_item(entry, feed_source, category_map, topics, fetch_content=fetch_content)
                 if not item.title:
                     raise ValueError("标题为空")
+                item_content_length = content_length(item.content)
+                if item_content_length < MIN_CONTENT_LENGTH:
+                    stats["skipped"] += 1
+                    logger.info(
+                        "跳过短正文新闻：%s | content_length=%s < %s",
+                        item.title,
+                        item_content_length,
+                        MIN_CONTENT_LENGTH,
+                    )
+                    continue
 
                 existing_row = None
                 match_key = ""
@@ -1137,6 +1342,11 @@ def crawl_source(
                         match_key = "title"
 
                 if existing_row is not None:
+                    item = sanitize_cover_image_for_db(
+                        connection,
+                        item,
+                        existing_news_id=int(existing_row["id"]),
+                    )
                     if should_update_existing(existing_row, item, update_existing_content):
                         if dry_run:
                             stats["updated"] += 1
@@ -1150,6 +1360,7 @@ def crawl_source(
                         logger.info("跳过重复新闻：%s", item.title)
                     continue
 
+                item = sanitize_cover_image_for_db(connection, item)
                 if dry_run:
                     stats["inserted"] += 1
                     logger.info(
@@ -1198,7 +1409,8 @@ def print_summary(source_name: str, stats: dict[str, Any]) -> None:
 def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[str, Any]:
     """过滤重复使用的图片（通用图检测）
 
-    如果同一张图片被超过3条新闻使用，认为它是通用图，过滤掉
+    同一张图片被多条不同新闻使用时，通常是 RSS/栏目默认图或组图列表图，
+    会造成新闻列表大面积重复封面。这里直接清空所有重复封面。
     """
     filter_stats = {
         "duplicate_images_filtered": 0,
@@ -1224,7 +1436,7 @@ def filter_duplicate_images(connection: pymysql.connections.Connection) -> dict[
                 image_url = row["cover_image"]
                 count = row["count"]
 
-                if count > 10:  # 超过10次的认为是通用图
+                if count >= DUPLICATE_IMAGE_MIN_COUNT:
                     duplicate_images[image_url] = count
                     logger.warning(
                         "检测到重复图片（%d 次使用）：%s",

@@ -324,7 +324,7 @@ def _fallback_persona_desc(data: ProfileReportRequest) -> str:
 
 # ── 主入口 ───────────────────────────────────────────────────
 
-def generate_profile_report(request: ProfileReportRequest) -> ProfileReportResponse:
+async def generate_profile_report(request: ProfileReportRequest) -> ProfileReportResponse:
     """生成近 7 天阅读报告的 AI 分析文案。
 
     流程：数据校验 → Prompt 构造 → LLM (或 mock) → 解析 → 质量校验 → 回退。
@@ -334,9 +334,9 @@ def generate_profile_report(request: ProfileReportRequest) -> ProfileReportRespo
     if not ov or ov.get("browse_count", 0) == 0:
         return _fallback_response(request, "用户近 7 天无阅读数据")
 
-    # 2. 判断是否启用 LLM
-    if not settings.llm_enabled:
-        logger.info("LLM 未启用，使用规则生成周报文案")
+    # 2. 判断是否启用生成类 AI
+    if not settings.summary_llm_enabled:
+        logger.info("SUMMARY_LLM 未启用，使用规则生成周报文案")
         return _fallback_response(request, "LLM disabled")
 
     # 3. 构造 Prompt 并调用 LLM
@@ -346,7 +346,7 @@ def generate_profile_report(request: ProfileReportRequest) -> ProfileReportRespo
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ]
-        llm_content = call_llm(
+        llm_content = await call_llm(
             messages=messages,
             temperature=0.5,
             max_tokens=1024,

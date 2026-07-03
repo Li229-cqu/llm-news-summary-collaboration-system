@@ -238,7 +238,6 @@ function formatMs(ms: number): string {
 
             <!-- 清洗操作标签 -->
             <div class="output-section" v-if="(step.output.removed_noise || []).length">
-              <span class="output-label">清洗操作</span>
               <div class="output-tags">
                 <el-tag v-for="(item, i) in step.output.removed_noise" :key="i" size="small" type="info" effect="plain">
                   {{ item }}
@@ -255,7 +254,6 @@ function formatMs(ms: number): string {
           <!-- Step 2: 关键词提取 -->
           <template v-if="step.name === 'extract_keywords'">
             <div class="output-section">
-              <span class="output-label">提取关键词 ({{ step.output.total_count || (step.output.keywords || []).length }} 个)</span>
               <div class="output-tags">
                 <el-tag
                   v-for="(kw, i) in (step.output.keywords || [])"
@@ -273,7 +271,6 @@ function formatMs(ms: number): string {
           <!-- Step 3: 六要素识别 -->
           <template v-if="step.name === 'extract_elements'">
             <div class="output-section">
-              <span class="output-label">六要素 (5W1H)</span>
               <div class="elements-grid" v-if="step.output.news_elements">
                 <div class="element-item" v-if="step.output.news_elements.who">
                   <span class="element-key">何人</span>
@@ -306,7 +303,7 @@ function formatMs(ms: number): string {
           <!-- Step 4: 标题摘要生成 -->
           <template v-if="step.name === 'generate_title_summary'">
             <div class="output-section" v-if="(step.output.candidate_titles || []).length">
-              <span class="output-label">候选标题 ({{ step.output.candidate_titles.length }} 个)</span>
+              <span class="s4-label">候选标题 ({{ step.output.candidate_titles.length }} 个)</span>
               <div class="titles-list">
                 <p v-for="(t, i) in step.output.candidate_titles" :key="i" class="output-text output-text--title">
                   {{ i + 1 }}. {{ t }}
@@ -314,11 +311,11 @@ function formatMs(ms: number): string {
               </div>
             </div>
             <div class="output-section" v-if="step.output.summary_short">
-              <span class="output-label">简短摘要 ({{ step.output.summary_short.length }} 字)</span>
+              <span class="s4-label">简短摘要 ({{ step.output.summary_short.length }} 字)</span>
               <p class="output-text">{{ step.output.summary_short }}</p>
             </div>
             <div class="output-section" v-if="step.output.summary_long">
-              <span class="output-label">
+              <span class="s4-label">
                 详细摘要 ({{ step.output.summary_long.length }} 字 ·
                 {{ step.output.summary_short ? (step.output.summary_long.length / Math.max(step.output.summary_short.length, 1)).toFixed(1) + 'x 短摘要' : '' }})
               </span>
@@ -329,7 +326,6 @@ function formatMs(ms: number): string {
           <!-- Step 5: 话题匹配 -->
           <template v-if="step.name === 'match_topic'">
             <div class="output-section">
-              <span class="output-label">话题匹配</span>
               <div class="output-tags">
                 <el-tag type="danger" effect="dark" size="small" v-if="step.output.primary_topic">
                   {{ step.output.primary_topic }}
@@ -351,7 +347,6 @@ function formatMs(ms: number): string {
           <!-- Step 6: 时间线适配 -->
           <template v-if="step.name === 'judge_timeline'">
             <div class="output-section">
-              <span class="output-label">时间线判断</span>
               <p class="output-text">
                 <el-tag :type="step.output.is_timely ? 'success' : 'warning'" size="small">
                   {{ step.output.is_timely ? '✅ 符合时效' : '⚠️ 需更新' }}
@@ -392,10 +387,6 @@ function formatMs(ms: number): string {
           <!-- Step 8: 编辑建议 -->
           <template v-if="step.name === 'edit_suggestions'">
             <div class="output-section">
-              <span class="output-label">
-                编辑建议
-                <template v-if="step.output.overall_score">(综合评分: {{ step.output.overall_score }}/100)</template>
-              </span>
               <ul class="suggestion-list">
                 <li v-for="(s, i) in (step.output.suggestions || [])" :key="i">
                   <el-tag
@@ -605,6 +596,14 @@ function formatMs(ms: number): string {
   letter-spacing: 0.03em;
   display: block;
   margin-bottom: 4px;
+}
+
+.s4-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
 }
 .output-text {
   margin: 0;

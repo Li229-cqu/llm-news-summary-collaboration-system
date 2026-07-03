@@ -18,8 +18,8 @@
         <el-button @click="handleSearchClear">清空</el-button>
       </div>
       <div class="top-bar-tags">
-        <el-tag :type="selectedTags.length === 0 ? 'primary' : 'info'" effect="light" class="filter-tag" @click="selectedTags = []">全部</el-tag>
-        <el-tag v-for="tag in availableTags" :key="tag.name" :type="selectedTags.includes(tag.name) ? 'primary' : 'info'" effect="light" class="filter-tag" @click="toggleTag(tag.name)">{{ tag.name }}</el-tag>
+        <el-tag :type="!selectedTag ? 'primary' : 'info'" effect="light" class="filter-tag" @click="selectedTag = ''; currentPage = 1; loadPosts(1)">全部</el-tag>
+        <el-tag v-for="tag in availableTags" :key="tag.name" :type="selectedTag === tag.name ? 'primary' : 'info'" effect="light" class="filter-tag" @click="toggleTag(tag.name)">{{ tag.name }}</el-tag>
       </div>
       <el-button type="primary" class="top-bar-btn" @click="router.push('/community/create')">发布帖子</el-button>
     </div>
@@ -31,20 +31,27 @@
       <div class="community-main">
         <el-card class="app-card main-card" shadow="never">
           <div class="feed-tabs">
-            <button v-for="tab in feedTabs" :key="tab.name" :class="['feed-tab', { active: activeFeedTab === tab.name }]" @click="activeFeedTab = tab.name">{{ tab.label }}</button>
+            <button v-for="tab in feedTabs" :key="tab.name" :class="['feed-tab', { active: activeFeedTab === tab.name }]" @click="switchTab(tab.name)">{{ tab.label }}</button>
           </div>
-          <div class="scroll-area">
-            <template v-if="activeFeedTab === 'recommend'">
+          <div ref="scrollAreaRef" class="scroll-area">
+            <template v-if="activeFeedTab === 'recommend' && contentMode === 'list'">
               <div v-if="loadingPosts" class="loading-container"><el-spinner /></div>
-              <div v-else-if="filteredPosts.length === 0" class="empty-state"><el-empty :description="searchKeyword ? '未找到相关帖子' : '暂无帖子，快来发布第一条吧'" /></div>
+              <div v-else-if="posts.length === 0" class="empty-state"><el-empty :description="searchKeyword ? '未找到相关帖子' : '暂无帖子，快来发布第一条吧'" /></div>
               <div v-else class="posts-list">
-                <PostCard v-for="post in filteredPosts" :key="post.id" :post="post" @view="handleViewPost" @like="handleLike" @favorite="handleFavorite" @comment="handleViewPost" @open-related-news="handleOpenRelatedNews" />
+                <PostCard v-for="post in posts" :key="post.id" :post="post" @view="openPostDetail" @like="handleLike" @favorite="handleFavorite" @comment="openPostDetail" @open-related-news="handleOpenRelatedNews" />
               </div>
               <el-pagination v-if="postTotal > pageSize" :current-page="currentPage" :page-size="pageSize" :total="postTotal" layout="prev, pager, next" @current-change="loadPosts" class="pagination" />
             </template>
+            <PostDetailPanel
+              v-else-if="activeFeedTab === 'recommend' && contentMode === 'detail' && selectedPostId"
+              :post-id="selectedPostId"
+              @back="backToPostList"
+              @updated="handlePostDetailUpdated"
+              @open-related-news="handleOpenRelatedNewsId"
+            />
             <div v-else-if="activeFeedTab === 'ai'" class="ai-tab-container">
               <AISessionList :sessions="aiSessions" :active-session-id="aiActiveSessionId" :collapsed="aiSessionCollapsed" :loading="aiLoadingSessions" @select="handleAiSelectSession" @create="handleAiCreateSession" @delete="handleAiDeleteSession" @toggle-collapse="aiSessionCollapsed = !aiSessionCollapsed" />
-              <AIChatPanel :active-session="aiActiveSession" :messages="aiCurrentMessages" :loading-messages="aiLoadingMessages" :sending="aiSending" @send="handleAiSend" @first-question="handleAiCreateSession" />
+              <AIChatPanel :active-session="aiActiveSession" :messages="aiCurrentMessages" :loading-messages="aiLoadingMessages" :sending="aiSending" :user-avatar="userAvatar" @send="handleAiSend" @first-question="handleAiCreateSession" />
             </div>
             <MyInteractionsPanel v-else-if="activeFeedTab === 'interactions'" @open-post-detail="handleOpenMyPostDetail" />
             <MyPostsPanel v-else-if="activeFeedTab === 'posts'" @publish="router.push('/community/create')" @view-post="handleOpenMyPostDetail" />
@@ -56,10 +63,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getPostList, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, type CommunityPost, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'
+import { getPostList, getPostDetail, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, sendCommunityAiMessageStream, createCommunityAiSessionStream, type StreamCallbacks, type CommunityPost, type PostListParams, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'
 import { useUserStore } from '@/stores/user'
 import PostCard from '@/components/community/PostCard.vue'
 import HotTopicsSidebar from '@/components/community/HotTopicsSidebar.vue'
@@ -67,8 +74,10 @@ import AISessionList from '@/components/community/AISessionList.vue'
 import AIChatPanel from '@/components/community/AIChatPanel.vue'
 import MyInteractionsPanel from '@/components/community/MyInteractionsPanel.vue'
 import MyPostsPanel from '@/components/community/MyPostsPanel.vue'
+import PostDetailPanel from '@/components/community/PostDetailPanel.vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 // ─── Post List ──
@@ -78,31 +87,36 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const postTotal = ref(0)
 const searchKeyword = ref('')
-const selectedTags = ref<string[]>([])
-
-const filteredPosts = computed(() => {
-  if (selectedTags.value.length === 0) return posts.value
-  return posts.value.filter(p => selectedTags.value.some(t => (p.tags || []).includes(t)))
-})
+const selectedTag = ref('')
 
 function toggleTag(name: string) {
-  const i = selectedTags.value.indexOf(name)
-  if (i >= 0) selectedTags.value.splice(i, 1)
-  else selectedTags.value.push(name)
+  selectedTag.value = selectedTag.value === name ? '' : name
+  currentPage.value = 1
+  loadPosts(1)
 }
 
 async function loadPosts(page = 1) {
   currentPage.value = page; loadingPosts.value = true
   try {
-    const result = await getPostList({ page, page_size: pageSize.value, keyword: searchKeyword.value.trim() || undefined })
+    const params: PostListParams = { page, page_size: pageSize.value, sort: 'hot' }
+    const kw = searchKeyword.value.trim()
+    if (kw) params.keyword = kw
+    if (selectedTag.value) params.tag = selectedTag.value
+    const result = await getPostList(params)
     posts.value = result.list.map(p => ({ ...p, liked: Boolean(p.liked ?? (p as any).is_liked ?? false) }))
     postTotal.value = result.total
+    // 如果当前页为空但 total > 0，回退到最后一页
+    if (posts.value.length === 0 && postTotal.value > 0 && currentPage.value > 1) {
+      const lastPage = Math.ceil(postTotal.value / pageSize.value)
+      loadPosts(lastPage)
+    }
   } catch { posts.value = []; postTotal.value = 0; ElMessage.error('获取帖子列表失败') } finally { loadingPosts.value = false }
 }
 function handleSearch() { currentPage.value = 1; loadPosts(1) }
-function handleSearchClear() { searchKeyword.value = ''; currentPage.value = 1; loadPosts(1) }
+function handleSearchClear() { searchKeyword.value = ''; selectedTag.value = ''; currentPage.value = 1; loadPosts(1) }
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 watch(searchKeyword, () => { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { currentPage.value = 1; loadPosts(1) }, 500) })
+watch(selectedTag, () => { /* 已在 toggleTag 中处理 */ })
 
 // ─── Tags ──
 const availableTags = ref<TagCount[]>([])
@@ -110,39 +124,191 @@ async function loadAvailableTags() {
   try { availableTags.value = await getAvailableTags() } catch { availableTags.value = [{ name: '时政', count: 0 }, { name: '经济', count: 0 }, { name: '科技', count: 0 }, { name: '教育', count: 0 }, { name: '军事', count: 0 }, { name: '社会', count: 0 }, { name: '国际', count: 0 }, { name: '体育', count: 0 }, { name: '娱乐', count: 0 }, { name: '健康', count: 0 }] }
 }
 
-// ─── Tabs ──
+// ─── Tabs & Content Mode ──
 const activeFeedTab = ref<'recommend' | 'ai' | 'interactions' | 'posts'>('recommend')
 const feedTabs = [ { name: 'recommend', label: '推荐讨论' }, { name: 'ai', label: 'AI 问答' }, { name: 'interactions', label: '我的互动' }, { name: 'posts', label: '我的帖子' } ] as const
 
+const contentMode = ref<'list' | 'detail'>('list')
+const selectedPostId = ref<number | string | null>(null)
+
+// 滚动恢复
+const scrollAreaRef = ref<HTMLElement | null>(null)
+const listScrollTop = ref(0)
+
+function switchTab(name: string) {
+  // 切 Tab 时退出详情模式
+  contentMode.value = 'list'
+  selectedPostId.value = null
+  activeFeedTab.value = name as typeof activeFeedTab.value
+  if (name === 'recommend') {
+    currentPage.value = 1
+    loadPosts(1)
+  }
+}
+
+function openPostDetail(post: CommunityPost) {
+  const postId = post.id
+  if (!postId) return
+  // 保存当前列表滚动位置，再切换到详情模式
+  if (scrollAreaRef.value) {
+    listScrollTop.value = scrollAreaRef.value.scrollTop
+  }
+  selectedPostId.value = postId
+  contentMode.value = 'detail'
+}
+
+function backToPostList() {
+  contentMode.value = 'list'
+  selectedPostId.value = null
+  // 恢复滚动位置
+  nextTick(() => {
+    if (scrollAreaRef.value) {
+      scrollAreaRef.value.scrollTop = listScrollTop.value
+    }
+  })
+}
+
+function handlePostDetailUpdated() {
+  // 详情中有点赞/收藏/评论更新时，刷新列表数据（但不退出详情）
+  if (currentPage.value) {
+    loadPosts(currentPage.value)
+  }
+}
+
 // ─── AI ──
 const aiSessions = ref<CommunityAiSession[]>([]); const aiActiveSessionId = ref<number | null>(null); const aiActiveSession = ref<CommunityAiSession | null>(null); const aiCurrentMessages = ref<CommunityAiMessage[]>([]); const aiLoadingSessions = ref(false); const aiLoadingMessages = ref(false); const aiSending = ref(false); const aiSessionCollapsed = ref(false)
+const userAvatar = computed(() => normalizeAvatarUrl(userStore.userInfo?.avatar))
+function normalizeAvatarUrl(url?: string): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  return `${baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
+function makeTempMsg(role: 'user' | 'assistant', content: string, loading = false): CommunityAiMessage {
+  return { id: `temp-${role}-${Date.now()}`, role, content, loading, created_at: new Date().toISOString() } as unknown as CommunityAiMessage
+}
 watch(activeFeedTab, (tab) => { if (tab === 'ai') loadAiSessions() })
 async function loadAiSessions() { aiLoadingSessions.value = true; try { const res = await getCommunityAiSessions({ page: 1, page_size: 50 }); aiSessions.value = res.list || []; if (aiSessions.value.length > 0) { if (!aiActiveSessionId.value || !aiSessions.value.some(s => s.id === aiActiveSessionId.value)) aiActiveSessionId.value = aiSessions.value[0].id; await loadAiSessionDetail(aiActiveSessionId.value) } else { aiActiveSessionId.value = null; aiActiveSession.value = null; aiCurrentMessages.value = [] } } catch { aiSessions.value = [] } finally { aiLoadingSessions.value = false } }
 async function loadAiSessionDetail(sessionId: number) { if (!sessionId) return; aiLoadingMessages.value = true; try { const res = await getCommunityAiSessionDetail(sessionId); aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('获取会话详情失败') } finally { aiLoadingMessages.value = false } }
 async function handleAiCreateSession() { try { const res = await createCommunityAiSession({}); aiSessions.value.unshift(res.session); aiActiveSessionId.value = res.session.id; aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('创建会话失败') } }
 async function handleAiSelectSession(sessionId: number) { aiActiveSessionId.value = sessionId; await loadAiSessionDetail(sessionId) }
 async function handleAiSend(question: string) {
-  if (aiActiveSessionId.value) { aiSending.value = true; try { const res = await sendCommunityAiMessage(aiActiveSessionId.value, { question }); aiCurrentMessages.value.push(res.user_message); aiCurrentMessages.value.push(res.assistant_message); aiActiveSession.value = res.session; const idx = aiSessions.value.findIndex(s => s.id === res.session.id); if (idx !== -1) aiSessions.value[idx] = res.session } catch { ElMessage.error('消息发送失败') } finally { aiSending.value = false } }
-  else { aiSending.value = true; try { const res = await createCommunityAiSession({ question }); aiSessions.value.unshift(res.session); aiActiveSessionId.value = res.session.id; aiActiveSession.value = res.session; aiCurrentMessages.value = res.messages || [] } catch { ElMessage.error('发送失败') } finally { aiSending.value = false } }
+  // 乐观更新：先立即显示用户消息 + AI loading
+  const userMsg = makeTempMsg('user', question)
+  const loadingMsg = makeTempMsg('assistant', '', true)
+  aiCurrentMessages.value.push(userMsg)
+  aiCurrentMessages.value.push(loadingMsg)
+  aiSending.value = true
+
+  const callbacks: StreamCallbacks = {
+    onToken(token: string) {
+      const msg = loadingMsg as any
+      if (msg.loading) {
+        msg.loading = false
+        msg.content = token
+      } else {
+        msg.content += token
+      }
+    },
+    onDone(data) {
+      loadingMsg.id = data.message_id
+      ;(loadingMsg as any).loading = false
+      loadingMsg.content = data.content
+      loadingMsg.status = 'success'
+      if (data.session) {
+        aiActiveSession.value = data.session
+        const idx = aiSessions.value.findIndex(s => s.id === data.session!.id)
+        if (idx !== -1) {
+          aiSessions.value[idx] = data.session!
+        } else {
+          aiSessions.value.unshift(data.session!)
+        }
+      }
+      aiSending.value = false
+    },
+    onError(error: string) {
+      const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
+      if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = makeTempMsg('assistant', error || 'AI 助手暂时无法回复，请稍后再试。')
+      ElMessage.error('消息发送失败')
+      aiSending.value = false
+    },
+  }
+
+  try {
+    if (aiActiveSessionId.value) {
+      await sendCommunityAiMessageStream(aiActiveSessionId.value, { question }, callbacks)
+    } else {
+      await createCommunityAiSessionStream({ question }, callbacks)
+    }
+  } catch {
+    // fetch 本身失败（网络错误等）
+    const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
+    if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = makeTempMsg('assistant', 'AI 助手暂时无法回复，请稍后再试。')
+    ElMessage.error('消息发送失败')
+    aiSending.value = false
+  }
 }
 async function handleAiDeleteSession(sessionId: number) { try { await deleteCommunityAiSession(sessionId); aiSessions.value = aiSessions.value.filter(s => s.id !== sessionId); if (aiActiveSessionId.value === sessionId) { if (aiSessions.value.length > 0) { aiActiveSessionId.value = aiSessions.value[0].id; await loadAiSessionDetail(aiActiveSessionId.value) } else { aiActiveSessionId.value = null; aiActiveSession.value = null; aiCurrentMessages.value = [] } } } catch { ElMessage.error('删除会话失败') } }
 
 // ─── Hot Search ──
 const hotSearchList = ref<HotSearchItem[]>([]); const loadingHotSearch = ref(false)
 async function loadHotSearch() { loadingHotSearch.value = true; try { hotSearchList.value = await getHotSearch({ limit: 10 }) } finally { loadingHotSearch.value = false } }
-function handleHotSearchClick(item: HotSearchItem) { if (item.target_type === 'post' || item.target_type === 'community_post') router.push(`/community/posts/${item.target_id}`); else { searchKeyword.value = item.keyword; currentPage.value = 1; loadPosts(1) } }
+function handleHotSearchClick(item: HotSearchItem) {
+  if (item.target_type === 'post' || item.target_type === 'community_post') {
+    // 进入内嵌详情
+    selectedPostId.value = item.target_id
+    contentMode.value = 'detail'
+    activeFeedTab.value = 'recommend'
+  } else {
+    searchKeyword.value = item.keyword; currentPage.value = 1; loadPosts(1)
+  }
+}
 
 // ─── Like / Favorite ──
 async function handleLike(post: CommunityPost) { try { const r = await toggleLike(post.id); post.likes = r.count; post.liked = r.liked } catch { console.error('点赞失败') } }
 async function handleFavorite(post: CommunityPost, event: Event) { event.stopPropagation(); try { if (post.is_favorited) { const r = await unfavoritePost(post.id); post.is_favorited = false; post.favorite_count = r.favorite_count } else { const r = await toggleFavorite(post.id); post.is_favorited = r.is_favorited; post.favorite_count = r.favorite_count } } catch { console.error('收藏操作失败') } }
 
 // ─── Nav ──
-function handleViewPost(post: CommunityPost) { router.push(`/community/posts/${post.id}`) }
-function handleOpenMyPostDetail(postId: number) { router.push(`/community/posts/${postId}`) }
+function handleViewPost(post: CommunityPost) { openPostDetail(post) }
+function handleOpenMyPostDetail(postId: number) {
+  // 从我的帖子/互动进入内嵌详情
+  selectedPostId.value = postId
+  contentMode.value = 'detail'
+  activeFeedTab.value = 'recommend'
+}
 function handleOpenRelatedNews(post: CommunityPost) { if (post.related_news_id) router.push(`/news/${post.related_news_id}`) }
+function handleOpenRelatedNewsId(newsId: number | string) { router.push(`/news/${newsId}`) }
 
-onMounted(() => { if (!userStore.userInfo) userStore.loadFromStorage(); loadPosts(); loadHotSearch(); loadAvailableTags() })
-</script>
+onMounted(() => {
+  if (!userStore.userInfo) userStore.loadFromStorage()
+  loadPosts()
+  loadHotSearch()
+  loadAvailableTags()
+  // 发帖成功后置顶新帖子
+  const pendingId = route.query.newPostId || sessionStorage.getItem('community_pending_new_post_id')
+  if (pendingId) {
+    sessionStorage.removeItem('community_pending_new_post_id')
+    currentPage.value = 1
+    loadPosts(1).then(() => {
+      if (pendingId) pinNewPostToTop(String(pendingId))
+    })
+    router.replace({ path: '/community', query: {} })
+  }
+})
+
+async function pinNewPostToTop(postId: string | number) {
+  try {
+    const detail = await getPostDetail(postId)
+    if (!detail || !detail.id) return
+    // 去重后插入第一位
+    posts.value = [detail, ...posts.value.filter(p => String(p.id) !== String(detail.id))]
+    if (posts.value.length > postTotal.value) {
+      postTotal.value = posts.value.length
+    }
+  } catch {
+    // 静默失败，不影响社区页正常显示
+  }
+}</script>
 
 <style scoped>
 .page-container { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(circle at 18% 10%, rgba(220, 38, 38, 0.08), transparent 28%), linear-gradient(180deg, #fef2f2 0%, #fef7f7 100%); }

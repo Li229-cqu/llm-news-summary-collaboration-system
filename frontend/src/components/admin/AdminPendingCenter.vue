@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -67,7 +67,8 @@ const actionLoading = ref(false)
 const detail = ref<AdminPendingItemDetail | null>(null)
 const actionReason = ref('')
 
-const currentTabLabel = computed(() => tabs.find(tab => tab.key === activeTab.value)?.label ?? '全部')
+// Comment type filter (only shown in comment tab)
+const commentFilter = ref<'all' | 'news' | 'post'>('all')
 
 function emitSummary() {
   emit('summary-change', summary.value)
@@ -81,19 +82,54 @@ function statusLabel(row: AdminPendingItem | AdminPendingItemDetail) {
   return row.status_label || '未知'
 }
 
+function typeLabel(row: AdminPendingItem | AdminPendingItemDetail) {
+  if (row.item_type === 'news') return '新闻'
+  if (row.item_type === 'post') return '帖子'
+  if (row.target_type === 'news') return '新闻评论'
+  if (row.target_type === 'post') return '帖子评论'
+  return '评论'
+}
+
+// Tags formatter: supports array, JSON string, comma-separated string
+function parseTags(value: unknown): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter(Boolean).map(String)
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === '[]') return []
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String)
+    } catch {
+      // fallback: comma-separated
+    }
+    return trimmed.split(',').map(s => s.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function renderTagsText(value: unknown): string {
+  const tags = parseTags(value)
+  if (!tags.length) return '—'
+  if (tags.length <= 3) return tags.join(', ')
+  return tags.slice(0, 3).join(', ') + ` +${tags.length - 3}`
+}
+
+function renderTags(value: unknown): string[] {
+  return parseTags(value)
+}
+
+// Filtered items for comment tab
+const displayedItems = computed(() => {
+  if (activeTab.value !== 'comment' || commentFilter.value === 'all') {
+    return items.value
+  }
+  return items.value.filter(item => item.target_type === commentFilter.value)
+})
+
 function actionButtons(row: AdminPendingItem | AdminPendingItemDetail): AdminReviewAction[] {
-  if (row.status === 4) {
-    return ['restore']
-  }
-
-  if (row.status === 1) {
-    return ['fold', 'delete']
-  }
-
-  if (row.item_type === 'news') {
-    return ['approve', 'reject', 'fold', 'delete']
-  }
-
+  if (row.status === 4) return ['restore']
+  if (row.status === 1) return ['fold', 'delete']
   return ['approve', 'reject', 'fold', 'delete']
 }
 
@@ -106,12 +142,20 @@ async function loadItems(targetPage: number = page.value) {
       page: targetPage,
       pageSize: pageSize.value,
     })
-    items.value = result.items || []
+    // For comment tab with filter, keep total from server but list is client-filtered
+    const serverItems = result.items || []
     total.value = result.total || 0
     page.value = result.page || targetPage
     pageSize.value = result.page_size || pageSize.value
     summary.value = result.summary || summary.value
     emitSummary()
+    if (activeTab.value === 'comment' && commentFilter.value !== 'all') {
+      const filtered = serverItems.filter(i => i.target_type === commentFilter.value)
+      items.value = filtered
+      total.value = filtered.length
+    } else {
+      items.value = serverItems
+    }
   } catch (error) {
     items.value = []
     total.value = 0
@@ -141,7 +185,8 @@ async function handleAction(action: AdminReviewAction, target?: AdminPendingItem
   if (!current) return
 
   const actionText = actionLabels[action]
-  const confirmText = `确定要${actionText}这条${current.item_type === 'news' ? '新闻' : current.item_type === 'post' ? '帖子' : '评论'}吗？`
+  const typeName = current.item_type === 'news' ? '新闻' : current.item_type === 'post' ? '帖子' : '评论'
+  const confirmText = `确定要${actionText}这条${typeName}吗？`
 
   try {
     await ElMessageBox.confirm(confirmText, '审核确认', {
@@ -188,9 +233,29 @@ function handlePageChange(current: number) {
   void loadItems(current)
 }
 
+function handleCommentFilterChange(val: 'all' | 'news' | 'post') {
+  commentFilter.value = val
+  // Re-filter from items (already loaded)
+  if (val === 'all') {
+    // Need to reload from server to get full list
+    void loadItems(page.value)
+  } else {
+    items.value = items.value.filter(i => i.target_type === val)
+    total.value = items.value.length
+  }
+}
+
 watch(activeTab, () => {
   page.value = 1
+  commentFilter.value = 'all'
   void loadItems(1)
+})
+
+watch(commentFilter, (val) => {
+  if (activeTab.value === 'comment') {
+    page.value = 1
+    void loadItems(1)
+  }
 })
 
 onMounted(() => {
@@ -224,7 +289,7 @@ onMounted(() => {
           <strong>{{ summary.pending_comment_count }}</strong>
         </div>
         <div class="summary-item">
-          <span>今日处理</span>
+          <span>今日内容处理</span>
           <strong>{{ summary.today_processed_count }}</strong>
         </div>
       </div>
@@ -234,58 +299,164 @@ onMounted(() => {
           <el-tab-pane v-for="tab in tabs" :key="tab.key" :label="tab.label" :name="tab.key" />
         </el-tabs>
 
-        <div class="pending-search">
-          <el-input
-            v-model="keyword"
-            clearable
-            placeholder="搜索标题、内容、提交人"
-            @keyup.enter="handleSearch"
+        <div class="pending-toolbar-row">
+          <!-- Comment type sub-filter, shown only in comment tab -->
+          <el-radio-group
+            v-if="activeTab === 'comment'"
+            v-model="commentFilter"
+            size="small"
+            @change="handleCommentFilterChange"
           >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button @click="handleReset">重置</el-button>
+            <el-radio-button value="all">全部评论</el-radio-button>
+            <el-radio-button value="news">新闻评论</el-radio-button>
+            <el-radio-button value="post">帖子评论</el-radio-button>
+          </el-radio-group>
+
+          <div class="pending-search">
+            <el-input
+              v-model="keyword"
+              clearable
+              placeholder="搜索标题、内容、提交人"
+              @keyup.enter="handleSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
+            <el-button @click="handleReset">重置</el-button>
+          </div>
         </div>
       </div>
 
-      <el-alert
-        class="pending-tip"
-        type="info"
-        :closable="false"
-        show-icon
-        title="当前列表展示的是数据库中的真实待审/折叠/删除内容，不再使用 ?? 数据。"
-      />
+      <!-- ── News Tab ── -->
+      <template v-if="activeTab === 'news'">
+        <el-table v-loading="loading" :data="items" class="pending-table" border>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column label="类型" width="80">
+            <template #default="{ row }">
+              <el-tag effect="plain" type="success">新闻</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="标题" min-width="240" />
+          <el-table-column label="来源" width="160">
+            <template #default="{ row }">{{ row.source || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="标签" width="200">
+            <template #default="{ row }">
+              <span :title="renderTags(row.tags).join(', ') || ''">{{ renderTagsText(row.tags) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status_label" label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType[row.status] || 'info'" effect="plain">{{ statusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="180" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click="loadDetail(row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
 
-      <el-table v-loading="loading" :data="items" class="pending-table" border>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column label="类型" width="110">
-          <template #default="scope">
-            <el-tag effect="plain" :type="scope.row.item_type === 'news' ? 'success' : scope.row.item_type === 'post' ? 'warning' : 'info'">
-              {{ scope.row.item_type === 'news' ? '新闻' : scope.row.item_type === 'post' ? '帖子' : '评论' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="title" label="标题 / 目标" min-width="240" />
-        <el-table-column prop="submitter" label="提交人" width="140" />
-        <el-table-column prop="source" label="来源" min-width="160" />
-        <el-table-column prop="category_name" label="分类 / 话题" width="150" />
-        <el-table-column prop="status_label" label="状态" width="110">
-          <template #default="scope">
-            <el-tag :type="statusTagType[scope.row.status] || 'info'" effect="plain">
-              {{ statusLabel(scope.row) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="create_time" label="创建时间" width="180" />
-        <el-table-column prop="update_time" label="更新时间" width="180" />
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default="scope">
-            <el-button text type="primary" size="small" @click="loadDetail(scope.row)">查看</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <!-- ── Post Tab ── -->
+      <template v-else-if="activeTab === 'post'">
+        <el-table v-loading="loading" :data="items" class="pending-table" border>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column label="类型" width="80">
+            <template #default="{ row }">
+              <el-tag effect="plain" type="warning">帖子</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="标题" min-width="240" />
+          <el-table-column prop="submitter" label="提交人" width="140" />
+          <el-table-column label="标签" width="200">
+            <template #default="{ row }">
+              <span :title="renderTags(row.tags).join(', ') || ''">{{ renderTagsText(row.tags) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status_label" label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType[row.status] || 'info'" effect="plain">{{ statusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="180" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click="loadDetail(row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <!-- ── Comment Tab ── -->
+      <template v-else-if="activeTab === 'comment'">
+        <el-table v-loading="loading" :data="displayedItems" class="pending-table" border>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column label="类型" width="120">
+            <template #default="{ row }">
+              <el-tag effect="plain" :type="row.target_type === 'news' ? 'success' : 'info'">
+                {{ row.target_type === 'news' ? '新闻评论' : '帖子评论' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="评论目标" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="submitter" label="评论人" width="140" />
+          <el-table-column prop="status_label" label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType[row.status] || 'info'" effect="plain">{{ statusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="180" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click="loadDetail(row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <!-- ── All Tab (generic columns) ── -->
+      <template v-else>
+        <el-table v-loading="loading" :data="items" class="pending-table" border>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column label="类型" width="120">
+            <template #default="{ row }">
+              <el-tag effect="plain" :type="row.item_type === 'news' ? 'success' : row.item_type === 'post' ? 'warning' : 'info'">
+                {{ typeLabel(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="标题 / 目标" min-width="200" show-overflow-tooltip />
+          <el-table-column label="提交人 / 来源" width="140">
+            <template #default="{ row }">
+              <template v-if="row.item_type === 'news'">{{ row.source || '—' }}</template>
+              <template v-else>{{ row.submitter || '—' }}</template>
+            </template>
+          </el-table-column>
+          <el-table-column label="标签" width="200">
+            <template #default="{ row }">
+              <template v-if="row.item_type !== 'comment'">
+                <span :title="renderTags(row.tags).join(', ') || ''">{{ renderTagsText(row.tags) }}</span>
+              </template>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status_label" label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType[row.status] || 'info'" effect="plain">{{ statusLabel(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="180" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click="loadDetail(row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
 
       <div class="pending-footer">
         <span>共 {{ total }} 条</span>
@@ -302,7 +473,7 @@ onMounted(() => {
 
     <el-drawer
       v-model="detailVisible"
-      :title="detail ? `待审核详情 · ${detail.item_type === 'news' ? '新闻' : detail.item_type === 'post' ? '帖子' : '评论'}` : '待审核详情'"
+      :title="detail ? `待审核详情 · ${typeLabel(detail)}` : '待审核详情'"
       size="720px"
       class="pending-drawer"
     >
@@ -313,68 +484,93 @@ onMounted(() => {
             <el-tag :type="statusTagType[detail.status] || 'info'" effect="plain">{{ detail.status_label }}</el-tag>
           </div>
 
-          <el-descriptions :column="1" border class="detail-desc" size="small">
-            <el-descriptions-item label="类型">
-              {{ detail.item_type === 'news' ? '新闻' : detail.item_type === 'post' ? '帖子' : '评论' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="提交人">{{ detail.submitter }}</el-descriptions-item>
-            <el-descriptions-item label="来源">{{ detail.source || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="分类 / 话题">{{ detail.category_name || detail.topic_name || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ detail.create_time || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="更新时间">{{ detail.update_time || '—' }}</el-descriptions-item>
-          </el-descriptions>
+          <!-- ── News Detail ── -->
+          <template v-if="detail.item_type === 'news'">
+            <el-descriptions :column="1" border class="detail-desc" size="small">
+              <el-descriptions-item label="类型">新闻</el-descriptions-item>
+              <el-descriptions-item label="来源">{{ detail.source || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="分类">{{ detail.category_name || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="话题">{{ detail.topic_name || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ detail.create_time || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="发布时间">{{ detail.publish_time || '—' }}</el-descriptions-item>
+            </el-descriptions>
 
-          <div v-if="detail.item_type !== 'comment'" class="detail-section">
-            <div class="section-label">正文 / 摘要</div>
-            <p class="detail-content">{{ detail.content || detail.summary || '—' }}</p>
-          </div>
-
-          <div v-if="detail.item_type === 'comment'" class="detail-section">
-            <div class="section-label">评论内容</div>
-            <p class="detail-content">{{ detail.content || '—' }}</p>
-          </div>
-
-          <div v-if="detail.item_type === 'news'" class="detail-grid">
             <div class="detail-section">
-              <div class="section-label">统计信息</div>
-              <div class="detail-stats">
-                <span>浏览 {{ detail.view_count ?? 0 }}</span>
-                <span>点赞 {{ detail.like_count ?? 0 }}</span>
-                <span>评论 {{ detail.comment_count ?? 0 }}</span>
-                <span>收藏 {{ detail.favorite_count ?? 0 }}</span>
+              <div class="section-label">摘要</div>
+              <p class="detail-content">{{ detail.summary || '—' }}</p>
+            </div>
+
+            <div class="detail-section">
+              <div class="section-label">正文</div>
+              <p class="detail-content">{{ detail.content || '—' }}</p>
+            </div>
+
+            <div class="detail-grid">
+              <div class="detail-section">
+                <div class="section-label">统计信息</div>
+                <div class="detail-stats">
+                  <span>浏览 {{ detail.view_count ?? 0 }}</span>
+                  <span>点赞 {{ detail.like_count ?? 0 }}</span>
+                  <span>评论 {{ detail.comment_count ?? 0 }}</span>
+                  <span>收藏 {{ detail.favorite_count ?? 0 }}</span>
+                </div>
+              </div>
+              <div class="detail-section">
+                <div class="section-label">标签</div>
+                <div class="tag-list">
+                  <el-tag v-for="tag in renderTags(detail.tags)" :key="tag" effect="plain">{{ tag }}</el-tag>
+                  <span v-if="!renderTags(detail.tags).length" class="detail-empty">—</span>
+                </div>
               </div>
             </div>
+          </template>
+
+          <!-- ── Post Detail ── -->
+          <template v-else-if="detail.item_type === 'post'">
+            <el-descriptions :column="1" border class="detail-desc" size="small">
+              <el-descriptions-item label="类型">帖子</el-descriptions-item>
+              <el-descriptions-item label="提交人">{{ detail.submitter || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="话题">{{ detail.topic_name || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ detail.create_time || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="关联新闻">{{ detail.related_news_title || '—' }}</el-descriptions-item>
+            </el-descriptions>
+
+            <div class="detail-section">
+              <div class="section-label">帖子内容</div>
+              <p class="detail-content">{{ detail.content || '—' }}</p>
+            </div>
+
             <div class="detail-section">
               <div class="section-label">标签</div>
               <div class="tag-list">
-                <el-tag v-for="tag in detail.tags || []" :key="tag" effect="plain">{{ tag }}</el-tag>
+                <el-tag v-for="tag in renderTags(detail.tags)" :key="tag" effect="plain">{{ tag }}</el-tag>
+                <span v-if="!renderTags(detail.tags).length" class="detail-empty">—</span>
               </div>
             </div>
-          </div>
+          </template>
 
-          <div v-else-if="detail.item_type === 'post'" class="detail-grid">
-            <div class="detail-section">
-              <div class="section-label">关联新闻</div>
-              <p class="detail-content">{{ detail.related_news_title || '—' }}</p>
-            </div>
-            <div class="detail-section">
-              <div class="section-label">标签</div>
-              <div class="tag-list">
-                <el-tag v-for="tag in detail.tags || []" :key="tag" effect="plain">{{ tag }}</el-tag>
-              </div>
-            </div>
-          </div>
+          <!-- ── Comment Detail ── -->
+          <template v-else>
+            <el-descriptions :column="1" border class="detail-desc" size="small">
+              <el-descriptions-item label="评论类型">
+                <el-tag effect="plain" :type="detail.target_type === 'news' ? 'success' : 'info'">
+                  {{ detail.target_type === 'news' ? '新闻评论' : '帖子评论' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="评论人">{{ detail.submitter || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ detail.create_time || '—' }}</el-descriptions-item>
+            </el-descriptions>
 
-          <div v-if="detail.item_type === 'comment'" class="detail-grid">
             <div class="detail-section">
-              <div class="section-label">回复目标</div>
-              <p class="detail-content">{{ detail.target_type === 'news' ? detail.news_id : detail.post_id || '—' }}</p>
+              <div class="section-label">评论内容</div>
+              <p class="detail-content">{{ detail.content || '—' }}</p>
             </div>
-            <div class="detail-section">
+
+            <div v-if="detail.parent_content" class="detail-section">
               <div class="section-label">父级评论</div>
-              <p class="detail-content">{{ detail.parent_content || '—' }}</p>
+              <p class="detail-content">{{ detail.parent_content }}</p>
             </div>
-          </div>
+          </template>
 
           <div class="detail-actions">
             <el-input
@@ -474,6 +670,14 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+.pending-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .pending-search {
   display: flex;
   gap: 12px;
@@ -482,10 +686,6 @@ onMounted(() => {
 
 .pending-search :deep(.el-input) {
   max-width: 360px;
-}
-
-.pending-tip {
-  margin-bottom: 16px;
 }
 
 .pending-table {
@@ -567,6 +767,11 @@ onMounted(() => {
   border-radius: 999px;
 }
 
+.detail-empty {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
+}
+
 .detail-actions {
   display: flex;
   flex-direction: column;
@@ -591,6 +796,11 @@ onMounted(() => {
 
   .pending-search :deep(.el-input) {
     max-width: 100%;
+  }
+
+  .pending-toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

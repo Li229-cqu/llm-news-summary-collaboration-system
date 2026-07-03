@@ -90,12 +90,12 @@ function handleClick(newsId: number) {
 }
 
 .timeline-source-list__title {
-  overflow: hidden;
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .timeline-source-list__meta {

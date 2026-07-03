@@ -1,5 +1,5 @@
 <template>
-  <main class="news-detail-page">
+  <main class="news-detail-page" :class="{ 'timeline-news-detail-mode': isFromTimeline }">
     <el-skeleton v-if="loading" animated :rows="10" />
 
     <el-alert v-else-if="error" :title="error" type="error" show-icon>
@@ -7,7 +7,7 @@
         <div class="news-detail-page__error-actions">
           <button class="back-btn" @click="goHome">
             <span class="back-btn__arrow">←</span>
-            <span>返回首页</span>
+            <span>{{ isFromTimeline ? '返回' : '返回首页' }}</span>
           </button>
         </div>
       </template>
@@ -16,7 +16,7 @@
     <el-empty v-else-if="!newsDetail" description="新闻不存在">
       <button class="back-btn" @click="goHome">
         <span class="back-btn__arrow">←</span>
-        <span>返回首页</span>
+        <span>{{ isFromTimeline ? '返回' : '返回首页' }}</span>
       </button>
     </el-empty>
 
@@ -24,11 +24,11 @@
       <section class="news-detail-main">
         <el-card class="news-detail-card" shadow="never">
           <div class="news-detail-card__header">
-            <button class="back-btn" @click="goHome">
+            <button class="back-btn" @click="isFromTimeline ? handleTimelineBack() : goHome()">
               <span class="back-btn__arrow">←</span>
-              <span>返回首页</span>
+              <span>{{ isFromTimeline ? '返回' : '返回首页' }}</span>
             </button>
-            <div class="news-detail-card__header-actions">
+            <div v-if="!isFromTimeline" class="news-detail-card__header-actions">
               <ShareButton target-selector=".news-detail-main" :title="newsDetail?.title || ''" />
               <button class="ai-gen-btn" @click="goToAiGenerate">用 AI 生成标题和摘要</button>
             </div>
@@ -64,9 +64,11 @@
             <span class="news-detail-section-title__count">共 {{ commentTotal }} 条</span>
           </div>
           <CommentBox
+            ref="commentBoxRef"
             placeholder="写下你的评论"
             button-text="发布评论"
             :loading="submittingComment"
+            :show-ai-button="false"
             @submit="handleCreateComment"
           />
           <CommentList
@@ -87,7 +89,7 @@
         </el-card>
       </section>
 
-      <aside class="news-detail-aside">
+      <aside v-if="!isFromTimeline" class="news-detail-aside">
         <NewsDetailSidePanel
           :recommended-news="recommendedNews"
           :timeline-topic-id="timelineTopicId"
@@ -163,6 +165,8 @@ const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 const newsId = computed(() => String(route.params.id ?? '').trim())
+const commentBoxRef = ref<InstanceType<typeof CommentBox> | null>(null)
+const isFromTimeline = computed(() => route.query.from === 'timeline')
 
 const recommendedNews = computed<NewsItem[]>(() => newsDetail.value?.recommended_news ?? [])
 const timelineTopicId = computed(() => newsDetail.value?.topic_id ?? null)
@@ -227,7 +231,15 @@ async function loadComments() {
 }
 
 function goHome() {
+  if (route.query.from === 'timeline') {
+    router.back()
+    return
+  }
   router.push('/home')
+}
+
+function handleTimelineBack() {
+  router.back()
 }
 
 function goToLogin() {
@@ -293,7 +305,7 @@ function goToAiGenerate() {
   )
 
   router.push({
-    path: '/ai/title-summary',
+    path: '/ai-generate',
     query: {
       source: 'news',
       newsId: newsDetail.value.id,
@@ -685,5 +697,20 @@ onMounted(() => {
     width: 100%;
     justify-content: center;
   }
+}
+
+/* ========================================
+   Timeline 来源紧凑模式
+   ======================================== */
+.timeline-news-detail-mode .news-detail-layout {
+  display: block;
+}
+
+.timeline-news-detail-mode .news-detail-main {
+  max-width: none;
+}
+
+.timeline-news-detail-mode .news-detail-card--comments {
+  display: none;
 }
 </style>

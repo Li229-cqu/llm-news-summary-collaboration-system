@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS `community_post` (
   `related_news_id` BIGINT UNSIGNED DEFAULT NULL,
   `topic_id` BIGINT UNSIGNED DEFAULT NULL,
   `tags` JSON DEFAULT NULL,
+  `images` JSON DEFAULT NULL COMMENT '帖子图片URL列表',
   `like_count` INT NOT NULL DEFAULT 0,
   `comment_count` INT NOT NULL DEFAULT 0,
   `favorite_count` INT NOT NULL DEFAULT 0,

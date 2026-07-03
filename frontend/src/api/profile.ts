@@ -385,5 +385,5 @@ export interface WeeklyReportResponse {
 }
 
 export async function getWeeklyReport(): Promise<WeeklyReportResponse> {
-  return request.get('/api/profile/weekly-report')
+  return request.get('/api/profile/weekly-report', { timeout: 60000 })
 }

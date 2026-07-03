@@ -2,33 +2,31 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  type AIConfigResponse,
-  type AIConfigUpdateRequest,
-  type AIConfigTestResult,
-  type PromptTemplateItem,
-  type PromptTemplatePayload,
-  type PromptTemplateOptions,
-  type AdminAICallRecordListResponse,
-  type AdminAICallRecordQueryParams,
+  createPromptTemplate,
+  getAICallRecords,
   getAIConfig,
-  updateAIConfig,
-  testAIConnection,
+  getPromptTemplateDetail,
   getPromptTemplateOptions,
   getPromptTemplates,
-  getPromptTemplateDetail,
-  createPromptTemplate,
+  setPromptTemplateDefault,
+  testAIConnection,
+  updateAIConfig,
   updatePromptTemplate,
   updatePromptTemplateStatus,
-  setPromptTemplateDefault,
-  getAICallRecords,
+  type AdminAICallRecordListResponse,
+  type AdminAICallRecordQueryParams,
+  type AIConfigResponse,
+  type AIConfigTestResult,
+  type AIConfigUpdateRequest,
+  type PromptTemplateItem,
+  type PromptTemplateOptions,
+  type PromptTemplatePayload,
 } from '@/api/admin'
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
-// ── tab state ────────────────────────────────────────────────────
-const activeTab = ref<'aiConfig' | 'prompt' | 'risk' | 'records'>('aiConfig')
+const activeTab = ref<'aiConfig' | 'prompt' | 'records' | 'risk'>('aiConfig')
 
-// ── AI Config state ──────────────────────────────────────────────
 const aiConfig = ref<AIConfigResponse | null>(null)
 const aiConfigLoading = ref(false)
 const aiConfigSaving = ref(false)
@@ -45,16 +43,15 @@ const aiConfigForm = reactive({
   risk_threshold_medium: 0.7,
 })
 
-// ── Prompt Template state ────────────────────────────────────────
 const promptLoading = ref(false)
 const promptList = ref<PromptTemplateItem[]>([])
 const promptTotal = ref(0)
 const promptOptions = ref<PromptTemplateOptions | null>(null)
 const promptQuery = reactive({ function_type: '', status: null as number | null, keyword: '', page: 1, page_size: 10 })
-
 const promptEditVisible = ref(false)
 const promptEditMode = ref<'create' | 'edit'>('create')
 const promptEditLoading = ref(false)
+const promptEditId = ref<number | null>(null)
 const promptEditForm = reactive<PromptTemplatePayload>({
   name: '',
   function_type: '',
@@ -64,7 +61,20 @@ const promptEditForm = reactive<PromptTemplatePayload>({
   is_default: 0,
   remark: '',
 })
-const promptEditId = ref<number | null>(null)
+
+const recordsLoading = ref(false)
+const recordsData = ref<AdminAICallRecordListResponse | null>(null)
+const recordsQuery = reactive<AdminAICallRecordQueryParams>({
+  function_type: '',
+  status: null,
+  risk_level: '',
+  is_fallback: null,
+  user_id: null,
+  start_time: '',
+  end_time: '',
+  page: 1,
+  page_size: 10,
+})
 
 const FUNC_TYPE_LABELS: Record<string, string> = {
   title_generation: '标题生成',
@@ -72,22 +82,12 @@ const FUNC_TYPE_LABELS: Record<string, string> = {
   keyword_extraction: '关键词提取',
   element_extraction: '要素提取',
   consistency_check: '一致性检查',
-  timeline_generation: '时间线生成',
+  timeline_generation: 'Timeline 生成',
   ai_chat: 'AI 对话',
 }
-
-// ── AI Call Records state ────────────────────────────────────────
-const recordsLoading = ref(false)
-const recordsData = ref<AdminAICallRecordListResponse | null>(null)
-const recordsQuery = reactive<AdminAICallRecordQueryParams>({
-  function_type: '', status: null, risk_level: '', is_fallback: null,
-  user_id: null, start_time: '', end_time: '', page: 1, page_size: 10,
-})
-
 const RISK_LEVEL_LABELS: Record<string, string> = { low: '低', medium: '中', high: '高' }
 const RECORD_STATUS_LABELS: Record<number, string> = { 0: '失败', 1: '成功', 2: '处理中', 3: '待处理' }
 
-// ── load AI Config ───────────────────────────────────────────────
 async function loadAIConfig() {
   aiConfigLoading.value = true
   try {
@@ -108,6 +108,15 @@ async function loadAIConfig() {
 }
 
 async function saveAIConfig() {
+  try {
+    await ElMessageBox.confirm('确认保存当前 AI 配置？模型地址、开关和阈值变更会影响后续 AI 生成。', '确认保存 AI 配置', {
+      type: 'warning',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
   aiConfigSaving.value = true
   try {
     const payload: AIConfigUpdateRequest = {
@@ -123,7 +132,10 @@ async function saveAIConfig() {
     }
     await updateAIConfig(payload)
     ElMessage.success('AI 配置已保存')
-    loadAIConfig()
+    emit('changed')
+    await loadAIConfig()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'AI 配置保存失败')
   } finally {
     aiConfigSaving.value = false
   }
@@ -133,11 +145,8 @@ async function testConnection() {
   aiConfigTesting.value = true
   try {
     const res: AIConfigTestResult = await testAIConnection()
-    if (res.status === 'ok') {
-      ElMessage.success(res.message)
-    } else {
-      ElMessage.warning(res.message)
-    }
+    if (res.status === 'ok') ElMessage.success(res.message)
+    else ElMessage.warning(res.message)
     if (aiConfig.value) {
       aiConfig.value.service_status = res.status
       aiConfig.value.last_check_time = new Date().toISOString()
@@ -149,18 +158,19 @@ async function testConnection() {
 
 async function resetAIConfigDefaults() {
   await ElMessageBox.confirm('确定恢复默认 AI 配置？', '提示', { type: 'warning' })
-  aiConfigForm.service_url = 'http://127.0.0.1:8001'
-  aiConfigForm.model_name = 'glm-4-flash'
-  aiConfigForm.api_key = ''
-  aiConfigForm.timeout = 60
-  aiConfigForm.max_input_length = 8000
-  aiConfigForm.enable_real_llm = false
-  aiConfigForm.enable_fallback = true
-  aiConfigForm.risk_threshold_low = 0.3
-  aiConfigForm.risk_threshold_medium = 0.7
+  Object.assign(aiConfigForm, {
+    service_url: 'http://127.0.0.1:8001',
+    model_name: 'glm-4-flash',
+    api_key: '',
+    timeout: 60,
+    max_input_length: 8000,
+    enable_real_llm: false,
+    enable_fallback: true,
+    risk_threshold_low: 0.3,
+    risk_threshold_medium: 0.7,
+  })
 }
 
-// ── Prompt Template ──────────────────────────────────────────────
 async function loadPromptTemplates() {
   promptLoading.value = true
   try {
@@ -185,13 +195,7 @@ async function loadPromptOptions() {
 function openPromptCreate() {
   promptEditMode.value = 'create'
   promptEditId.value = null
-  promptEditForm.name = ''
-  promptEditForm.function_type = ''
-  promptEditForm.prompt_content = ''
-  promptEditForm.version = 'v1'
-  promptEditForm.status = 1
-  promptEditForm.is_default = 0
-  promptEditForm.remark = ''
+  Object.assign(promptEditForm, { name: '', function_type: '', prompt_content: '', version: 'v1', status: 1, is_default: 0, remark: '' })
   promptEditVisible.value = true
 }
 
@@ -202,13 +206,15 @@ async function openPromptEdit(row: PromptTemplateItem) {
   promptEditVisible.value = true
   try {
     const detail = await getPromptTemplateDetail(row.id)
-    promptEditForm.name = detail.name
-    promptEditForm.function_type = detail.function_type
-    promptEditForm.prompt_content = detail.prompt_content
-    promptEditForm.version = detail.version
-    promptEditForm.status = detail.status
-    promptEditForm.is_default = detail.is_default
-    promptEditForm.remark = detail.remark
+    Object.assign(promptEditForm, {
+      name: detail.name,
+      function_type: detail.function_type,
+      prompt_content: detail.prompt_content,
+      version: detail.version,
+      status: detail.status,
+      is_default: detail.is_default,
+      remark: detail.remark,
+    })
   } finally {
     promptEditLoading.value = false
   }
@@ -217,15 +223,12 @@ async function openPromptEdit(row: PromptTemplateItem) {
 async function submitPromptEdit() {
   promptEditLoading.value = true
   try {
-    if (promptEditMode.value === 'create') {
-      await createPromptTemplate(promptEditForm)
-      ElMessage.success('模板已创建')
-    } else {
-      await updatePromptTemplate(promptEditId.value!, promptEditForm)
-      ElMessage.success('模板已更新')
-    }
+    if (promptEditMode.value === 'create') await createPromptTemplate(promptEditForm)
+    else await updatePromptTemplate(promptEditId.value!, promptEditForm)
+    ElMessage.success('Prompt 模板已保存')
     promptEditVisible.value = false
-    loadPromptTemplates()
+    await loadPromptTemplates()
+    emit('changed')
   } finally {
     promptEditLoading.value = false
   }
@@ -236,22 +239,25 @@ async function togglePromptStatus(row: PromptTemplateItem) {
   const label = newStatus === 1 ? '启用' : '停用'
   try {
     await ElMessageBox.confirm(`确定${label}该模板？`, '提示', { type: 'warning' })
-  } catch { return }
+  } catch {
+    return
+  }
   await updatePromptTemplateStatus(row.id, { status: newStatus })
   ElMessage.success(`模板已${label}`)
-  loadPromptTemplates()
+  await loadPromptTemplates()
 }
 
 async function setDefaultTemplate(row: PromptTemplateItem) {
   try {
-    await ElMessageBox.confirm(`确定将"${row.name}"设为默认模板？同一功能类型的其他模板将取消默认。`, '提示', { type: 'warning' })
-  } catch { return }
+    await ElMessageBox.confirm(`确定将“${row.name}”设为默认模板？同一功能类型的其他模板会取消默认。`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
   await setPromptTemplateDefault(row.id)
   ElMessage.success('已设为默认模板')
-  loadPromptTemplates()
+  await loadPromptTemplates()
 }
 
-// ── AI Call Records ──────────────────────────────────────────────
 async function loadCallRecords() {
   recordsLoading.value = true
   try {
@@ -271,18 +277,10 @@ async function loadCallRecords() {
   }
 }
 
-// ── lifecycle ────────────────────────────────────────────────────
-onMounted(() => {
-  loadAIConfig()
-  loadPromptOptions()
-  loadPromptTemplates()
-  loadCallRecords()
-})
-
 function onTabChange(tab: string) {
-  if (tab === 'aiConfig' && !aiConfig.value) loadAIConfig()
-  else if (tab === 'prompt' && promptList.value.length === 0) loadPromptTemplates()
-  else if (tab === 'records' && !recordsData.value) loadCallRecords()
+  if (tab === 'aiConfig' && !aiConfig.value) void loadAIConfig()
+  else if (tab === 'prompt' && promptList.value.length === 0) void loadPromptTemplates()
+  else if (tab === 'records' && !recordsData.value) void loadCallRecords()
 }
 
 const aiConfigStatusText = computed(() => {
@@ -293,52 +291,46 @@ const aiConfigStatusType = computed(() => {
   if (!aiConfig.value?.service_status) return 'info'
   return aiConfig.value.service_status === 'ok' ? 'success' : 'danger'
 })
+
+onMounted(() => {
+  void loadAIConfig()
+  void loadPromptOptions()
+  void loadPromptTemplates()
+  void loadCallRecords()
+})
 </script>
 
 <template>
   <div class="ai-config-page">
     <div class="panel-header">
-      <h3>AI 模型与规则</h3>
+      <div>
+        <h3>AI 配置与记录</h3>
+        <p>模型配置来自 system_config 的 ai.* 项，Prompt 模板来自 ai_prompt_template，生成记录来自 ai_generate_record。</p>
+      </div>
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <!-- Tab 1: AI 模型配置 -->
-      <el-tab-pane label="模型配置" name="aiConfig">
+      <el-tab-pane label="AI 模型配置" name="aiConfig">
+        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区只维护 system_config 中的 ai.* 配置。系统配置页不再重复编辑这些配置。" />
         <el-row :gutter="24" v-loading="aiConfigLoading">
           <el-col :span="16">
             <el-form label-width="140px" label-position="right">
-              <el-form-item label="AI 服务地址">
-                <el-input v-model="aiConfigForm.service_url" placeholder="http://127.0.0.1:8001" />
-              </el-form-item>
-              <el-form-item label="模型名称">
-                <el-input v-model="aiConfigForm.model_name" placeholder="glm-4-flash" />
-              </el-form-item>
+              <el-form-item label="AI 服务地址"><el-input v-model="aiConfigForm.service_url" placeholder="http://127.0.0.1:8001" /></el-form-item>
+              <el-form-item label="模型名称"><el-input v-model="aiConfigForm.model_name" placeholder="glm-4-flash" /></el-form-item>
               <el-form-item label="API Key">
                 <el-input v-model="aiConfigForm.api_key" type="password" show-password placeholder="留空则不修改" />
                 <span v-if="aiConfig?.api_key_configured" class="hint-text">已配置</span>
               </el-form-item>
-              <el-form-item label="超时时间(秒)">
-                <el-input-number v-model="aiConfigForm.timeout" :min="5" :max="600" />
+              <el-form-item label="超时时间(秒)"><el-input-number v-model="aiConfigForm.timeout" :min="5" :max="600" /></el-form-item>
+              <el-form-item label="最大输入长度"><el-input-number v-model="aiConfigForm.max_input_length" :min="100" :max="100000" :step="100" /></el-form-item>
+              <el-form-item label="启用真实 LLM"><el-switch v-model="aiConfigForm.enable_real_llm" /></el-form-item>
+              <el-form-item label="启用规则兜底"><el-switch v-model="aiConfigForm.enable_fallback" /></el-form-item>
+              <el-form-item v-if="aiConfig?.cache_supported" label="启用结果缓存"><el-switch :model-value="false" disabled /></el-form-item>
+              <el-form-item v-else label="结果缓存">
+                <el-alert title="当前后端暂未接入 AI 结果缓存，缓存配置作为二期功能处理。" type="info" show-icon :closable="false" />
               </el-form-item>
-              <el-form-item label="最大输入长度">
-                <el-input-number v-model="aiConfigForm.max_input_length" :min="100" :max="100000" :step="100" />
-              </el-form-item>
-              <el-form-item label="启用真实 LLM">
-                <el-switch v-model="aiConfigForm.enable_real_llm" />
-              </el-form-item>
-              <el-form-item label="启用规则兜底">
-                <el-switch v-model="aiConfigForm.enable_fallback" />
-              </el-form-item>
-              <el-form-item label="启用结果缓存">
-                <el-switch :model-value="false" disabled />
-                <span class="hint-text">暂不支持</span>
-              </el-form-item>
-              <el-form-item label="低风险阈值">
-                <el-input-number v-model="aiConfigForm.risk_threshold_low" :min="0" :max="1" :step="0.1" :precision="2" />
-              </el-form-item>
-              <el-form-item label="中风险阈值">
-                <el-input-number v-model="aiConfigForm.risk_threshold_medium" :min="0" :max="1" :step="0.1" :precision="2" />
-              </el-form-item>
+              <el-form-item label="低风险阈值"><el-input-number v-model="aiConfigForm.risk_threshold_low" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
+              <el-form-item label="中风险阈值"><el-input-number v-model="aiConfigForm.risk_threshold_medium" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
               <el-form-item>
                 <el-button type="primary" :loading="aiConfigSaving" @click="saveAIConfig">保存配置</el-button>
                 <el-button :loading="aiConfigTesting" @click="testConnection">测试连接</el-button>
@@ -349,29 +341,18 @@ const aiConfigStatusType = computed(() => {
           <el-col :span="8">
             <el-card header="服务状态">
               <el-descriptions :column="1" border size="small">
-                <el-descriptions-item label="连接状态">
-                  <el-tag :type="aiConfigStatusType">{{ aiConfigStatusText }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="API Key">
-                  <el-tag :type="aiConfig?.api_key_configured ? 'success' : 'info'">
-                    {{ aiConfig?.api_key_configured ? '已配置' : '未配置' }}
-                  </el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="缓存支持">
-                  <el-tag type="info">不支持</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="最后检测">
-                  <span v-if="aiConfig?.last_check_time">{{ aiConfig.last_check_time }}</span>
-                  <span v-else class="hint-text">未检测</span>
-                </el-descriptions-item>
+                <el-descriptions-item label="连接状态"><el-tag :type="aiConfigStatusType">{{ aiConfigStatusText }}</el-tag></el-descriptions-item>
+                <el-descriptions-item label="API Key"><el-tag :type="aiConfig?.api_key_configured ? 'success' : 'info'">{{ aiConfig?.api_key_configured ? '已配置' : '未配置' }}</el-tag></el-descriptions-item>
+                <el-descriptions-item label="缓存支持"><el-tag type="info">{{ aiConfig?.cache_supported ? '已接入' : '二期功能' }}</el-tag></el-descriptions-item>
+                <el-descriptions-item label="最后检测"><span>{{ aiConfig?.last_check_time || '未检测' }}</span></el-descriptions-item>
               </el-descriptions>
             </el-card>
           </el-col>
         </el-row>
       </el-tab-pane>
 
-      <!-- Tab 2: Prompt 模板 -->
-      <el-tab-pane label="Prompt 模板" name="prompt">
+      <el-tab-pane label="Prompt 模板配置" name="prompt">
+        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区维护 ai_prompt_template 表，用于不同 AI 功能的 Prompt 模板管理。" />
         <div class="filter-row">
           <el-select v-model="promptQuery.function_type" placeholder="功能类型" clearable style="width: 160px" @change="promptQuery.page=1;loadPromptTemplates()">
             <el-option v-for="ft in promptOptions?.function_types || []" :key="ft.value" :label="ft.label" :value="ft.value" />
@@ -384,131 +365,27 @@ const aiConfigStatusType = computed(() => {
           <el-button type="primary" @click="promptQuery.page=1;loadPromptTemplates()">查询</el-button>
           <el-button type="success" @click="openPromptCreate">新增模板</el-button>
         </div>
-
         <el-table v-loading="promptLoading" :data="promptList" border>
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="name" label="模板名称" min-width="160" show-overflow-tooltip />
-          <el-table-column label="功能类型" width="130">
-            <template #default="scope">
-              {{ FUNC_TYPE_LABELS[scope.row.function_type] || scope.row.function_type }}
-            </template>
-          </el-table-column>
+          <el-table-column label="功能类型" width="130"><template #default="scope">{{ FUNC_TYPE_LABELS[scope.row.function_type] || scope.row.function_type }}</template></el-table-column>
           <el-table-column prop="version" label="版本" width="80" />
-          <el-table-column label="状态" width="90">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === 1 ? 'success' : 'info'" size="small">
-                {{ scope.row.status === 1 ? '启用' : '停用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="默认" width="80">
-            <template #default="scope">
-              <el-tag v-if="scope.row.is_default" type="warning" size="small">默认</el-tag>
-              <span v-else class="hint-text">--</span>
-            </template>
-          </el-table-column>
+          <el-table-column label="状态" width="90"><template #default="scope"><el-tag :type="scope.row.status === 1 ? 'success' : 'info'" size="small">{{ scope.row.status === 1 ? '启用' : '停用' }}</el-tag></template></el-table-column>
+          <el-table-column label="默认" width="80"><template #default="scope"><el-tag v-if="scope.row.is_default" type="warning" size="small">默认</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
           <el-table-column prop="updated_at" label="更新时间" width="170" />
           <el-table-column label="操作" width="280" fixed="right">
             <template #default="scope">
               <el-button link type="primary" size="small" @click="openPromptEdit(scope.row)">编辑</el-button>
-              <el-button link :type="scope.row.status === 1 ? 'warning' : 'success'" size="small" @click="togglePromptStatus(scope.row)">
-                {{ scope.row.status === 1 ? '停用' : '启用' }}
-              </el-button>
-              <el-button link type="warning" size="small" @click="setDefaultTemplate(scope.row)" v-if="!scope.row.is_default">设为默认</el-button>
+              <el-button link :type="scope.row.status === 1 ? 'warning' : 'success'" size="small" @click="togglePromptStatus(scope.row)">{{ scope.row.status === 1 ? '停用' : '启用' }}</el-button>
+              <el-button v-if="!scope.row.is_default" link type="warning" size="small" @click="setDefaultTemplate(scope.row)">设为默认</el-button>
             </template>
           </el-table-column>
         </el-table>
-
-        <el-pagination
-          v-if="promptTotal > promptQuery.page_size"
-          layout="total, prev, pager, next"
-          :total="promptTotal"
-          :page-size="promptQuery.page_size"
-          v-model:current-page="promptQuery.page"
-          @current-change="loadPromptTemplates"
-          class="mt16"
-        />
-
-        <!-- Prompt Edit Dialog -->
-        <el-dialog
-          v-model="promptEditVisible"
-          :title="promptEditMode === 'create' ? '新增 Prompt 模板' : '编辑 Prompt 模板'"
-          width="680px"
-          :close-on-click-modal="false"
-        >
-          <el-form label-width="100px" v-loading="promptEditLoading">
-            <el-form-item label="模板名称" required>
-              <el-input v-model="promptEditForm.name" placeholder="输入模板名称" />
-            </el-form-item>
-            <el-form-item label="功能类型" required>
-              <el-select v-model="promptEditForm.function_type" placeholder="选择功能类型" style="width:100%">
-                <el-option v-for="ft in promptOptions?.function_types || []" :key="ft.value" :label="ft.label" :value="ft.value" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="Prompt 内容" required>
-              <el-input v-model="promptEditForm.prompt_content" type="textarea" :rows="8" placeholder="输入 Prompt 模板内容" />
-            </el-form-item>
-            <el-form-item label="版本号">
-              <el-input v-model="promptEditForm.version" placeholder="v1" />
-            </el-form-item>
-            <el-form-item label="状态">
-              <el-switch v-model="promptEditForm.status" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" />
-            </el-form-item>
-            <el-form-item label="设为默认">
-              <el-switch v-model="promptEditForm.is_default" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" />
-            </el-form-item>
-            <el-form-item label="备注">
-              <el-input v-model="promptEditForm.remark" placeholder="备注说明" />
-            </el-form-item>
-          </el-form>
-          <template #footer>
-            <el-button @click="promptEditVisible = false">取消</el-button>
-            <el-button type="primary" :loading="promptEditLoading" @click="submitPromptEdit">保存</el-button>
-          </template>
-        </el-dialog>
+        <el-pagination v-if="promptTotal > promptQuery.page_size" v-model:current-page="promptQuery.page" layout="total, prev, pager, next" :total="promptTotal" :page-size="promptQuery.page_size" class="mt16" @current-change="loadPromptTemplates" />
       </el-tab-pane>
 
-      <!-- Tab 3: 风险规则 -->
-      <el-tab-pane label="风险规则" name="risk">
-        <el-row :gutter="20" v-loading="aiConfigLoading">
-          <el-col :span="12">
-            <el-card header="敏感词规则">
-              <div v-if="aiConfig?.sensitive_words?.length">
-                <el-tag v-for="(word, i) in aiConfig.sensitive_words" :key="i" class="mr8 mb8" type="danger">{{ word }}</el-tag>
-              </div>
-              <el-empty v-else description="未配置敏感词" :image-size="80" />
-            </el-card>
-          </el-col>
-          <el-col :span="12">
-            <el-card header="风险等级阈值">
-              <el-descriptions :column="1" border size="small">
-                <el-descriptions-item label="低风险阈值">&le; {{ aiConfig?.risk_threshold_low ?? '--' }}</el-descriptions-item>
-                <el-descriptions-item label="中风险阈值">&le; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item>
-                <el-descriptions-item label="高风险范围">&gt; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item>
-              </el-descriptions>
-            </el-card>
-          </el-col>
-          <el-col :span="12" style="margin-top: 20px">
-            <el-card header="降级策略">
-              <div v-if="aiConfig?.fallback_strategy && Object.keys(aiConfig.fallback_strategy).length">
-                <pre class="json-view">{{ JSON.stringify(aiConfig.fallback_strategy, null, 2) }}</pre>
-              </div>
-              <el-empty v-else description="未配置降级策略" :image-size="80" />
-            </el-card>
-          </el-col>
-          <el-col :span="12" style="margin-top: 20px">
-            <el-card header="风险规则配置">
-              <div v-if="aiConfig?.risk_rules?.length">
-                <pre class="json-view">{{ JSON.stringify(aiConfig.risk_rules, null, 2) }}</pre>
-              </div>
-              <el-empty v-else description="未配置风险规则" :image-size="80" />
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-tab-pane>
-
-      <!-- Tab 4: AI 调用记录 -->
-      <el-tab-pane label="AI 调用记录" name="records">
+      <el-tab-pane label="AI 生成记录" name="records">
+        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区读取 ai_generate_record 表。兜底筛选仅在后端确认 ai_source 字段可用时显示。" />
         <div class="filter-row">
           <el-select v-model="recordsQuery.function_type" placeholder="功能类型" clearable style="width: 150px" @change="recordsQuery.page=1;loadCallRecords()">
             <el-option v-for="ft in promptOptions?.function_types || []" :key="ft.value" :label="ft.label" :value="ft.value" />
@@ -524,7 +401,7 @@ const aiConfigStatusType = computed(() => {
             <el-option label="中" value="medium" />
             <el-option label="高" value="high" />
           </el-select>
-          <el-select v-model="recordsQuery.is_fallback" placeholder="兜底标记" clearable style="width: 110px" @change="recordsQuery.page=1;loadCallRecords()">
+          <el-select v-if="recordsData?.fallback_supported !== false" v-model="recordsQuery.is_fallback" placeholder="兜底标记" clearable style="width: 110px" @change="recordsQuery.page=1;loadCallRecords()">
             <el-option label="兜底" :value="true" />
             <el-option label="正常" :value="false" />
           </el-select>
@@ -532,58 +409,47 @@ const aiConfigStatusType = computed(() => {
           <el-date-picker v-model="recordsQuery.end_time" type="date" placeholder="截止日期" value-format="YYYY-MM-DD" style="width: 140px" />
           <el-button type="primary" @click="recordsQuery.page=1;loadCallRecords()">查询</el-button>
         </div>
-
-        <!-- summary cards -->
-        <div class="summary-grid" v-if="recordsData?.summary">
+        <div v-if="recordsData?.summary" class="summary-grid">
           <div class="summary-card"><span class="sc-label">总调用</span><span class="sc-value">{{ recordsData.summary.total_count }}</span></div>
           <div class="summary-card"><span class="sc-label">今日调用</span><span class="sc-value">{{ recordsData.summary.today_count }}</span></div>
           <div class="summary-card"><span class="sc-label">兜底次数</span><span class="sc-value">{{ recordsData.summary.fallback_count }}</span></div>
         </div>
-
         <el-table v-loading="recordsLoading" :data="recordsData?.items || []" border>
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip />
-          <el-table-column label="功能类型" width="130">
-            <template #default="scope">
-              {{ FUNC_TYPE_LABELS[scope.row.function_type] || scope.row.function_type }}
-            </template>
-          </el-table-column>
+          <el-table-column label="功能类型" width="130"><template #default="scope">{{ FUNC_TYPE_LABELS[scope.row.function_type] || scope.row.function_type }}</template></el-table-column>
           <el-table-column prop="input_length" label="输入长度" width="90" />
-          <el-table-column label="状态" width="90">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small">
-                {{ RECORD_STATUS_LABELS[scope.row.status] || '未知' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="风险等级" width="90">
-            <template #default="scope">
-              <el-tag v-if="scope.row.risk_level" :type="scope.row.risk_level === 'high' ? 'danger' : scope.row.risk_level === 'medium' ? 'warning' : 'success'" size="small">
-                {{ RISK_LEVEL_LABELS[scope.row.risk_level] || scope.row.risk_level }}
-              </el-tag>
-              <span v-else class="hint-text">--</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="兜底" width="70">
-            <template #default="scope">
-              <el-tag v-if="scope.row.is_fallback" type="warning" size="small">是</el-tag>
-              <span v-else class="hint-text">--</span>
-            </template>
-          </el-table-column>
+          <el-table-column label="状态" width="90"><template #default="scope"><el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small">{{ RECORD_STATUS_LABELS[scope.row.status] || '未知' }}</el-tag></template></el-table-column>
+          <el-table-column label="风险等级" width="90"><template #default="scope"><el-tag v-if="scope.row.risk_level" :type="scope.row.risk_level === 'high' ? 'danger' : scope.row.risk_level === 'medium' ? 'warning' : 'success'" size="small">{{ RISK_LEVEL_LABELS[scope.row.risk_level] || scope.row.risk_level }}</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
+          <el-table-column label="兜底" width="70"><template #default="scope"><el-tag v-if="scope.row.is_fallback" type="warning" size="small">是</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
           <el-table-column prop="created_at" label="时间" width="170" />
         </el-table>
+        <el-pagination v-if="recordsData && recordsData.total > (recordsQuery.page_size || 10)" v-model:current-page="recordsQuery.page" layout="total, prev, pager, next" :total="recordsData.total" :page-size="recordsQuery.page_size" class="mt16" @current-change="loadCallRecords" />
+      </el-tab-pane>
 
-        <el-pagination
-          v-if="recordsData && recordsData.total > (recordsQuery.page_size || 10)"
-          layout="total, prev, pager, next"
-          :total="recordsData.total"
-          :page-size="recordsQuery.page_size"
-          v-model:current-page="recordsQuery.page"
-          @current-change="loadCallRecords"
-          class="mt16"
-        />
+      <el-tab-pane label="风险规则" name="risk">
+        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区当前为只读说明，用于查看敏感词、风险阈值、降级策略和风险规则；编辑仍通过 AI 模型配置或后端配置完成。" />
+        <el-row :gutter="20" v-loading="aiConfigLoading">
+          <el-col :span="12"><el-card header="敏感词规则"><el-tag v-for="(word, i) in aiConfig?.sensitive_words || []" :key="i" class="mr8 mb8" type="danger">{{ word }}</el-tag><el-empty v-if="!aiConfig?.sensitive_words?.length" description="未配置敏感词" :image-size="80" /></el-card></el-col>
+          <el-col :span="12"><el-card header="风险等级阈值"><el-descriptions :column="1" border size="small"><el-descriptions-item label="低风险阈值">&le; {{ aiConfig?.risk_threshold_low ?? '--' }}</el-descriptions-item><el-descriptions-item label="中风险阈值">&le; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item><el-descriptions-item label="高风险范围">&gt; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item></el-descriptions></el-card></el-col>
+          <el-col :span="12" style="margin-top: 20px"><el-card header="降级策略"><pre v-if="aiConfig?.fallback_strategy && Object.keys(aiConfig.fallback_strategy).length" class="json-view">{{ JSON.stringify(aiConfig.fallback_strategy, null, 2) }}</pre><el-empty v-else description="未配置降级策略" :image-size="80" /></el-card></el-col>
+          <el-col :span="12" style="margin-top: 20px"><el-card header="风险规则配置"><pre v-if="aiConfig?.risk_rules?.length" class="json-view">{{ JSON.stringify(aiConfig.risk_rules, null, 2) }}</pre><el-empty v-else description="未配置风险规则" :image-size="80" /></el-card></el-col>
+        </el-row>
       </el-tab-pane>
     </el-tabs>
+
+    <el-dialog v-model="promptEditVisible" :title="promptEditMode === 'create' ? '新增 Prompt 模板' : '编辑 Prompt 模板'" width="680px" :close-on-click-modal="false">
+      <el-form label-width="100px" v-loading="promptEditLoading">
+        <el-form-item label="模板名称" required><el-input v-model="promptEditForm.name" placeholder="输入模板名称" /></el-form-item>
+        <el-form-item label="功能类型" required><el-select v-model="promptEditForm.function_type" placeholder="选择功能类型" style="width:100%"><el-option v-for="ft in promptOptions?.function_types || []" :key="ft.value" :label="ft.label" :value="ft.value" /></el-select></el-form-item>
+        <el-form-item label="Prompt 内容" required><el-input v-model="promptEditForm.prompt_content" type="textarea" :rows="8" placeholder="输入 Prompt 模板内容" /></el-form-item>
+        <el-form-item label="版本号"><el-input v-model="promptEditForm.version" placeholder="v1" /></el-form-item>
+        <el-form-item label="状态"><el-switch v-model="promptEditForm.status" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" /></el-form-item>
+        <el-form-item label="设为默认"><el-switch v-model="promptEditForm.is_default" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="promptEditForm.remark" placeholder="备注说明" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="promptEditVisible = false">取消</el-button><el-button type="primary" :loading="promptEditLoading" @click="submitPromptEdit">保存</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -591,6 +457,8 @@ const aiConfigStatusType = computed(() => {
 .ai-config-page { padding: 0 4px; }
 .panel-header { margin-bottom: 16px; }
 .panel-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
+.panel-header p { margin: 6px 0 0; color: #909399; font-size: 13px; }
+.section-alert { margin-bottom: 16px; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
 .summary-grid { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
 .summary-card { background: #f5f7fa; border-radius: 6px; padding: 14px 20px; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; }

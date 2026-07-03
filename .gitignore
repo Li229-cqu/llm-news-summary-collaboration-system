@@ -44,6 +44,11 @@ uploads/
 backup/**/*.sql
 *.sqlite3
 backup/
+backups/
+
+# Claude Code
+.claude/
+CLAUDE.md
 
 # Allow database schema and seed files
 !database/schema.sql

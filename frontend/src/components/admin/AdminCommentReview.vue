@@ -15,7 +15,7 @@ import {
 
 const emit = defineEmits<{ changed: [] }>()
 
-type CommentTab = 'all' | 'news' | 'post' | 'pending' | 'folded' | 'deleted' | 'reported'
+type CommentTab = 'all' | 'news' | 'post' | 'pending' | 'folded' | 'deleted'
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -50,7 +50,6 @@ const tabItems = computed(() => [
   { key: 'pending', label: '\u5f85\u590d\u6838' },
   { key: 'folded', label: '\u5df2\u6298\u53e0' },
   { key: 'deleted', label: '\u5df2\u5220\u9664' },
-  { key: 'reported', label: '\u88ab\u4e3e\u62a5', disabled: !options.value.report_supported },
 ])
 
 const summaryCards = computed(() => [
@@ -127,11 +126,6 @@ async function loadOptions() {
 }
 
 async function loadComments(targetPage = page.value) {
-  if (activeTab.value === 'reported' && !options.value.report_supported) {
-    list.value = []
-    total.value = 0
-    return
-  }
   loading.value = true
   errorMessage.value = ''
   try {
@@ -213,7 +207,7 @@ async function runStatusAction(row: AdminCommentItem, action: AdminReviewAction)
 }
 
 function availableActions(row: AdminCommentItem) {
-  if (row.status === 3) return ['approve', 'fold', 'delete'] as AdminReviewAction[]
+  if (row.status === 3) return [] as AdminReviewAction[]
   if (row.status === 1) return ['fold', 'delete'] as AdminReviewAction[]
   if (row.status === 2) return ['restore', 'delete'] as AdminReviewAction[]
   if (row.status === 4 || row.status === 0) return ['restore'] as AdminReviewAction[]
@@ -249,34 +243,38 @@ onMounted(async () => {
         </article>
       </div>
 
-      <el-alert v-if="!options.report_supported" class="info-alert" type="info" show-icon :closable="false" title="&#24403;&#21069;&#25968;&#25454;&#24211;&#26242;&#26410;&#35774;&#35745;&#35780;&#35770;&#20030;&#25253;&#34920;&#65292;&#34987;&#20030;&#25253;&#35780;&#35770;&#20165;&#26174;&#31034;&#31354;&#29366;&#24577;&#12290;" />
-
       <el-tabs :model-value="activeTab" class="type-tabs" @tab-change="handleTabChange">
-        <el-tab-pane v-for="tab in tabItems" :key="tab.key" :name="tab.key" :label="tab.label" :disabled="tab.disabled" />
+        <el-tab-pane v-for="tab in tabItems" :key="tab.key" :name="tab.key" :label="tab.label" />
       </el-tabs>
 
       <div class="filter-bar">
-        <el-input v-model="filters.keyword" clearable placeholder="&#25628;&#32034;&#35780;&#35770;&#20869;&#23481;" />
-        <el-input-number v-model="filters.user_id" :min="1" controls-position="right" placeholder="User ID" />
-        <el-input v-model="filters.username" clearable placeholder="&#35780;&#35770;&#29992;&#25143;" />
-        <el-select v-model="filters.type" clearable placeholder="&#35780;&#35770;&#31867;&#22411;">
-          <el-option label="&#20840;&#37096;" value="all" />
-          <el-option label="&#26032;&#38395;&#35780;&#35770;" value="news" />
-          <el-option label="&#31038;&#21306;&#35780;&#35770;" value="post" />
-        </el-select>
-        <el-select v-model="filters.status" clearable placeholder="&#29366;&#24577;">
-          <el-option v-for="item in options.statuses" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-input-number v-model="filters.news_id" :min="1" controls-position="right" placeholder="News ID" />
-        <el-input-number v-model="filters.post_id" :min="1" controls-position="right" placeholder="Post ID" />
-        <el-select v-model="filters.has_parent" clearable placeholder="&#26159;&#21542;&#22238;&#22797;">
-          <el-option label="&#22238;&#22797;&#35780;&#35770;" :value="true" />
-          <el-option label="&#19968;&#32423;&#35780;&#35770;" :value="false" />
-        </el-select>
-        <el-date-picker v-model="filters.date_range" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" start-placeholder="&#24320;&#22987;&#26102;&#38388;" end-placeholder="&#32467;&#26463;&#26102;&#38388;" />
-        <div class="filter-actions">
-          <el-button type="primary" @click="handleSearch">&#26597;&#35810;</el-button>
-          <el-button @click="handleReset">&#37325;&#32622;</el-button>
+        <div class="filter-row-1">
+          <el-input v-model="filters.keyword" clearable placeholder="搜索评论内容" class="filter-keyword" />
+          <el-input v-model="filters.username" clearable placeholder="评论用户" class="filter-input" />
+          <el-select v-model="filters.type" clearable placeholder="评论类型" class="filter-select">
+            <el-option label="全部" value="all" />
+            <el-option label="新闻评论" value="news" />
+            <el-option label="社区评论" value="post" />
+          </el-select>
+          <el-select v-model="filters.status" clearable placeholder="状态" class="filter-select">
+            <el-option v-for="item in options.statuses" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </div>
+        <div class="filter-row-2">
+          <el-input-number v-model="filters.user_id" :min="1" controls-position="right" placeholder="用户 ID" class="filter-small-input" />
+          <el-input-number v-model="filters.news_id" :min="1" controls-position="right" placeholder="新闻 ID" class="filter-small-input" />
+          <el-input-number v-model="filters.post_id" :min="1" controls-position="right" placeholder="帖子 ID" class="filter-small-input" />
+          <el-select v-model="filters.has_parent" clearable placeholder="是否回复" class="filter-select">
+            <el-option label="回复评论" :value="true" />
+            <el-option label="一级评论" :value="false" />
+          </el-select>
+        </div>
+        <div class="filter-row-3">
+          <el-date-picker v-model="filters.date_range" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" start-placeholder="开始时间" end-placeholder="结束时间" class="filter-date-range" />
+          <div class="filter-actions">
+            <el-button type="primary" @click="handleSearch">查询</el-button>
+            <el-button @click="handleReset">重置</el-button>
+          </div>
         </div>
       </div>
 
@@ -312,6 +310,7 @@ onMounted(async () => {
             <el-button v-for="action in availableActions(scope.row)" :key="action" size="small" text :type="action === 'delete' || action === 'reject' ? 'danger' : 'primary'" :loading="actionLoading" @click="runStatusAction(scope.row, action)">
               {{ action === 'approve' ? '\u901a\u8fc7' : action === 'fold' ? '\u6298\u53e0' : action === 'delete' ? '\u5220\u9664' : action === 'restore' ? '\u6062\u590d' : '\u9000\u56de' }}
             </el-button>
+            <el-button v-if="scope.row.status === 3" size="small" text disabled>待审核中心处理</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -400,8 +399,32 @@ onMounted(async () => {
 .summary-card strong { display: block; margin-top: 6px; font-size: 22px; color: var(--color-text-primary); }
 .info-alert, .error-alert { margin-bottom: 16px; }
 .type-tabs { margin-bottom: 10px; }
-.filter-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-.filter-actions { display: flex; gap: 8px; }
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.filter-row-1, .filter-row-2, .filter-row-3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.filter-keyword { width: 320px; }
+.filter-input { width: 200px; }
+.filter-small-input { width: 150px; }
+.filter-select { width: 200px; }
+.filter-date-range { width: 400px; }
+.filter-actions {
+  display: flex;
+  gap: 8px;
+}
+.filter-actions .el-button:first-child {
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  color: #fff;
+}
 .comment-table { width: 100%; }
 .pagination-row { display: flex; justify-content: flex-end; margin-top: 16px; }
 .detail-body { display: flex; flex-direction: column; gap: 18px; }

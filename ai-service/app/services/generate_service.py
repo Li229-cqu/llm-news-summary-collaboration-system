@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import re
 import logging
+import asyncio
 
 from app.common.exceptions import AIServiceException
 from app.core.config import settings
@@ -11,7 +12,7 @@ from app.schemas.evidence import EvidenceChain, EvidenceRequest, EvidenceRespons
 from app.services.llm_client import call_llm, call_summary_llm
 from app.services.prompt_builder import build_messages
 from app.services.llm_parser import parse_llm_response
-from app.services.evidence_service import evaluate_evidence
+from app.services.evidence_service import evaluate_evidence, evaluate_evidence_mock
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +456,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
     if not 1 <= request.title_count <= 5:
         raise AIServiceException(code=400, message="标题数量必须在 1-5 范围内")
 
-    if not settings.llm_enabled and not settings.summary_llm_enabled:
+    if not settings.summary_llm_enabled:
         logger.info("LLM 未启用，使用动态 mock 生成响应")
         return generate_mock_response(request)
 
@@ -513,41 +514,37 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 logger.info(f"长摘要前100字: {response.summary_long[:100]}")
 
                 if not request.skip_evidence:
-                    logger.info("正在执行证据评估")
-                    combined_summary = response.summary_short + response.summary_long
-
-                    evidence_response = await _evaluate_evidence_background(
-                        combined_summary,
-                        request.input_text,
-                        0,
-                        request.summary_type
-                    )
-
-                    if evidence_response:
-                        response.evidence_chain = evidence_response.evidence_chain
-                        response.risk_level = evidence_response.risk_level
-                        response.risk_details = evidence_response.risk_details
-                        response.evidence_coverage = evidence_response.evidence_chain.evidence_coverage if evidence_response.evidence_chain else None
+                    logger.info("正在并行执行证据评估")
+                    evidence_tasks = []
 
                     if response.summary_short:
-                        evidence_response_short = await _evaluate_evidence_background(
+                        evidence_tasks.append(_evaluate_evidence_background(
                             response.summary_short,
                             request.input_text,
                             0,
                             request.summary_type
-                        )
-                        if evidence_response_short:
-                            response.evidence_chain_short = evidence_response_short.evidence_chain
+                        ))
 
                     if response.summary_long:
-                        evidence_response_long = await _evaluate_evidence_background(
+                        evidence_tasks.append(_evaluate_evidence_background(
                             response.summary_long,
                             request.input_text,
                             0,
                             request.summary_type
-                        )
-                        if evidence_response_long:
-                            response.evidence_chain_long = evidence_response_long.evidence_chain
+                        ))
+
+                    if evidence_tasks:
+                        results = await asyncio.gather(*evidence_tasks, return_exceptions=True)
+
+                        if response.summary_short and results[0] and not isinstance(results[0], Exception):
+                            response.evidence_chain_short = results[0].evidence_chain
+                            response.evidence_chain = results[0].evidence_chain
+                            response.risk_level = results[0].risk_level
+                            response.risk_details = results[0].risk_details
+                            response.evidence_coverage = results[0].evidence_chain.evidence_coverage if results[0].evidence_chain else None
+
+                        if response.summary_long and len(results) > 1 and results[1] and not isinstance(results[1], Exception):
+                            response.evidence_chain_long = results[1].evidence_chain
 
                 return response
 
@@ -563,7 +560,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
             return generate_mock_response(request)
 
     else:
-        logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.llm_model}")
+        logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.summary_llm_model}")
 
         try:
             messages = build_messages(request)
@@ -579,41 +576,37 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 logger.info("智谱 GLM 调用成功，返回有效响应")
 
                 if not request.skip_evidence:
-                    logger.info("正在执行证据评估")
-                    combined_summary = response.summary_short + response.summary_long
-
-                    evidence_response = await _evaluate_evidence_background(
-                        combined_summary,
-                        request.input_text,
-                        0,
-                        request.summary_type
-                    )
-
-                    if evidence_response:
-                        response.evidence_chain = evidence_response.evidence_chain
-                        response.risk_level = evidence_response.risk_level
-                        response.risk_details = evidence_response.risk_details
-                        response.evidence_coverage = evidence_response.evidence_chain.evidence_coverage if evidence_response.evidence_chain else None
+                    logger.info("正在并行执行证据评估")
+                    evidence_tasks = []
 
                     if response.summary_short:
-                        evidence_response_short = await _evaluate_evidence_background(
+                        evidence_tasks.append(_evaluate_evidence_background(
                             response.summary_short,
                             request.input_text,
                             0,
                             request.summary_type
-                        )
-                        if evidence_response_short:
-                            response.evidence_chain_short = evidence_response_short.evidence_chain
+                        ))
 
                     if response.summary_long:
-                        evidence_response_long = await _evaluate_evidence_background(
+                        evidence_tasks.append(_evaluate_evidence_background(
                             response.summary_long,
                             request.input_text,
                             0,
                             request.summary_type
-                        )
-                        if evidence_response_long:
-                            response.evidence_chain_long = evidence_response_long.evidence_chain
+                        ))
+
+                    if evidence_tasks:
+                        results = await asyncio.gather(*evidence_tasks, return_exceptions=True)
+
+                        if response.summary_short and results[0] and not isinstance(results[0], Exception):
+                            response.evidence_chain_short = results[0].evidence_chain
+                            response.evidence_chain = results[0].evidence_chain
+                            response.risk_level = results[0].risk_level
+                            response.risk_details = results[0].risk_details
+                            response.evidence_coverage = results[0].evidence_chain.evidence_coverage if results[0].evidence_chain else None
+
+                        if response.summary_long and len(results) > 1 and results[1] and not isinstance(results[1], Exception):
+                            response.evidence_chain_long = results[1].evidence_chain
 
                 return response
 

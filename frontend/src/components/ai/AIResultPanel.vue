@@ -210,7 +210,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
       </div>
 
       <div v-if="(displayResult?.candidate_titles?.length ?? 0) > 0" class="result-section">
-        <h4 class="section-title">📌 候选标题</h4>
+        <h4 class="section-title">候选标题</h4>
         <div class="title-list">
           <div v-for="(title, index) in (displayResult?.candidate_titles ?? [])" :key="index" class="title-item">
             <div class="title-text">
@@ -243,7 +243,7 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
             @click="copyToClipboard(displayResult.summary_short)"
             class="copy-button-summary"
           >
-            📋 复制
+            复制
           </el-button>
         </div>
       </div>
@@ -262,13 +262,13 @@ const handleSummaryClick = (event: Event, chain?: EvidenceChain) => {
             @click="copyToClipboard(displayResult.summary_long)"
             class="copy-button-summary"
           >
-            📋 复制
+            复制
           </el-button>
         </div>
       </div>
 
       <div v-if="(displayResult?.summary_points?.length ?? 0) > 0" class="result-section">
-        <h4 class="section-title">🎯 摘要要点</h4>
+        <h4 class="section-title">摘要要点</h4>
         <ul class="points-list">
           <li v-for="(point, index) in (displayResult?.summary_points ?? [])" :key="index" class="point-item">
             {{ point }}

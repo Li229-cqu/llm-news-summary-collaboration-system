@@ -80,6 +80,7 @@ export interface BrowseResult {
 
 export interface HotNewsParams {
   limit?: number
+  category_id?: number | string
 }
 
 export interface SearchNewsParams {

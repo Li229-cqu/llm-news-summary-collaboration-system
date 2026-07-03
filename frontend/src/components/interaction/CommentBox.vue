@@ -28,6 +28,19 @@
 
     <div class="comment-box__actions">
       <div class="comment-box__tools">
+        <!-- AI 辅助生成按钮 -->
+        <el-button
+          v-if="showAiButton"
+          text
+          :disabled="loading || generatingComment"
+          @click="handleGenerateComment"
+          title="AI辅助生成评论"
+          class="comment-box__ai-btn"
+        >
+          <el-icon v-if="generatingComment" class="is-loading"><Loading /></el-icon>
+          <span v-else>🤖 AI辅助</span>
+        </el-button>
+
         <!-- 表情按钮 -->
         <el-popover
           placement="bottom-start"
@@ -81,6 +94,9 @@ const props = withDefaults(
     buttonText?: string
     title?: string
     hint?: string
+    topic?: string
+    context?: string
+    showAiButton?: boolean
   }>(),
   {
     placeholder: '写下你的评论',
@@ -88,11 +104,15 @@ const props = withDefaults(
     buttonText: '提交评论',
     title: '发表评论',
     hint: '支持图片和表情，写下你的想法',
+    topic: '',
+    context: '',
+    showAiButton: true,
   },
 )
 
 const emit = defineEmits<{
   (event: 'submit', content: string, mediaJson: Record<string, unknown> | null): void
+  (event: 'generate-comment'): void
 }>()
 
 const content = ref('')
@@ -108,6 +128,9 @@ const uploadedImageUrl = ref<string | null>(null)
 
 // emoji 收集
 const insertedEmojis = ref<string[]>([])
+
+// AI 评论生成状态
+const generatingComment = ref(false)
 
 function triggerFileInput() {
   fileInputRef.value?.click()
@@ -168,6 +191,16 @@ async function onEmojiClick(event: Event) {
       textarea.setSelectionRange(pos, pos)
       textarea.focus()
     }
+  }
+}
+
+async function handleGenerateComment() {
+  if (generatingComment.value) return
+  generatingComment.value = true
+  try {
+    emit('generate-comment')
+  } finally {
+    generatingComment.value = false
   }
 }
 

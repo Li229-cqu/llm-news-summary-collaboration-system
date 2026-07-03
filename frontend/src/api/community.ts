@@ -14,6 +14,7 @@ export interface CommunityPost {
   comment_count?: number
   views: number
   tags: string[]
+  images?: string[]
   liked?: boolean
   is_favorited?: boolean
   favorite_count?: number
@@ -28,6 +29,7 @@ export interface CreatePostRequest {
   content: string
   tags?: string[]
   related_news_id?: number | null
+  images?: string[]
 }
 
 export interface PostListResponse {
@@ -134,11 +136,28 @@ export interface PostListParams {
   page?: number
   page_size?: number
   keyword?: string
+  tag?: string
+  sort?: 'hot' | 'latest'
 }
 
 export interface CommentListParams {
   page?: number
   page_size?: number
+}
+
+export interface PostMediaUploadResponse {
+  url: string
+  filename: string
+  size: number
+}
+
+export function uploadPostMedia(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<PostMediaUploadResponse, PostMediaUploadResponse>(
+    '/api/community/posts/media/upload',
+    formData,
+  )
 }
 
 export function getPostList(params: PostListParams = {}) {
@@ -313,6 +332,185 @@ export function deleteCommunityAiSession(sessionId: number) {
   return request.delete<{ success: boolean; message: string }, { success: boolean; message: string }>(`/api/community/ai-sessions/${sessionId}`)
 }
 
+// ─── AI 会话流式 API ───────────────────────────────────────────
+
+export interface StreamCallbacks {
+  onToken: (token: string) => void
+  onDone: (data: {
+    done: true
+    message_id: number
+    session_id: number
+    content: string
+    recommended_questions?: string[]
+    session?: CommunityAiSession
+    messages?: CommunityAiMessage[]
+  }) => void
+  onError: (error: string) => void
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const TOKEN_KEY = 'llm_news_token'
+
+/** SSE 流式：在已有会话中发送消息，逐 token 回调。 */
+export async function sendCommunityAiMessageStream(
+  sessionId: number,
+  data: SendCommunityAiMessageRequest,
+  callbacks: StreamCallbacks,
+): Promise<void> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const resp = await fetch(`${API_BASE}/api/community/ai-sessions/${sessionId}/messages/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!resp.ok) {
+    callbacks.onError(`请求失败: ${resp.status} ${resp.statusText}`)
+    return
+  }
+
+  const reader = resp.body?.getReader()
+  if (!reader) {
+    callbacks.onError('浏览器不支持流式读取')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      // 最后一个 incomplete line 保留在 buffer 中
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        try {
+          const json = JSON.parse(trimmed.slice(6))
+          if (json.error) {
+            callbacks.onError(json.error)
+            return
+          }
+          if (json.done) {
+            callbacks.onDone(json)
+            return
+          }
+          if (json.token) {
+            callbacks.onToken(json.token)
+            // 让出微任务队列，允许 Vue 在下一个 token 之前重新渲染
+            await Promise.resolve()
+          }
+        } catch {
+          // JSON parse error, skip malformed line
+        }
+      }
+    }
+  } catch (err: any) {
+    callbacks.onError(err.message || '流读取失败')
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+}
+
+/** SSE 流式：创建 AI 会话并可携带首条问题，逐 token 回调。 */
+export async function createCommunityAiSessionStream(
+  data: CreateCommunityAiSessionRequest,
+  callbacks: StreamCallbacks,
+): Promise<void> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const resp = await fetch(`${API_BASE}/api/community/ai-sessions/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!resp.ok) {
+    callbacks.onError(`请求失败: ${resp.status} ${resp.statusText}`)
+    return
+  }
+
+  const reader = resp.body?.getReader()
+  if (!reader) {
+    callbacks.onError('浏览器不支持流式读取')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        try {
+          const json = JSON.parse(trimmed.slice(6))
+          if (json.error) {
+            callbacks.onError(json.error)
+            return
+          }
+          if (json.done) {
+            callbacks.onDone(json)
+            return
+          }
+          if (json.token) {
+            callbacks.onToken(json.token)
+            await Promise.resolve()
+          }
+        } catch {
+          // JSON parse error, skip
+        }
+      }
+    }
+  } catch (err: any) {
+    callbacks.onError(err.message || '流读取失败')
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+}
+
+export interface GeneratePostCommentResponse {
+  comment: string
+  source: string
+}
+
+export interface GeneratePostCommentPayload {
+  topic: string
+  context?: string
+  sentiment?: 'positive' | 'negative' | 'neutral'
+}
+
+/** AI生成社区帖子评论，无需登录。 */
+export function generatePostComment(
+  postId: number | string,
+  payload: GeneratePostCommentPayload,
+) {
+  return request.post<GeneratePostCommentResponse, GeneratePostCommentResponse>(
+    `/api/community/posts/${postId}/comments/generate`,
+    payload,
+    { timeout: 15000 },
+  )
+}
+
 // ─── 我的帖子与互动 ─────────────────────────────────────────────
 
 export interface MyCommunityPost {
@@ -326,6 +524,7 @@ export interface MyCommunityPost {
   created_at: string
   updated_at?: string
   tags: string[]
+  images?: string[]
   status?: number
   view_count?: number
   like_count?: number
