@@ -336,7 +336,15 @@ def _check_consistency(input_text: str) -> ConsistencyCheck:
     )
 
 
-def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
+def generate_mock_response(
+    request: GenerateRequest,
+    *,
+    source: str = "mock",
+    generation_source: str = "mock",
+    provider: str = "local",
+    model: str = "rule-based",
+    fallback_reason: str | None = None,
+) -> GenerateResponse:
     input_text = request.input_text.strip()
 
     candidate_titles = _generate_dynamic_titles(
@@ -420,7 +428,11 @@ def generate_mock_response(request: GenerateRequest) -> GenerateResponse:
         keywords=keywords,
         elements=elements,
         consistency=consistency,
-        source="mock",
+        source=source if source in {"mock", "llm", "fallback", "demo"} else "mock",
+        generation_source=generation_source if generation_source in {"mock", "llm", "fallback"} else "mock",
+        provider=provider,
+        model=model,
+        fallback_reason=fallback_reason,
         evidence_chain=evidence_chain,
         evidence_chain_short=evidence_chain_short,
         evidence_chain_long=evidence_chain_long,
@@ -495,9 +507,21 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
 
             if short_response is None and long_response is None:
                 logger.warning("长短摘要都无法解析，fallback 到 mock")
-                return generate_mock_response(request)
+                return generate_mock_response(
+                    request,
+                    source="fallback",
+                    generation_source="fallback",
+                    provider=settings.summary_llm_provider,
+                    model=settings.summary_llm_model,
+                    fallback_reason="LLM response parse failed",
+                )
 
             response = short_response if short_response else long_response
+            response.source = "llm"
+            response.generation_source = "llm"
+            response.provider = settings.summary_llm_provider
+            response.model = settings.summary_llm_model
+            response.fallback_reason = None
             
             if short_response and long_response:
                 response.summary_short = short_response.summary_short
@@ -549,15 +573,36 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 return response
 
             logger.warning("DeepSeek 返回内容无法解析，fallback 到 mock")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason="LLM response parse failed",
+            )
 
         except ValueError as e:
             logger.warning(f"DeepSeek 参数错误，fallback 到 mock: {str(e)}")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason=str(e),
+            )
 
         except Exception as e:
             logger.warning(f"DeepSeek 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason=f"{type(e).__name__}: {str(e)}",
+            )
 
     else:
         logger.info(f"单AI模式已启用，准备调用智谱 GLM: model={settings.summary_llm_model}")
@@ -571,6 +616,11 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 title_count=request.title_count,
                 summary_length=request.summary_length
             )
+            response.source = "llm"
+            response.generation_source = "llm"
+            response.provider = settings.summary_llm_provider
+            response.model = settings.summary_llm_model
+            response.fallback_reason = None
 
             if response is not None:
                 logger.info("智谱 GLM 调用成功，返回有效响应")
@@ -611,12 +661,33 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 return response
 
             logger.warning("智谱 GLM 返回内容无法解析，fallback 到 mock")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason="LLM response parse failed",
+            )
 
         except ValueError as e:
             logger.warning(f"智谱 LLM 参数错误，fallback 到 mock: {str(e)}")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason=str(e),
+            )
 
         except Exception as e:
             logger.warning(f"智谱 LLM 调用失败，fallback 到 mock: {type(e).__name__}: {str(e)}")
-            return generate_mock_response(request)
+            return generate_mock_response(
+                request,
+                source="fallback",
+                generation_source="fallback",
+                provider=settings.summary_llm_provider,
+                model=settings.summary_llm_model,
+                fallback_reason=f"{type(e).__name__}: {str(e)}",
+            )

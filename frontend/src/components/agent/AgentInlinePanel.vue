@@ -15,6 +15,7 @@
 
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import type { AIGenerateResponse } from '@/api/ai'
 import { useNewsEditorAgentStore, AGENT_STEPS } from '@/stores/newsEditorAgent'
 import Step7SummaryPanel from './Step7SummaryPanel.vue'
 
@@ -24,7 +25,7 @@ const props = defineProps<{
   /** Phase 3 Mock 模式：true = 后端 MockTaskRunner + SSE 实时流（默认），false = 真实 AI + SSE */
   useMock?: boolean
 }>()
-const emit = defineEmits<{ done: [] }>()
+const emit = defineEmits<{ (e: 'done', result: AIGenerateResponse | null): void }>()
 
 const store = useNewsEditorAgentStore()
 const submitting = ref(false)
@@ -70,7 +71,7 @@ async function handleStart() {
   try {
     if (props.useMock === true) {
       // Phase 3 Mock 模式：后端 MockTaskRunner + SSE 实时流（仅当明确指定 mock 时）
-      await store.submitTaskMock(text)
+      await store.submitTaskMock(text, props.params)
     } else {
       // Phase 3 真实模式：真实 AI pipeline + SSE 实时流（默认），传入侧边栏参数
       await store.submitTask(text, props.params)
@@ -91,7 +92,8 @@ function handleReset() {
 
 // Notify parent when task completes
 watch(() => store.status, (s) => {
-  if (s === 'completed' || s === 'failed') emit('done')
+  if (s === 'completed') emit('done', store.standardResult)
+  if (s === 'failed') emit('done', null)
 })
 
 onUnmounted(() => { store.disconnect() })
@@ -306,7 +308,7 @@ function formatMs(ms: number): string {
               <span class="s4-label">候选标题 ({{ step.output.candidate_titles.length }} 个)</span>
               <div class="titles-list">
                 <p v-for="(t, i) in step.output.candidate_titles" :key="i" class="output-text output-text--title">
-                  {{ i + 1 }}. {{ t }}
+                  {{ Number(i) + 1 }}. {{ t }}
                 </p>
               </div>
             </div>

@@ -187,20 +187,20 @@ export async function exportRecordToWord(record: AIGenerateRecordDetail): Promis
 
   // ═══ 六要素 ═══
   if (result.elements && result.elements.what) {
-    children.push(headingBlock('六要素 (5W1H)', HeadingLevel.HEADING_2))
+    children.push(headingBlock('新闻六要素', HeadingLevel.HEADING_2))
     const el = result.elements
     children.push(keyValueTable([
-      ['何人 (Who)', el.who || ''],
-      ['何事 (What)', el.what || ''],
-      ['何时 (When)', el.when || ''],
-      ['何地 (Where)', el.where || ''],
-      ['为何 (Why)', el.why || ''],
-      ['如何 (How)', el.how || ''],
+      ['人物/主体', el.who || ''],
+      ['事件', el.what || ''],
+      ['时间', el.when || ''],
+      ['地点', el.where || ''],
+      ['原因', el.why || ''],
+      ['方式', el.how || ''],
     ]))
   }
 
   // ═══ 一致性检查 ═══
-  if (result.consistency) {
+  if (result.has_consistency) {
     children.push(headingBlock('一致性检查', HeadingLevel.HEADING_2))
     const c = result.consistency as Record<string, any>
 

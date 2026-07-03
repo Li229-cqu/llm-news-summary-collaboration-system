@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import time
 import random
+import re
 from typing import Any, Dict, List, Optional
 
 # ═════════════════════════════════════════════════════════════
@@ -36,6 +37,90 @@ STEP_META_MOCK: List[Dict[str, Any]] = [
     {"name": "check_consistency",  "label": "一致性检查",   "order": 7},
     {"name": "edit_suggestions",   "label": "编辑建议生成", "order": 8},
 ]
+
+
+def _normalize_mock_text(text: str, limit: int) -> str:
+    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rstrip("，。！？；;,:： ") + "..."
+
+
+def _build_mock_generate_output(
+    input_text: str,
+    pipeline_params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    base = dict(MOCK_STEP_OUTPUTS["generate_title_summary"])
+    params = pipeline_params or {}
+
+    title_count = params.get("title_count", len(base.get("candidate_titles", [])) or 3)
+    try:
+        title_count = max(1, min(5, int(title_count)))
+    except Exception:
+        title_count = 3
+
+    summary_type = str(params.get("summary_type", "generate"))
+    summary_style = str(params.get("summary_style", "简明扼要"))
+    title_style = str(params.get("title_style", "客观新闻型"))
+    summary_length = str(params.get("summary_length", "both"))
+
+    sentences = [s.strip() for s in re.split(r"[。！？；\n]+", input_text or "") if s.strip()]
+    seed_text = sentences[0] if sentences else (input_text or base["summary_short"] or "新闻内容")
+
+    def build_title(seed: str, index: int) -> str:
+        title = _normalize_mock_text(seed, 26) or f"新闻标题{index + 1}"
+        if title_style == "吸引点击型":
+            return f"重磅：{title}"
+        if title_style == "简洁概括型":
+            return _normalize_mock_text(title, 18) or f"标题{index + 1}"
+        return title
+
+    titles = [build_title(sentences[i] if i < len(sentences) else seed_text, i) for i in range(title_count)]
+    while len(titles) < title_count:
+        titles.append(build_title(seed_text, len(titles)))
+
+    if summary_type == "extract":
+        short_summary = _normalize_mock_text(input_text or base["summary_short"], 120)
+        long_summary = _normalize_mock_text(input_text or base["summary_long"], 360)
+    else:
+        short_summary = _normalize_mock_text(f"综合来看，{input_text or base['summary_short']}", 140)
+        long_summary = _normalize_mock_text(f"进一步整理后可见，{input_text or base['summary_long']}", 420)
+
+    if summary_style == "客观正式":
+        short_summary = f"据报道，{short_summary}" if short_summary else short_summary
+        long_summary = f"综合来看，{long_summary}" if long_summary else long_summary
+    elif summary_style == "通俗易懂":
+        short_summary = f"简单来说，{short_summary}" if short_summary else short_summary
+        long_summary = f"换句话说，{long_summary}" if long_summary else long_summary
+
+    if summary_length == "short":
+        long_summary = ""
+    elif summary_length == "long":
+        short_summary = ""
+
+    summary_points = list(base.get("summary_points", []))
+    if summary_type == "extract" and sentences:
+        summary_points = sentences[:3]
+    elif input_text:
+        summary_points = [p for p in (
+            _normalize_mock_text(seed, 28)
+            for seed in sentences[:3]
+        ) if p]
+
+    return {
+        **base,
+        "candidate_titles": titles[:title_count],
+        "summary_short": short_summary,
+        "summary_long": long_summary,
+        "summary_points": summary_points[:5],
+        "summary_length": summary_length,
+        "title_count": title_count,
+        "summary_type": summary_type,
+        "summary_style": summary_style,
+        "title_style": title_style,
+    }
 
 # ═════════════════════════════════════════════════════════════
 # 每步 mock 输出数据（模拟真实 AI 返回结构）
@@ -145,6 +230,7 @@ def generate_mock_task_detail(
     task_id: int,
     current_step_index: int = 0,
     status: str = "running",
+    pipeline_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """根据当前步骤索引生成模拟任务详情。
 
@@ -163,6 +249,11 @@ def generate_mock_task_detail(
             step_status = "running"
 
         step_output = MOCK_STEP_OUTPUTS.get(meta["name"], {}) if step_status == "completed" else {}
+        if meta["name"] == "generate_title_summary" and step_status == "completed":
+            step_output = _build_mock_generate_output(
+                input_text="",
+                pipeline_params=pipeline_params or {},
+            )
 
         steps.append({
             "id": i + 1,
@@ -252,6 +343,7 @@ async def run_mock_task(
     input_text: str = "",
     news_id: Optional[int] = None,
     task_type: str = "news_editor",
+    pipeline_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """创建 mock 任务记录并启动 MockTaskRunner 后台状态机。
 
@@ -274,7 +366,7 @@ async def run_mock_task(
     )
 
     # 后台启动 MockTaskRunner（非阻塞）
-    schedule_mock_task(task_response.task_id, input_text)
+    schedule_mock_task(task_response.task_id, input_text, pipeline_params=pipeline_params)
 
     return {
         "task_id": task_response.task_id,

@@ -20,6 +20,8 @@ import {
   type SSEEvent,
   type AgentTaskDetail,
 } from '@/api/newsEditorAgent'
+import type { AIGenerateResponse } from '@/api/ai'
+import { normalizeAIGenerateResult } from '@/utils/normalizeAIGenerateResult'
 
 // ── 步骤定义（与后端 pipeline.py STEP_META 一致） ────────
 
@@ -79,6 +81,7 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
   const inputText = ref('')
   const steps = ref<StepState[]>(createDefaultSteps())
   const result = ref<AgentResult | null>(null)
+  const standardResult = ref<AIGenerateResponse | null>(null)
   const error = ref('')
   const loading = ref(false)
 
@@ -121,6 +124,9 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
         model: event.data?.model ?? '',
         output: event.data?.output ?? {},
       })
+      standardResult.value = normalizeAIGenerateResult(event.data?.result_json ?? event.data?.output ?? event.data ?? null, {
+        steps: steps.value,
+      })
     }
   }
 
@@ -143,7 +149,16 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
         try {
           const parsed = JSON.parse(raw)
           extractResultFromSteps(parsed)
-        } catch { /* ignore */ }
+          standardResult.value = normalizeAIGenerateResult(parsed, { steps: steps.value })
+        } catch {
+          standardResult.value = normalizeAIGenerateResult(event.data?.result ?? event.data ?? null, {
+            steps: steps.value,
+          })
+        }
+      } else {
+        standardResult.value = normalizeAIGenerateResult(event.data?.result ?? event.data ?? null, {
+          steps: steps.value,
+        })
       }
     } else {
       status.value = 'failed'
@@ -190,6 +205,7 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
 
     resetSteps()
     result.value = null
+    standardResult.value = null
     error.value = ''
     loading.value = true
     status.value = 'running'
@@ -255,18 +271,22 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
    * 后端 MockTaskRunner 是唯一状态源（每个 step 写入 DB + 推送 SSE），
    * 前端只做接收 + 渲染，不做任何客户端模拟。
    */
-  async function submitTaskMock(text: string): Promise<void> {
+  async function submitTaskMock(text: string, params?: Record<string, any>): Promise<void> {
     if (!text.trim()) return
 
     resetSteps()
     result.value = null
+    standardResult.value = null
     error.value = ''
     loading.value = true
     status.value = 'running'
 
     try {
       // 调用 /run-text-mock 启动后端 MockTaskRunner（含 SSE 推送）
-      const res = await runTextAgentMock({ input_text: text.trim() })
+      const res = await runTextAgentMock({
+        input_text: text.trim(),
+        pipeline_params: params as any,
+      })
       taskId.value = res.task_id
       inputText.value = text.trim()
     } catch (err) {
@@ -396,6 +416,9 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
 
         // 聚合结果
         _extractResultFromDetail(detail)
+        standardResult.value = normalizeAIGenerateResult(detail, {
+          steps: steps.value,
+        })
       }
 
       // 如果后端有 current_step 信息且 steps 为空，手动标记当前步骤
@@ -447,28 +470,28 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
     }
   }
 
-  /** 取消当前任务（断开 SSE + 停止 polling，重置状态）。 */
-  function abort() {
+  /** 清空执行态，但保留当前输入文本。 */
+  function clearExecutionState() {
     disconnect()
     _stopPolling()
     taskId.value = null
     status.value = 'idle'
     error.value = ''
+    loading.value = false
     resetSteps()
     result.value = null
+    standardResult.value = null
+  }
+
+  /** 取消当前任务（断开 SSE + 停止 polling，重置状态）。 */
+  function abort() {
+    clearExecutionState()
   }
 
   /** 重置到初始状态。 */
   function reset() {
-    disconnect()
-    _stopPolling()
-    taskId.value = null
-    status.value = 'idle'
+    clearExecutionState()
     inputText.value = ''
-    resetSteps()
-    result.value = null
-    error.value = ''
-    loading.value = false
   }
 
   return {
@@ -478,6 +501,7 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
     inputText,
     steps,
     result,
+    standardResult,
     error,
     loading,
     // computed
@@ -489,6 +513,7 @@ export const useNewsEditorAgentStore = defineStore('newsEditorAgent', () => {
     submitTaskMock,
     connectStream,
     disconnect,
+    clearExecutionState,
     abort,
     reset,
   }

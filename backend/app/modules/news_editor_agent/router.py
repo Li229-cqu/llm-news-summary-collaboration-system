@@ -127,6 +127,7 @@ async def run_text_agent_mock(
         input_text=input_text,
         news_id=request.news_id,
         task_type=request.task_type,
+        pipeline_params=request.pipeline_params.model_dump() if request.pipeline_params else None,
     )
 
     return success_response(result)

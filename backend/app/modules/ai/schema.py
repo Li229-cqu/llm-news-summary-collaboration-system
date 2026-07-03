@@ -66,7 +66,11 @@ class AIGenerateResponse(BaseModel):
     keywords: List[str]
     elements: NewsElement
     consistency: ConsistencyCheck
-    source: Optional[Literal["mock", "llm"]] = "mock"
+    source: Optional[Literal["mock", "llm", "fallback", "demo"]] = "mock"
+    generation_source: Optional[Literal["mock", "llm", "fallback"]] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    fallback_reason: Optional[str] = None
     evidence_chain: Optional[EvidenceChain] = None
     evidence_chain_short: Optional[EvidenceChain] = None
     evidence_chain_long: Optional[EvidenceChain] = None
@@ -82,7 +86,7 @@ class AIGenerateRecordItem(BaseModel):
     source_title: str
     title_count: int
     risk_level: Literal["low", "medium", "high"]
-    ai_source: Literal["mock", "llm", "demo"] = "mock"
+    ai_source: Literal["mock", "llm", "fallback", "demo"] = "mock"
     created_at: str
     candidate_titles: list[str] = []
     summary_short: str = ""

@@ -3,12 +3,20 @@ import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAIDraftStore } from '@/stores/aiDraft'
+import { useNewsEditorAgentStore } from '@/stores/newsEditorAgent'
 import { useAIGenerateHistory } from '@/composables/useAIGenerateHistory'
 import AIGenerateSidebar from './components/AIGenerateSidebar.vue'
 import type { AIGenerateRecordItem } from '@/api/ai'
+import {
+  formatProviderModel,
+  getAIGenerateSourceLabel,
+  getAIGenerateSourceTagType,
+  type NormalizedAIGenerateHistoryRecord,
+} from '@/utils/normalizeAIGenerateResult'
 
 const router = useRouter()
 const aiDraft = useAIDraftStore()
+const agentStore = useNewsEditorAgentStore()
 
 const {
   historyRecords,
@@ -28,49 +36,54 @@ onMounted(() => {
   loadHistory()
 })
 
-/** 跳转到历史详情页 */
 function handleViewDetail(record: AIGenerateRecordItem) {
   router.push(`/ai-generate/history/${record.id}`)
 }
 
-/** 复用历史输入 → 跳回生成页并载入内容 */
 async function handleReuse(record: AIGenerateRecordItem) {
   const detail = await loadRecordDetail(record.id)
   if (!detail) return
 
+  aiDraft.clearSourceNews()
+  aiDraft.clearResult()
   aiDraft.setInputText(detail.input_text)
   aiDraft.setParams(detail.params)
+  agentStore.clearExecutionState()
   ElMessage.success('已复用历史输入，正在跳转生成页')
   router.push('/ai-generate')
 }
 
-/** 删除 */
 async function handleDelete(record: AIGenerateRecordItem) {
   await deleteRecord(record)
 }
 
-/** 导出 */
 function handleExport(record: AIGenerateRecordItem) {
   openExportDialog(record)
 }
 
-/** 列表项首标题 */
-function getFirstTitle(record: AIGenerateRecordItem): string {
-  if (Array.isArray(record.candidate_titles) && record.candidate_titles.length > 0) {
-    return record.candidate_titles[0]
-  }
-  return ''
+function getPreviewTitle(record: NormalizedAIGenerateHistoryRecord): string {
+  return record.displayTitle || record.candidate_titles?.[0] || record.source_title || '暂无标题'
+}
+
+function getPreviewSummary(record: NormalizedAIGenerateHistoryRecord): string {
+  return record.displaySummary || record.standardResult.summary_short || record.standardResult.summary_long || '暂无摘要'
+}
+
+function getSourceLabel(record: NormalizedAIGenerateHistoryRecord): string {
+  return getAIGenerateSourceLabel(record.displaySource, record.standardResult.generation_source)
+}
+
+function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
+  return getAIGenerateSourceTagType(record.displaySource, record.standardResult.generation_source)
 }
 </script>
 
 <template>
   <main class="history-page">
     <header class="page-header">
-      <div class="header-content">
-        <div class="header-text">
-          <h1>AI 生成历史</h1>
-          <p>查看和管理所有历史生成记录</p>
-        </div>
+      <div class="header-text">
+        <h1>AI 生成历史</h1>
+        <p>查看和管理所有生成记录</p>
       </div>
     </header>
 
@@ -85,21 +98,18 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
           <el-button size="small" @click="loadHistory" :loading="loading">刷新</el-button>
         </div>
 
-        <!-- 空状态 -->
         <div v-if="!loading && historyRecords.length === 0" class="empty-state">
-          <span class="empty-icon">📭</span>
+          <span class="empty-icon">🗂</span>
           <p class="empty-text">暂无生成记录</p>
-          <p class="empty-desc">生成标题和摘要后，记录将显示在这里</p>
+          <p class="empty-desc">生成标题和摘要后，记录会显示在这里</p>
           <el-button type="primary" @click="router.push('/ai-generate')">去生成</el-button>
         </div>
 
-        <!-- 加载中 -->
         <div v-if="loading" class="loading-state">
           <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" width="1em" height="1em"><path d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32z m0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0v-192a32 32 0 0 1 32-32z m448-192a32 32 0 0 1-32 32h-192a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM320 512a32 32 0 0 1-32 32h-192a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z"/></svg></el-icon>
           <span>加载中...</span>
         </div>
 
-        <!-- 历史列表 -->
         <div v-if="!loading && historyRecords.length > 0" class="history-list">
           <div
             v-for="record in historyRecords"
@@ -109,20 +119,19 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
           >
             <div class="card-body">
               <div class="card-main">
-                <div v-if="getFirstTitle(record)" class="card-ai-title">
-                  {{ getFirstTitle(record) }}
-                </div>
-                <div class="card-source-title">{{ record.source_title }}</div>
+                <div class="card-ai-title">{{ getPreviewTitle(record) }}</div>
+                <div class="card-source-title">{{ record.source_title || '暂无来源标题' }}</div>
+                <div class="card-summary">{{ getPreviewSummary(record) }}</div>
                 <div class="card-meta">
                   <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
                     {{ record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险' }}
                   </el-tag>
-                  <el-tag
-                    :type="record.ai_source === 'llm' ? 'success' : 'info'"
-                    size="small"
-                  >
-                    {{ record.ai_source === 'llm' ? '真实AI' : 'Mock演示' }}
+                  <el-tag :type="getSourceTagType(record)" size="small">
+                    {{ getSourceLabel(record) }}
                   </el-tag>
+                  <span v-if="formatProviderModel(record.standardResult.provider, record.standardResult.model)" class="meta-text">
+                    {{ formatProviderModel(record.standardResult.provider, record.standardResult.model) }}
+                  </span>
                   <span class="meta-text">{{ record.source === 'manual' ? '手动输入' : '新闻导入' }}</span>
                   <span class="meta-text">{{ record.title_count }} 个标题</span>
                   <span class="meta-text">{{ formatDate(record.created_at) }}</span>
@@ -141,7 +150,6 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
       </div>
     </div>
 
-    <!-- 导出格式弹窗 -->
     <el-dialog
       v-model="showExportDialog"
       title="选择导出格式"
@@ -156,12 +164,10 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
           :class="{ selected: selectedExportFormat === format }"
           @click="selectedExportFormat = format"
         >
-          <div class="format-icon">
-            {{ format === 'txt' ? 'TXT' : format === 'docx' ? 'DOC' : 'PDF' }}
-          </div>
+          <div class="format-icon">{{ format === 'txt' ? 'TXT' : format === 'docx' ? 'DOC' : 'PDF' }}</div>
           <div class="format-info">
             <div class="format-name">{{ format === 'txt' ? 'TXT 文本' : format === 'docx' ? 'Word 文档' : 'PDF 文档' }}</div>
-            <div class="format-desc">{{ format === 'txt' ? '纯文本格式，便于编辑' : format === 'docx' ? '支持排版样式' : '适合打印分享' }}</div>
+            <div class="format-desc">{{ format === 'txt' ? '纯文本，便于编辑' : format === 'docx' ? '支持排版样式' : '适合打印分享' }}</div>
           </div>
         </div>
       </div>
@@ -182,7 +188,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 }
 
 .page-header {
-  background: var(--color-bg-card);
+  background: #fff;
   border: 1px solid #f1d4d4;
   border-radius: 22px;
   padding: 32px 40px;
@@ -190,24 +196,17 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   box-shadow: 0 4px 24px rgba(217, 45, 32, 0.06);
 }
 
-.header-content {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
 .header-text h1 {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
-  color: var(--color-text-primary);
-  letter-spacing: -0.5px;
+  color: #1e293b;
 }
 
 .header-text p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: var(--color-text-secondary);
+  color: #666;
 }
 
 .main-content {
@@ -237,26 +236,25 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--color-bg-card);
+  background: #fff;
   border-radius: 10px;
   border: 1px solid #f0f0f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .record-count {
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #64748b;
 }
 
-/* 空状态 */
-.empty-state {
+.empty-state,
+.loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
   padding: 60px 20px;
   text-align: center;
-  background: var(--color-bg-card);
+  background: #fff;
   border-radius: 10px;
   border: 1px solid #f0f0f0;
 }
@@ -275,24 +273,9 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 .empty-desc {
   margin: 0;
   font-size: 14px;
-  color: var(--color-text-secondary);
+  color: #6b7280;
 }
 
-/* 加载中 */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 60px 20px;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  background: var(--color-bg-card);
-  border-radius: 10px;
-  border: 1px solid #f0f0f0;
-}
-
-/* 历史列表 */
 .history-list {
   display: flex;
   flex-direction: column;
@@ -300,17 +283,11 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 }
 
 .history-card {
-  background: var(--color-bg-card);
+  background: #fff;
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
-}
-
-.history-card:hover {
-  border-color: #f1d4d4;
-  box-shadow: 0 4px 16px rgba(217, 45, 32, 0.08);
 }
 
 .card-body {
@@ -326,23 +303,31 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   min-width: 0;
 }
 
-.card-ai-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
+.card-ai-title,
+.card-source-title,
+.card-summary {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.card-ai-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
 .card-source-title {
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.card-summary {
+  font-size: 13px;
+  color: #475569;
   margin-bottom: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .card-meta {
@@ -354,7 +339,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .meta-text {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: #94a3b8;
 }
 
 .card-actions {
@@ -366,7 +351,7 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 .card-actions :deep(.el-button) {
   padding: 4px 10px;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #64748b;
 }
 
 .card-actions :deep(.el-button:hover) {
@@ -377,7 +362,6 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   color: #ef4444;
 }
 
-/* 导出弹窗 */
 .export-dialog :deep(.el-dialog__body) {
   padding: 16px;
 }
@@ -393,15 +377,10 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.2s ease;
-  background-color: var(--color-bg-hover);
-}
-
-.format-item:hover {
-  border-color: #d1d5db;
+  background-color: #f9fafb;
+  border: 1px solid transparent;
 }
 
 .format-item.selected {
@@ -425,42 +404,8 @@ function getFirstTitle(record: AIGenerateRecordItem): string {
 
 .format-desc {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #6b7280;
   margin-top: 2px;
-}
-
-/* Element Plus 主题色覆盖 */
-:deep(.el-button--primary) {
-  --el-button-bg-color: #ff4d4f;
-  --el-button-border-color: #ff4d4f;
-  --el-button-hover-bg-color: #ff7875;
-  --el-button-hover-border-color: #ff7875;
-  --el-button-active-bg-color: #d9363e;
-  --el-button-active-border-color: #d9363e;
-}
-
-:deep(.el-tag--primary) {
-  --el-tag-bg-color: #fff5f5;
-  --el-tag-border-color: #ffe4e4;
-  --el-tag-text-color: #ff4d4f;
-}
-
-:deep(.el-tag--success) {
-  --el-tag-bg-color: #f0fff4;
-  --el-tag-border-color: #c6f6d5;
-  --el-tag-text-color: #38a169;
-}
-
-:deep(.el-tag--warning) {
-  --el-tag-bg-color: #fffaf0;
-  --el-tag-border-color: #feebc8;
-  --el-tag-text-color: #d69e2e;
-}
-
-:deep(.el-tag--danger) {
-  --el-tag-bg-color: #fff5f5;
-  --el-tag-border-color: #ffe4e4;
-  --el-tag-text-color: #ff4d4f;
 }
 
 @media (max-width: 900px) {

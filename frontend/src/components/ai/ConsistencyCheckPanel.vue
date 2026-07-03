@@ -10,20 +10,20 @@ const props = defineProps<Props>()
 
 const riskLevelText = computed(() => {
   const map: Record<string, string> = {
-    'low': '低风险',
-    'medium': '中风险',
-    'high': '高风险',
+    low: '低风险',
+    medium: '中风险',
+    high: '高风险',
   }
-  return map[props.consistency.risk_level]
+  return map[props.consistency.risk_level] || '未知'
 })
 
 const riskLevelType = computed(() => {
   const map: Record<string, string> = {
-    'low': 'success',
-    'medium': 'warning',
-    'high': 'danger',
+    low: 'success',
+    medium: 'warning',
+    high: 'danger',
   }
-  return map[props.consistency.risk_level]
+  return map[props.consistency.risk_level] || 'info'
 })
 
 const scoreStatus = computed(() => {
@@ -36,13 +36,12 @@ const scoreStatus = computed(() => {
 
 <template>
   <div class="consistency-section">
-    <h4 class="section-title">一致性质量校验</h4>
+    <h4 class="section-title">一致性检测</h4>
 
-    <!-- 得分卡片 -->
     <div class="score-card">
       <div class="score-display">
         <div class="score-value" :class="`score-status-${scoreStatus}`">{{ consistency.score }}</div>
-        <div class="score-label">质量分</div>
+        <div class="score-label">评分</div>
       </div>
       <div class="score-bar">
         <div
@@ -53,7 +52,6 @@ const scoreStatus = computed(() => {
       </div>
     </div>
 
-    <!-- 风险等级 -->
     <div class="risk-section">
       <span class="risk-label">风险等级：</span>
       <el-tag :type="riskLevelType" size="large">
@@ -61,9 +59,8 @@ const scoreStatus = computed(() => {
       </el-tag>
     </div>
 
-    <!-- 问题列表 -->
     <div v-if="consistency.issues.length > 0" class="issues-section">
-      <h5 class="subsection-title">检测到的问题</h5>
+      <h5 class="subsection-title">问题提示</h5>
       <ul class="issues-list">
         <li v-for="(issue, index) in consistency.issues" :key="index" class="issue-item">
           {{ issue }}
@@ -71,9 +68,8 @@ const scoreStatus = computed(() => {
       </ul>
     </div>
 
-    <!-- 建议列表 -->
     <div v-if="consistency.suggestions.length > 0" class="suggestions-section">
-      <h5 class="subsection-title">改进建议</h5>
+      <h5 class="subsection-title">修改建议</h5>
       <ul class="suggestions-list">
         <li v-for="(suggestion, index) in consistency.suggestions" :key="index" class="suggestion-item">
           {{ suggestion }}
@@ -101,7 +97,6 @@ const scoreStatus = computed(() => {
   color: var(--color-text-primary);
 }
 
-/* 得分卡片 */
 .score-card {
   padding: 16px;
   background: linear-gradient(135deg, var(--color-primary-soft) 0%, rgba(64, 158, 255, 0.08) 100%);
@@ -161,7 +156,6 @@ const scoreStatus = computed(() => {
   }
 }
 
-/* 风险等级 */
 .risk-section {
   display: flex;
   align-items: center;
@@ -175,7 +169,6 @@ const scoreStatus = computed(() => {
   font-weight: 500;
 }
 
-/* 问题和建议 */
 .issues-section,
 .suggestions-section {
   margin-top: 12px;
