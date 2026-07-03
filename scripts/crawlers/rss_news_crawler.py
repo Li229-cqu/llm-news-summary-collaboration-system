@@ -1,4 +1,4 @@
-﻿"""RSS 新闻爬虫（DB3.5 增量版）
+"""RSS 新闻爬虫（DB3.5 增量版）
 
 特性：
 - 优先按 source_url 去重
@@ -116,7 +116,7 @@ ENABLE_PEOPLE_RSS = True  # 启用人民网 RSS 源以获得更多数据
 DEFAULT_MAX_ITEMS = 10
 DEFAULT_SOURCE_MODE = "all"  # 使用所有 RSS 源
 DUPLICATE_IMAGE_MIN_COUNT = 2
-MIN_CONTENT_LENGTH = 500
+MIN_CONTENT_LENGTH = 200
 
 logger = logging.getLogger("rss_news_crawler")
 
