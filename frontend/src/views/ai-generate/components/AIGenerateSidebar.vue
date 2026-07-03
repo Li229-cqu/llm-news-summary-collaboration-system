@@ -59,7 +59,7 @@ function navigate(path: string) {
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   border-radius: 12px;
   border: 1px solid #f1d4d4;
   box-shadow: 0 2px 12px rgba(217, 45, 32, 0.05);
@@ -74,7 +74,7 @@ function navigate(path: string) {
 .sidebar-label {
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .nav-list {

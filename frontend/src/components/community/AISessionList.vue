@@ -106,7 +106,7 @@ function formatTime(timeStr: string | null | undefined) {
   display: flex;
   flex-direction: column;
   border-right: 1px solid #e3edf9;
-  background: #fafcff;
+  background: var(--color-bg-hover);
   transition: width 0.25s ease;
   width: 280px;
   flex-shrink: 0;
@@ -155,7 +155,7 @@ function formatTime(timeStr: string | null | undefined) {
   justify-content: center;
   gap: 8px;
   padding: 32px 8px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -205,7 +205,7 @@ function formatTime(timeStr: string | null | undefined) {
 
 .session-item-preview {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,7 +214,7 @@ function formatTime(timeStr: string | null | undefined) {
 
 .session-item-meta {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   margin-top: 2px;
 }
 </style>

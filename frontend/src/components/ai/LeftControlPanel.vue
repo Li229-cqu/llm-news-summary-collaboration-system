@@ -199,7 +199,7 @@ const handleGenerateRecords = () => {
 .sidebar-title {
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .sidebar-section {
@@ -223,7 +223,7 @@ const handleGenerateRecords = () => {
 .section-title {
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin-bottom: 4px;
   padding-left: 10px;
   position: relative;
@@ -243,7 +243,7 @@ const handleGenerateRecords = () => {
 
 .section-desc {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   padding-left: 14px;
 }
 

@@ -77,15 +77,15 @@ function resetAll() { aiDraft.resetParams(); ElMessage.success('已恢复默认�
   font-size: 14px; text-align: left; color: var(--color-text-secondary);
   transition: background .15s;
 }
-.ps__trigger:hover { background: #f9fafb; }
+.ps__trigger:hover { background: var(--color-bg-hover); }
 .ps__trigger-label { font-weight: 500; flex-shrink: 0; }
 .ps__trigger-val { flex: 1; text-align: right; color: var(--color-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ps__trigger-arrow { color: #9ca3af; transition: transform .2s; flex-shrink: 0; }
+.ps__trigger-arrow { color: var(--color-text-muted); transition: transform .2s; flex-shrink: 0; }
 .ps__section.is-open .ps__trigger-arrow { transform: rotate(180deg); }
 
 .ps__options { padding: 0 20px 10px; display: flex; flex-direction: column; gap: 1px; }
 .ps__opt {
-  width: 100%; padding: 8px 10px 8px 20px; text-align: left; font-size: 13px; color: #6b7280;
+  width: 100%; padding: 8px 10px 8px 20px; text-align: left; font-size: 13px; color: var(--color-text-secondary);
   background: none; border: none; border-radius: 6px; cursor: pointer; transition: all .12s;
 }
 .ps__opt:hover { background: #fef2f2; color: #1f2937; }
@@ -93,7 +93,7 @@ function resetAll() { aiDraft.resetParams(); ElMessage.success('已恢复默认�
 
 .ps__footer { padding: 12px 20px; border-top: 1px solid var(--color-border); }
 .ps__reset {
-  width: 100%; padding: 8px; font-size: 13px; color: #9ca3af; background: #f9fafb;
+  width: 100%; padding: 8px; font-size: 13px; color: var(--color-text-muted); background: var(--color-bg-hover);
   border: 1px solid #f3f4f6; border-radius: 6px; cursor: pointer; transition: all .15s;
 }
 .ps__reset:hover { background: var(--color-primary-soft); border-color: #fecaca; color: var(--color-primary); }

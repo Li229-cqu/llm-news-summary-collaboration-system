@@ -73,7 +73,7 @@ function handleClick(item: HotSearchItem) {
   border: 1px solid rgba(238, 210, 210, 0.86);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(130, 34, 34, 0.08);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--color-bg-card);
   margin: 0;
   flex: 1;
   min-height: 0;
@@ -94,7 +94,7 @@ function handleClick(item: HotSearchItem) {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .loading-container {
@@ -180,7 +180,7 @@ function handleClick(item: HotSearchItem) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 12px;
   justify-content: flex-end;
 }
@@ -212,7 +212,7 @@ function handleClick(item: HotSearchItem) {
 .tip-text {
   margin: 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 </style>

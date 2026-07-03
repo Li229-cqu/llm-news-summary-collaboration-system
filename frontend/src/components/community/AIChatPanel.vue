@@ -179,7 +179,7 @@ function formatTime(timeStr: string) {
 
 .empty-desc {
   font-size: 15px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   line-height: 1.7;
   margin: 0 0 24px;
 }
@@ -250,7 +250,7 @@ function formatTime(timeStr: string) {
 
 .message-time {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   padding: 0 4px;
 }
 
@@ -266,12 +266,12 @@ function formatTime(timeStr: string) {
 
 .thinking-text {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .thinking-icon {
   font-size: 16px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   animation: spin 1s linear infinite;
 }
 

@@ -391,7 +391,7 @@ function emitOpen(topic: TimelineTopic) {
 }
 
 :root.dark .news-recommend-panel__item-summary {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .news-recommend-panel__item-meta-pill {
@@ -443,11 +443,11 @@ function emitOpen(topic: TimelineTopic) {
 }
 
 :root.dark .news-recommend-panel__item-stages {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .news-recommend-panel__desc {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 /* ========================================

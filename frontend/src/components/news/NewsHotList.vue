@@ -292,7 +292,7 @@ function handleClick(newsId: number) {
   gap: 18px;
   padding: 22px 24px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, .94);
+  background: var(--color-bg-card);
   border: 1px solid rgba(217, 45, 32, .10);
   box-shadow: 0 6px 24px rgba(15, 23, 42, .05);
 }

@@ -215,7 +215,7 @@ function truncateContent(content: string, maxLength: number) {
 }
 
 .post-title {
-  color: #111827;
+  color: var(--color-text-primary);
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -242,7 +242,7 @@ function truncateContent(content: string, maxLength: number) {
   height: 80px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 .post-image-item--single {
@@ -301,7 +301,7 @@ function truncateContent(content: string, maxLength: number) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   transition: color 0.3s;
 }
 

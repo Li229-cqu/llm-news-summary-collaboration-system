@@ -21,7 +21,7 @@ defineEmits<{
 .history-panel-placeholder {
   padding: 40px 20px;
   text-align: center;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   border: 1px dashed #e5e7eb;
 }
@@ -39,6 +39,6 @@ defineEmits<{
 
 .placeholder-text {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 </style>

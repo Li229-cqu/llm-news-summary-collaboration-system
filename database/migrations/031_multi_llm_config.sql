@@ -12,8 +12,12 @@ INSERT IGNORE INTO `system_config` (`config_key`, `config_value`, `config_type`,
 ('ai.deepseek.base_url', 'https://api.deepseek.com/v1', 'string', 'DeepSeek API 地址', 1);
 
 -- Zhipu API 配置（从旧 ai.* 配置迁移）
+-- 先用变量取出旧 api_key 值，避免 INSERT ... SELECT 同表冲突
+SET @existing_api_key := (SELECT config_value FROM system_config WHERE config_key = 'ai.api_key' AND config_value != '' LIMIT 1);
+SET @existing_api_key := IFNULL(@existing_api_key, '');
+
 INSERT IGNORE INTO `system_config` (`config_key`, `config_value`, `config_type`, `description`, `editable`) VALUES
-('ai.zhipu.api_key', (SELECT config_value FROM system_config WHERE config_key = 'ai.api_key' AND config_value != '' LIMIT 1), 'string', 'Zhipu API Key', 1),
+('ai.zhipu.api_key', @existing_api_key, 'string', 'Zhipu API Key', 1),
 ('ai.zhipu.model', 'glm-4-flash', 'string', 'Zhipu 模型名称', 1),
 ('ai.zhipu.timeout', '60', 'int', 'Zhipu 请求超时(秒)', 1),
 ('ai.zhipu.base_url', 'https://open.bigmodel.cn/api/paas/v4', 'string', 'Zhipu API 地址', 1);

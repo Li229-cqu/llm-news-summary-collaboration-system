@@ -457,7 +457,7 @@ function formatMs(ms: number): string {
 
 /* ── 8 段式进度条 ── */
 .agent-progress-bar {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f1d4d4;
   border-radius: 14px;
   padding: 16px 20px;
@@ -467,7 +467,7 @@ function formatMs(ms: number): string {
 .progress-track {
   width: 100%;
   height: 6px;
-  background: #f5f5f5;
+  background: var(--color-bg-hover);
   border-radius: 3px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -526,7 +526,7 @@ function formatMs(ms: number): string {
   font-size: 12px;
   color: #666;
 }
-.progress-label__count { font-weight: 700; color: #1e293b; font-variant-numeric: tabular-nums; }
+.progress-label__count { font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
 .progress-label__name { color: #ff4d4f; font-weight: 500; }
 
 /* ── 当前步骤卡片 ── */
@@ -550,19 +550,19 @@ function formatMs(ms: number): string {
   padding: 2px 10px;
   border-radius: 10px;
 }
-.current-step-card__name { font-size: 15px; font-weight: 600; color: #1e293b; }
+.current-step-card__name { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
 
 /* ── 已完成步骤输出卡片 ── */
 .step-results { display: flex; flex-direction: column; gap: 12px; }
 .step-results__title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
 .step-result-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f0f0f0;
   border-radius: 12px;
   overflow: hidden;
@@ -576,12 +576,12 @@ function formatMs(ms: number): string {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-bottom: 1px solid #f5f5f5;
 }
 .step-result-card__icon { color: #16a34a; font-weight: 700; font-size: 13px; }
 .step-result-card__order { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; }
-.step-result-card__label { font-size: 14px; font-weight: 600; color: #1e293b; flex: 1; }
+.step-result-card__label { font-size: 14px; font-weight: 600; color: var(--color-text-primary); flex: 1; }
 .step-result-card__meta { display: flex; gap: 10px; font-size: 11px; color: #999; }
 
 .step-result-card__body { padding: 14px 16px; }
@@ -611,7 +611,7 @@ function formatMs(ms: number): string {
   line-height: 1.6;
   color: #444;
 }
-.output-text--title { font-size: 15px; font-weight: 600; color: #1e293b; }
+.output-text--title { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
 .output-text--dim { color: #999; font-size: 12px; margin-top: 2px; }
 .output-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .output-meta { display: block; margin-top: 4px; font-size: 12px; color: #999; }
@@ -644,7 +644,7 @@ function formatMs(ms: number): string {
   flex-shrink: 0;
 }
 .element-val {
-  color: #333;
+  color: var(--color-text-primary);
   word-break: break-all;
 }
 
@@ -652,7 +652,7 @@ function formatMs(ms: number): string {
 .titles-list p {
   margin: 2px 0;
   padding: 4px 8px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 4px;
   font-size: 13px;
 }
@@ -676,11 +676,11 @@ function formatMs(ms: number): string {
 .agent-empty {
   text-align: center;
   padding: 40px 20px;
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px dashed #e8e8e8;
   border-radius: 14px;
 }
-.agent-empty__title { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 8px; }
+.agent-empty__title { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 8px; }
 .agent-empty__desc { font-size: 13px; color: #666; line-height: 1.6; margin: 0 auto; max-width: 480px; }
 .agent-empty__hint { margin-top: 10px; font-size: 12px; color: #999; }
 
@@ -693,7 +693,7 @@ function formatMs(ms: number): string {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: #f9fafb;
+  background: var(--color-bg-hover);
   border-radius: 10px;
   margin-bottom: 8px;
 }
@@ -709,7 +709,7 @@ function formatMs(ms: number): string {
   display: block;
   font-size: 20px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
 .clean-stat-label {
@@ -757,7 +757,7 @@ function formatMs(ms: number): string {
 .similarity-item {
   padding: 10px 12px;
   margin-bottom: 8px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   border-left: 3px solid #e5e7eb;
   transition: all 0.2s;
@@ -785,7 +785,7 @@ function formatMs(ms: number): string {
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 .sim-reason {
   font-size: 11px;
@@ -794,7 +794,7 @@ function formatMs(ms: number): string {
 }
 .sim-score-bar {
   height: 4px;
-  background: #e5e7eb;
+  background: var(--color-border);
   border-radius: 2px;
   margin-bottom: 6px;
   overflow: hidden;
@@ -829,7 +829,7 @@ function formatMs(ms: number): string {
   max-width: 420px;
 }
 .hover-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #ffccc7;
   border-radius: 12px;
   padding: 16px;

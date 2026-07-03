@@ -233,7 +233,7 @@ function statusIcon(s: string): string {
   font-size: 12px;
   font-weight: 700;
   background: #f3f4f6;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 .replay-step.is-active .replay-step__icon {
   background: color-mix(in srgb, var(--color-primary) 15%, transparent);
@@ -262,7 +262,7 @@ function statusIcon(s: string): string {
 .detail-block pre {
   margin: 0;
   padding: 6px 8px;
-  background: #f9fafb;
+  background: var(--color-bg-hover);
   border-radius: 6px;
   font-size: 11px;
   line-height: 1.5;

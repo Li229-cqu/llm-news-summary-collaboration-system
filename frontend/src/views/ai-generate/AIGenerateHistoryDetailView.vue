@@ -239,7 +239,7 @@ function handleExport() {
 }
 
 .page-header {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f1d4d4;
   border-radius: 22px;
   padding: 32px 40px;
@@ -257,14 +257,14 @@ function handleExport() {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   letter-spacing: -0.5px;
 }
 
 .header-text p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #666666;
+  color: var(--color-text-secondary);
 }
 
 .main-content {
@@ -295,7 +295,7 @@ function handleExport() {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -318,7 +318,7 @@ function handleExport() {
 /* 基本信息 */
 .info-section {
   padding: 20px 24px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -336,7 +336,7 @@ function handleExport() {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   flex: 1;
 }
 
@@ -350,13 +350,13 @@ function handleExport() {
   display: flex;
   gap: 20px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 /* 内容区 */
 .content-section {
   padding: 20px 24px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -366,7 +366,7 @@ function handleExport() {
   margin: 0 0 14px;
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   padding-left: 10px;
   position: relative;
 }
@@ -390,7 +390,7 @@ function handleExport() {
   white-space: pre-wrap;
   word-break: break-word;
   padding: 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 8px;
   border: 1px solid #f0f0f0;
 }
@@ -406,20 +406,20 @@ function handleExport() {
   flex-direction: column;
   gap: 4px;
   padding: 10px 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 8px;
   border: 1px solid #f0f0f0;
 }
 
 .param-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .param-value {
   font-size: 14px;
-  color: #1e293b;
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 
@@ -432,10 +432,10 @@ function handleExport() {
   gap: 8px;
   padding: 60px 20px;
   text-align: center;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .empty-state {
@@ -456,7 +456,7 @@ function handleExport() {
 .empty-desc {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 /* 导出弹窗 */
@@ -479,7 +479,7 @@ function handleExport() {
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s ease;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
 }
 
 .format-item:hover {
@@ -507,7 +507,7 @@ function handleExport() {
 
 .format-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 

@@ -205,7 +205,7 @@ onMounted(() => {
   margin-bottom: 4px;
   border-radius: 22px;
   overflow: hidden;
-  background: #fff;
+  background: var(--color-bg-card);
   border: 1px solid #f1d4d4;
   box-shadow: 0 4px 24px rgba(217, 45, 32, 0.06);
 }
@@ -264,7 +264,7 @@ onMounted(() => {
   position: absolute;
   border-radius: 10px;
   border: 1px solid rgba(217, 45, 32, 0.12);
-  background: #fff;
+  background: var(--color-bg-card);
 }
 
 .timeline-hero__deco-card--1 {
@@ -341,7 +341,7 @@ onMounted(() => {
 
 .timeline-hero__subtitle {
   margin: 8px 0 0;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -351,7 +351,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-top: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -607,7 +607,7 @@ onMounted(() => {
 }
 
 :root.dark .timeline-topic-card__summary {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .timeline-topic-card__keyword {

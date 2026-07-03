@@ -202,7 +202,7 @@ const riskSummary = computed(() => {
 /* ── 风险总览 ── */
 .s7s__summary {
   padding: 10px 14px;
-  background: #f9fafb;
+  background: var(--color-bg-hover);
   border-radius: 8px;
 }
 .s7s__risk-row {
@@ -214,11 +214,11 @@ const riskSummary = computed(() => {
 .s7s__risk-label {
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 .s7s__risk-desc {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 /* ── 分区标题 ── */
@@ -226,7 +226,7 @@ const riskSummary = computed(() => {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: .03em;
   margin-bottom: 6px;
@@ -241,13 +241,13 @@ const riskSummary = computed(() => {
 
 .s7s__issue-card {
   padding: 10px 12px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   border-left: 3px solid #e5e7eb;
   transition: all .15s;
 }
 .s7s__issue-card:hover {
-  background: #fff;
+  background: var(--color-bg-card);
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
 .s7s__issue--hallucination {
@@ -299,7 +299,7 @@ const riskSummary = computed(() => {
 .s7s__issue-reason {
   margin: 0;
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
@@ -326,7 +326,7 @@ const riskSummary = computed(() => {
 .s7s__check-dot.is-fail { background: #ef4444; }
 .s7s__check-dot.is-warn { background: #f59e0b; }
 .s7s__check-msg {
-  color: #9ca3af;
+  color: var(--color-text-muted);
   margin-left: 4px;
 }
 
@@ -335,8 +335,8 @@ const riskSummary = computed(() => {
   padding: 16px;
   text-align: center;
   font-size: 12px;
-  color: #9ca3af;
-  background: #f9fafb;
+  color: var(--color-text-muted);
+  background: var(--color-bg-hover);
   border-radius: 8px;
 }
 </style>

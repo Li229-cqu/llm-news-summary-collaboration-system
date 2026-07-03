@@ -1088,7 +1088,7 @@ onBeforeUnmount(() => {
   padding: 10px 28px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-bg-card);
   color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;

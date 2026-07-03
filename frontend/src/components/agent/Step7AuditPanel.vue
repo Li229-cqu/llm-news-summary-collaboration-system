@@ -258,14 +258,14 @@ function simStats(simMap: any[]) {
 .s7a__section-title {
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: .03em;
 }
 
 .s7a__section-count {
   font-weight: 400;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   margin-left: 6px;
   font-size: 11px;
 }
@@ -279,11 +279,11 @@ function simStats(simMap: any[]) {
 }
 .s7a__risk-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 .s7a__stats {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 /* ── 检查项 ── */
@@ -299,7 +299,7 @@ function simStats(simMap: any[]) {
   font-size: 13px;
   color: #555;
   padding: 6px 10px;
-  background: #f9fafb;
+  background: var(--color-bg-hover);
   border-radius: 6px;
 }
 .s7a__check-icon {
@@ -327,7 +327,7 @@ function simStats(simMap: any[]) {
   flex-shrink: 0;
 }
 .s7a__check-msg {
-  color: #9ca3af;
+  color: var(--color-text-muted);
   margin-left: 4px;
 }
 
@@ -352,7 +352,7 @@ function simStats(simMap: any[]) {
   display: flex;
   gap: 14px;
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   align-items: center;
 }
 .s7a__legend-item {
@@ -376,7 +376,7 @@ function simStats(simMap: any[]) {
 
 .s7a__sim-item {
   padding: 10px 12px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   border-left: 3px solid #e5e7eb;
   transition: all .15s;
@@ -411,13 +411,13 @@ function simStats(simMap: any[]) {
 
 .s7a__sim-reason {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   flex: 1;
 }
 
 .s7a__sim-bar {
   height: 4px;
-  background: #e5e7eb;
+  background: var(--color-border);
   border-radius: 2px;
   margin-bottom: 6px;
   overflow: hidden;
@@ -438,7 +438,7 @@ function simStats(simMap: any[]) {
 .s7a__sim-src-text {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-style: italic;
   line-height: 1.45;
   padding-left: 12px;
@@ -458,8 +458,8 @@ function simStats(simMap: any[]) {
   position: fixed;
   z-index: 9999;
   max-width: 380px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,.14);
@@ -484,7 +484,7 @@ function simStats(simMap: any[]) {
 }
 
 .s7a__hover-text--dim {
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -510,7 +510,7 @@ function simStats(simMap: any[]) {
   gap: 8px;
   align-items: baseline;
   padding: 6px 10px;
-  background: #f9fafb;
+  background: var(--color-bg-hover);
   border-radius: 6px;
 }
 .s7a__issue-dot {
@@ -531,7 +531,7 @@ function simStats(simMap: any[]) {
 .s7a__score-bar {
   flex: 1;
   height: 10px;
-  background: #e5e7eb;
+  background: var(--color-border);
   border-radius: 5px;
   overflow: hidden;
 }

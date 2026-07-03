@@ -84,8 +84,8 @@ function safeY(): string {
   z-index: 9999;
   width: 370px;
   max-width: calc(100vw - 24px);
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, .14);
   pointer-events: none;
@@ -126,7 +126,7 @@ function safeY(): string {
 .dt__label {
   font-size: 10px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: .04em;
 }
@@ -166,8 +166,8 @@ function safeY(): string {
 }
 
 .dt__ctx-text {
-  color: #6b7280;
-  background: #f9fafb;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
   padding: 4px 8px;
   border-radius: 4px;
   font-style: italic;

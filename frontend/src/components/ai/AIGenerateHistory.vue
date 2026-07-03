@@ -255,8 +255,8 @@ function fmt(s: string, n: number) { if (!s) return ''; return s.length > n ? s.
 }
 .gh__card-sum { margin: 0 0 6px; font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
 .gh__card-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.gh__card-title { padding: 2px 10px; background: #f3f4f6; border-radius: 4px; font-size: 13px; color: #6b7280; }
-.gh__card-time { font-size: 12px; color: #9ca3af; }
+.gh__card-title { padding: 2px 10px; background: #f3f4f6; border-radius: 4px; font-size: 13px; color: var(--color-text-secondary); }
+.gh__card-time { font-size: 12px; color: var(--color-text-muted); }
 
 /* ── 操作按钮 — 右侧纵向排列 ── */
 .gh__card-acts {
@@ -277,9 +277,9 @@ function fmt(s: string, n: number) { if (!s) return ''; return s.length > n ? s.
 .gh__sec-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
 .gh__text { margin: 0; font-size: 14px; line-height: 1.75; color: var(--color-text-secondary); white-space: pre-line; }
 .gh__tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.gh__tag { padding: 3px 10px; background: #f3f4f6; border-radius: 6px; font-size: 13px; color: #6b7280; }
+.gh__tag { padding: 3px 10px; background: #f3f4f6; border-radius: 6px; font-size: 13px; color: var(--color-text-secondary); }
 .gh__titles { display: flex; flex-direction: column; gap: 4px; }
-.gh__title-item { margin: 0; padding: 6px 10px; background: #f9fafb; border-radius: 6px; font-size: 14px; color: var(--color-text-primary); }
+.gh__title-item { margin: 0; padding: 6px 10px; background: var(--color-bg-hover); border-radius: 6px; font-size: 14px; color: var(--color-text-primary); }
 .gh__elements { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .gh__el { font-size: 14px; color: var(--color-text-secondary); display: flex; gap: 6px; }
 .gh__el-k { font-weight: 600; color: var(--color-text-primary); flex-shrink: 0; min-width: 32px; }

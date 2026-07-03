@@ -145,13 +145,13 @@ const handleFileChange = async (event: Event) => {
   width: 100%;
   height: 280px;
   padding: 14px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.6;
   color: #374151;
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   resize: vertical;
   transition: border-color 0.2s ease;
   box-sizing: border-box;
@@ -163,14 +163,14 @@ const handleFileChange = async (event: Event) => {
 }
 
 .text-input::placeholder {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .char-count {
   margin-top: 8px;
   text-align: right;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .count-number {
@@ -181,10 +181,10 @@ const handleFileChange = async (event: Event) => {
 .empty-tip {
   padding: 12px 14px;
   margin-bottom: 12px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   border-left: 3px solid #d1d5db;
 }
 

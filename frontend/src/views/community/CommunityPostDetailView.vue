@@ -48,4 +48,6 @@ function handleRelatedNews(newsId: number | string) { router.push(`/news/${newsI
   gap: 16px;
   margin-bottom: 24px;
 }
+
+:root.dark .post-detail-page { background: var(--color-bg); }
 </style>

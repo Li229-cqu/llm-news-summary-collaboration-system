@@ -54,15 +54,15 @@ function sanitizeClonedStyles(root: HTMLElement, clonedWindow: Window) {
     if (hasUnsupportedColor || hasVar) {
       el.style.backgroundImage = 'none'
       if (!el.style.backgroundColor || el.style.backgroundColor === 'transparent') {
-        el.style.backgroundColor = '#ffffff'
+        el.style.backgroundColor = 'var(--color-bg-card)'
       }
       el.style.boxShadow = 'none'
-      el.style.borderColor = '#e5e5e5'
-      el.style.color = '#333333'
+      el.style.borderColor = 'var(--color-border)'
+      el.style.color = 'var(--color-text-primary)'
     } else if (hasGradient) {
       el.style.backgroundImage = 'none'
       if (!el.style.backgroundColor || el.style.backgroundColor === 'transparent') {
-        el.style.backgroundColor = '#f5f5f5'
+        el.style.backgroundColor = 'var(--color-bg-hover)'
       }
     }
   })
@@ -89,7 +89,7 @@ async function handleScreenshot() {
   loading.value = true
   try {
     const canvas = await html2canvas(target, {
-      backgroundColor: '#ffffff',
+      backgroundColor: 'var(--color-bg-card)',
       useCORS: true,
       scale: window.devicePixelRatio || 2,
       logging: false,

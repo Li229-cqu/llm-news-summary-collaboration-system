@@ -152,7 +152,7 @@ async function handleTabChange(tabKey: string) {
   display: flex;
   flex-direction: column;
   padding: 24px 18px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-right: 1px solid #f5dfdf;
   gap: 20px;
 }
@@ -167,7 +167,7 @@ async function handleTabChange(tabKey: string) {
   align-items: center;
   text-align: center;
   padding: 28px 16px 20px;
-  background: linear-gradient(180deg, #fef2f2 0%, #f8fafc 50%, #fff 100%);
+  background: linear-gradient(180deg, #fef2f2 0%, var(--color-bg-hover) 50%, var(--color-bg-card) 100%);
   border-radius: 18px;
   border: 1px solid #f5dfdf;
   gap: 12px;
@@ -239,4 +239,12 @@ async function handleTabChange(tabKey: string) {
   .admin-sidebar { height: auto; border-right: none; }
   .admin-main { height: auto; overflow-y: visible; }
 }
+
+:root.dark .admin-container { background: var(--color-bg); }
+:root.dark .admin-sidebar { border-right-color: var(--color-border); }
+:root.dark .sidebar-user-card {
+  background: linear-gradient(180deg, var(--color-primary-soft) 0%, var(--color-bg-hover) 50%, var(--color-bg-card) 100%);
+  border-color: var(--color-border);
+}
+:root.dark .sidebar-user-name { color: var(--color-text-primary); }
 </style>

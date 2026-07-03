@@ -1143,7 +1143,7 @@ onUnmounted(() => {
 }
 
 .timeline-node__no-nav {
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1281,7 +1281,7 @@ onUnmounted(() => {
 :root.dark .timeline-node__source-name,
 :root.dark .error-text,
 :root.dark .empty-text {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .stats-item {
@@ -1412,7 +1412,7 @@ onUnmounted(() => {
 }
 
 :root.dark .source-detail__meta {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 :root.dark .source-detail__title {

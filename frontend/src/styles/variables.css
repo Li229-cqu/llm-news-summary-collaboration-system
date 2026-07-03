@@ -39,11 +39,16 @@
 :root.dark {
   --color-primary: #f87171;
   --color-primary-soft: #3b1a1a;
-  --color-bg: #161b22;
-  --color-bg-card: #1f2933;
-  --color-text-primary: #e5e7eb;
-  --color-text-secondary: #aeb8c4;
-  --color-border: #3b4654;
+  --color-primary-light: #7f1d1d;
+  --color-primary-dark: #fecaca;
+  --color-bg: #0d1117;
+  --color-bg-card: #161b22;
+  --color-bg-hover: #1c2533;
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #656d76;
+  --color-border: #30363d;
+  --color-border-light: #21262d;
 
   --el-color-primary: #f87171;
   --el-color-primary-light-3: #ef4444;
@@ -52,4 +57,13 @@
   --el-color-primary-light-8: #3b1a1a;
   --el-color-primary-light-9: #2a1515;
   --el-color-primary-dark-2: #fecaca;
+
+  --el-bg-color: var(--color-bg-card);
+  --el-bg-color-page: var(--color-bg);
+  --el-fill-color-blank: var(--color-bg-card);
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-border-color: var(--color-border);
+  --el-menu-bg-color: var(--color-bg-card);
+  --el-menu-hover-bg-color: var(--color-bg-hover);
 }

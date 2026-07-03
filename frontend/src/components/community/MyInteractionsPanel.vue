@@ -305,7 +305,7 @@ onMounted(() => {
   padding: 14px 16px;
   border: 1px solid #e3edf9;
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-bg-card);
   transition: box-shadow 0.2s;
 }
 .interaction-card:hover {
@@ -335,12 +335,12 @@ onMounted(() => {
 
 .action-desc {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .interaction-time {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .comment-content {
@@ -389,7 +389,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .pagination {

@@ -532,7 +532,7 @@ defineExpose({ refreshHistory })
 
 .action-wrapper {
   padding: 20px;
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -551,7 +551,7 @@ defineExpose({ refreshHistory })
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: #666666;
+    color: var(--color-text-secondary);
     
     .tip-dot {
       width: 4px;
@@ -571,8 +571,8 @@ defineExpose({ refreshHistory })
     flex: 1;
     padding: 10px 16px;
     font-size: 13px;
-    color: #666666;
-    background-color: #f8f8f8;
+    color: var(--color-text-secondary);
+    background-color: var(--color-bg-hover);
     border: 1px solid #e8e8e8;
     border-radius: 6px;
     cursor: pointer;
@@ -613,7 +613,7 @@ defineExpose({ refreshHistory })
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -635,7 +635,7 @@ defineExpose({ refreshHistory })
 }
 
 .history-list-container {
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -648,13 +648,13 @@ defineExpose({ refreshHistory })
   align-items: center;
   gap: 8px;
   padding: 40px 20px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .empty-state {
   padding: 40px 20px;
   text-align: center;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   border: 1px dashed #e5e7eb;
 }
@@ -669,7 +669,7 @@ defineExpose({ refreshHistory })
 .empty-description {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .history-list {
@@ -683,9 +683,9 @@ defineExpose({ refreshHistory })
   align-items: flex-start;
   justify-content: space-between;
   padding: 16px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   
   &:hover {
     border-color: #d1d5db;
@@ -706,7 +706,7 @@ defineExpose({ refreshHistory })
 
 .item-summary {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -717,7 +717,7 @@ defineExpose({ refreshHistory })
 
 .item-time {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .item-actions {
@@ -739,7 +739,7 @@ defineExpose({ refreshHistory })
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background-color: #ffffff;
+  background-color: var(--color-bg-card);
   border-radius: 10px;
   border: 1px solid #f0f0f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -774,7 +774,7 @@ defineExpose({ refreshHistory })
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s ease;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
 
   &:hover {
     border-color: #d1d5db;
@@ -802,7 +802,7 @@ defineExpose({ refreshHistory })
 
 .format-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 </style>
