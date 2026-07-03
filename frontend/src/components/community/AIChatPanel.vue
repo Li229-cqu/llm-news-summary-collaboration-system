@@ -125,6 +125,11 @@ watch(
     if (val) scrollToBottom()
   },
 )
+// 流式输出时内容增长自动滚动
+watch(
+  () => props.messages[props.messages.length - 1]?.content?.length,
+  () => scrollToBottom(),
+)
 
 function formatTime(timeStr: string) {
   const date = new Date(timeStr)

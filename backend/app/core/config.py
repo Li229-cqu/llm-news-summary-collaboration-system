@@ -35,7 +35,7 @@ class Settings(BaseModel):
     @property
     def allowed_origins(self) -> list[str]:
         """当前阶段允许的前端跨域地址。"""
-        return [self.frontend_url, "http://localhost:5173", "http://localhost:5174", "http://localhost:5175"]
+        return [self.frontend_url, "http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177", "http://localhost:5178", "http://localhost:5179"]
 
 
 settings = Settings()

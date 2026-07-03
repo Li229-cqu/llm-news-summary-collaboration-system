@@ -107,6 +107,10 @@
           <el-input v-model="newCommentText" type="textarea" :rows="3" placeholder="写下你的评论..." maxlength="1000" show-word-limit />
           <div class="composer-actions">
             <div class="composer-tools">
+              <el-button text :loading="generatingComment" @click="handleGenerateComment">
+                <el-icon v-if="generatingComment" class="is-loading"><Loading /></el-icon>
+                <span v-else>🤖 AI辅助</span>
+              </el-button>
               <el-button text @click="toggleEmojiPicker"><el-icon><PictureFilled /></el-icon></el-button>
               <el-button text @click="triggerImageUpload"><el-icon><PictureFilled /></el-icon></el-button>
               <input ref="imageUploadRef" type="file" accept="image/*" style="display:none" @change="handleImageSelect" />
@@ -153,6 +157,7 @@ import {
   createComment,
   replyComment,
   deleteComment,
+  generatePostComment,
   likeComment,
   toggleLike,
   toggleFavorite,
@@ -205,6 +210,7 @@ const imageUploadRef = ref<HTMLInputElement>()
 // ─── AI Summary ──
 const commentsSummary = ref<CommentsSummaryResponse | null>(null)
 const loadingCommentsSummary = ref(false)
+const generatingComment = ref(false)
 
 // ─── Images ──
 const detailImages = computed(() => {
@@ -250,6 +256,20 @@ async function handleFavorite() {
 }
 
 // ─── Comment ──
+async function handleGenerateComment() {
+  if (!post.value || generatingComment.value) return
+  generatingComment.value = true
+  try {
+    const result = await generatePostComment(post.value.id, {
+      topic: post.value.title,
+      context: post.value.content.slice(0, 200),
+      sentiment: 'neutral',
+    })
+    newCommentText.value = result.comment
+    ElMessage.success('AI评论生成成功')
+  } catch { ElMessage.error('AI评论生成失败') } finally { generatingComment.value = false }
+}
+
 async function handleCreateComment() {
   if (!post.value) return; const content = newCommentText.value.trim()
   if (!content && !selectedImageFile.value) return

@@ -10,4 +10,4 @@ router = APIRouter(prefix=settings.api_prefix, tags=["评论总结"])
 
 @router.post("/comment-summary", response_model=ApiResponse[CommentSummaryResponse])
 async def summarize(request: CommentSummaryRequest) -> ApiResponse[CommentSummaryResponse]:
-    return success_response(summarize_comments(request))
+    return success_response(await summarize_comments(request))

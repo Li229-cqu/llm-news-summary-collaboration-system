@@ -66,6 +66,8 @@ from app.modules.community.service import (
     get_received_favorites,
     reply_comment,
     send_ai_message,
+    send_ai_message_stream,
+    create_ai_session_stream,
     unfavorite_post as unfavorite_post_service,
     unlike_post as unlike_post_service,
     toggle_comment_like,
@@ -183,6 +185,32 @@ async def add_comment(
     current_user: UserInfo = Depends(require_login),
 ) -> ApiResponse[CommentItem]:
     return success_response(create_comment(post_id, request, current_user=current_user))
+
+
+@router.post("/posts/{post_id}/comments/generate", response_model=ApiResponse[dict])
+async def generate_post_comment(
+    post_id: int = Path(..., ge=1, description="帖子ID"),
+    topic: str = Body(..., description="评论主题"),
+    context: str = Body("", description="上下文内容"),
+    sentiment: str = Body("neutral", description="情感倾向: positive/negative/neutral"),
+) -> ApiResponse[dict]:
+    """AI生成社区帖子评论，无需登录。"""
+    import httpx
+    from app.core.config import settings
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/generate-comment"
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                ai_service_url,
+                json={"topic": topic, "context": context, "sentiment": sentiment},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and "data" in data:
+                    return success_response(data["data"])
+    except Exception as exc:
+        logger.warning("AI 评论生成失败：%s", exc)
+    return success_response({"comment": "这是一个有趣的话题，值得讨论！", "source": "fallback"})
 
 
 @router.post("/comments/{comment_id}/reply", response_model=ApiResponse[CommentItem])
@@ -380,6 +408,25 @@ async def send_ai_message_route(
     """在已有会话中连续追问。"""
     result = await send_ai_message(session_id, request, current_user)
     return success_response(result)
+
+
+@router.post("/ai-sessions/{session_id}/messages/stream")
+async def send_ai_message_stream_route(
+    session_id: int = Path(..., ge=1, description="会话ID"),
+    request: CommunityAiMessageCreate = Body(...),
+    current_user: UserInfo = Depends(require_login),
+):
+    """SSE 流式：在已有会话中连续追问，实时返回 token。"""
+    return await send_ai_message_stream(session_id, request, current_user)
+
+
+@router.post("/ai-sessions/stream")
+async def create_ai_session_stream_route(
+    request: CommunityAiSessionCreate = Body(...),
+    current_user: UserInfo = Depends(require_login),
+):
+    """SSE 流式：创建 AI 会话并可选携带首条问题，实时返回 token。"""
+    return await create_ai_session_stream(request, current_user)
 
 
 @router.delete("/ai-sessions/{session_id}", response_model=ApiResponse[dict])

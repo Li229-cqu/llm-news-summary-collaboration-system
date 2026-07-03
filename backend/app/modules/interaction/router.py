@@ -1,16 +1,20 @@
 """新闻互动模块接口路由。"""
 
+import logging
 import os
 import secrets
 import time
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Header, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Header, UploadFile
+
+logger = logging.getLogger(__name__)
 
 from app.common.auth import require_login
 from app.common.exceptions import AppException
 from app.common.response import ApiResponse, success_response
+from app.core.config import settings
 from app.modules.auth.schema import UserInfo
 from app.modules.auth.service import get_mock_user_by_token
 from app.modules.interaction.schema import (

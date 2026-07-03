@@ -64,9 +64,11 @@
             <span class="news-detail-section-title__count">共 {{ commentTotal }} 条</span>
           </div>
           <CommentBox
+            ref="commentBoxRef"
             placeholder="写下你的评论"
             button-text="发布评论"
             :loading="submittingComment"
+            :show-ai-button="false"
             @submit="handleCreateComment"
           />
           <CommentList
@@ -163,6 +165,7 @@ const timelineDrawerVisible = ref(false)
 const selectedTopicId = ref<number | string | null>(null)
 const selectedTopicName = ref('')
 const newsId = computed(() => String(route.params.id ?? '').trim())
+const commentBoxRef = ref<InstanceType<typeof CommentBox> | null>(null)
 
 const recommendedNews = computed<NewsItem[]>(() => newsDetail.value?.recommended_news ?? [])
 const timelineTopicId = computed(() => newsDetail.value?.topic_id ?? null)

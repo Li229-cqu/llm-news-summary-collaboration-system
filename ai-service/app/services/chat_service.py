@@ -1,8 +1,9 @@
 import logging
+import sys
 from app.common.exceptions import AIServiceException
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.llm_client import call_llm
+from app.services.llm_client import call_summary_llm, call_summary_llm_stream
 
 logger = logging.getLogger(__name__)
 
@@ -12,15 +13,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if not request.question.strip():
         raise AIServiceException(code=400, message="问题不能为空")
 
-    if not settings.summary_llm_enabled:
-        logger.info("🤖 [MOCK MODE] 返回模拟 AI 回答（SUMMARY_LLM 未启用）")
-        from app.mock.sample_outputs import CHAT_OUTPUT
-        return ChatResponse(**CHAT_OUTPUT, source="mock")
-
+    print(f"[CHAT SERVICE] Request received: question={request.question[:20]}...", file=sys.stderr)
+    
     messages = [
         {
             "role": "system",
-            "content": request.context or "你是一个专业的AI新闻助手，专注于回答新闻相关问题。请根据用户的问题提供简洁、准确、有价值的回答。如果用户的问题与新闻无关，请礼貌地引导他们回到新闻话题。"
+            "content": request.context or "你是一个专业的AI新闻助手，专注于回答新闻相关问题。请根据用户的问题提供简洁、准确、有价值的回答。"
         },
         {
             "role": "user",
@@ -29,9 +27,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
     ]
 
     try:
-        logger.info("🚀 [REAL API] 调用真实大语言模型 API...")
-        answer = await call_llm(messages)
-        logger.info("✅ [REAL API] 大模型 API 调用成功")
+        print(f"[CHAT SERVICE] Calling LLM...", file=sys.stderr)
+        answer = await call_summary_llm(messages)
+        print(f"[CHAT SERVICE] LLM response: {answer[:50]}...", file=sys.stderr)
         return ChatResponse(
             answer=answer,
             recommended_questions=[
@@ -42,13 +40,41 @@ async def chat(request: ChatRequest) -> ChatResponse:
             source="llm"
         )
     except Exception as e:
-        logger.error(f"❌ [REAL API] 大模型 API 调用失败: {str(e)}")
-        return ChatResponse(
-            answer=f"抱歉，AI 服务暂时无法回答。错误信息：{str(e)}",
-            recommended_questions=[
-                "请问有什么新闻热点吗？",
-                "如何获取新闻摘要？",
-                "推荐相关新闻内容"
-            ],
-            source="mock"
-        )
+        print(f"[CHAT SERVICE] LLM error: {type(e).__name__}: {e}", file=sys.stderr)
+        from app.mock.sample_outputs import CHAT_OUTPUT
+        return ChatResponse(**CHAT_OUTPUT, source="mock")
+
+
+async def chat_stream(request: ChatRequest):
+    """流式调用 AI 模型回答问题，逐 token yield。
+
+    返回 dict 流，每个 dict 可能是：
+    - {"token": "字"}  -- 单个 token
+    - {"done": True}   -- 流结束
+    - {"error": "..."} -- 异常
+    """
+    if not request.question.strip():
+        yield {"error": "问题不能为空", "done": True}
+        return
+
+    messages = [
+        {
+            "role": "system",
+            "content": request.context or "你是一个专业的AI新闻助手，专注于回答新闻相关问题。请根据用户的问题提供简洁、准确、有价值的回答。"
+        },
+        {
+            "role": "user",
+            "content": request.question
+        }
+    ]
+
+    try:
+        logger.info("🚀 [CHAT SERVICE STREAM] 调用流式 LLM...")
+        async for token in call_summary_llm_stream(messages):
+            if token:
+                yield {"token": token}
+        yield {"done": True}
+        logger.info("✅ [CHAT SERVICE STREAM] 流式调用完成")
+    except Exception as e:
+        logger.error(f"❌ [CHAT SERVICE STREAM] 流式调用失败: {str(e)}")
+        yield {"error": str(e), "done": True}

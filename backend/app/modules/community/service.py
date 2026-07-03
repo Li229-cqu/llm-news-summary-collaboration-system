@@ -2890,7 +2890,7 @@ def _build_community_context() -> str:
 
     try:
         news_list = get_news_list(page=1, page_size=10)
-        hot_news = get_hot_news(limit=5)
+        hot_news = get_hot_news(limit=10)
         posts = get_post_list(page=1, page_size=10)
         hot_topics = get_hot_search(limit=5)
 
@@ -2899,7 +2899,7 @@ def _build_community_context() -> str:
             for n in (news_list.get("list") or [])[:5]
         )
         hot_news_context = "\n".join(
-            f"热点新闻 {n['id']}: {n['title']}" for n in (hot_news or [])[:3]
+            f"热搜榜第{n['rank']}名: {n['title']}" for n in (hot_news or [])[:10]
         )
         post_context = "\n".join(
             f"社区帖子 {p.id}: {p.title} - {p.content[:100]}" for p in (posts.list or [])[:5]
@@ -2912,7 +2912,7 @@ def _build_community_context() -> str:
         return f"""【系统新闻内容】
 {news_context}
 
-【热点新闻】
+【首页热搜榜 Top10】
 {hot_news_context}
 
 【社区讨论帖子】
@@ -3286,6 +3286,316 @@ async def send_ai_message(
         session=CommunityAiSessionItem(**_session_row_to_item(updated_row, message_count=message_count, last_message_preview=preview)),
         user_message=user_msg,
         assistant_message=assistant_msg,
+    )
+
+
+# ─── AI Session Streaming (SSE) ──────────────────────────────────
+
+
+async def _call_ai_service_stream(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+):
+    """流式调用 AI 服务，逐 chunk yield dict（token/done/error）。"""
+    import httpx
+    from app.core.config import settings
+
+    system_context = _build_community_context()
+
+    history_text = ""
+    if history:
+        parts = []
+        for h in history[-8:]:
+            role_label = "用户" if h["role"] == "user" else "AI助手"
+            content = h["content"][:200]
+            parts.append(f"{role_label}：{content}")
+        if parts:
+            history_text = "\n".join(parts) + "\n"
+
+    system_prompt = f"""你是一个专业的AI新闻助手，运行在智能新闻摘要系统中。请根据以下系统内容回答用户的问题。
+
+{system_context}
+
+【对话历史】
+{history_text}
+
+请根据以上内容回答用户的问题。如果问题与系统内容相关，请引用具体信息进行回答。如果问题与系统内容无关，请礼貌地告知用户当前系统的数据范围。回答要简洁、准确、有价值。"""
+
+    try:
+        ai_service_url = f"{settings.ai_service_url}/ai/chat/stream"
+        logger.info("🚀 [AI SESSION STREAM] 调用 AI 服务: %s", ai_service_url)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                ai_service_url,
+                json={"question": question, "context": system_prompt},
+            ) as response:
+                if response.status_code != 200:
+                    yield {"error": f"AI 服务返回错误: {response.status_code}", "done": True}
+                    return
+
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        raw = line[len("data: "):]
+                        try:
+                            chunk = json.loads(raw)
+                            yield chunk
+                            if chunk.get("done") or chunk.get("error"):
+                                return
+                        except json.JSONDecodeError:
+                            logger.warning("SSE JSON 解析失败: %s", raw[:100])
+                            continue
+    except Exception as exc:
+        logger.warning("❌ [AI SESSION STREAM] AI 服务调用失败：%s", exc)
+        yield {"error": f"AI 服务不可用: {str(exc)}", "done": True}
+
+
+async def send_ai_message_stream(
+    session_id: int,
+    request: CommunityAiMessageCreate,
+    current_user: UserInfo,
+):
+    """SSE 流式：在已有会话中追问，实时返回 token。"""
+    from fastapi.responses import StreamingResponse
+
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    # 校验 session
+    session_row = execute_one(
+        "SELECT * FROM community_ai_session WHERE id = %s AND status = 'active'",
+        [session_id],
+    )
+    if session_row is None:
+        raise AppException(code=404, message="会话不存在")
+    if int(session_row["user_id"]) != user_id:
+        raise AppException(code=403, message="无权访问该会话")
+
+    # 插入 user 消息
+    user_msg_id = execute_insert(
+        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+         VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+        [session_id, user_id, request.question],
+    )
+
+    # 获取历史消息
+    history_rows = _db_get_recent_messages(session_id, limit=10)
+    history = [{"role": r["role"], "content": r["content"]} for r in history_rows]
+
+    async def event_generator():
+        full_answer: list[str] = []
+
+        try:
+            async for chunk in _call_ai_service_stream(request.question, history):
+                if chunk.get("error"):
+                    # 保存部分内容（如有）
+                    partial = "".join(full_answer)
+                    if partial.strip():
+                        try:
+                            execute_insert(
+                                """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                                 VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                                [session_id, user_id, partial, chunk.get("error", "")],
+                            )
+                            execute_update(
+                                "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                                [session_id],
+                            )
+                        except Exception as db_exc:
+                            logger.error("保存部分 AI 回答失败: %s", db_exc)
+                    yield f"data: {json.dumps({'error': chunk['error'], 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                if chunk.get("done"):
+                    # 保存完整回答到 DB
+                    answer_text = "".join(full_answer) or "AI 服务暂时无回复"
+                    try:
+                        assistant_msg_id = execute_insert(
+                            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+                             VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+                            [session_id, user_id, answer_text],
+                        )
+                        execute_update(
+                            "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                            [session_id],
+                        )
+
+                        # 重新读取 session
+                        updated_row = execute_one(
+                            "SELECT * FROM community_ai_session WHERE id = %s", [session_id]
+                        )
+                        message_count = _db_get_session_message_count(session_id)
+                        last_msg = _db_get_session_last_message(session_id)
+                        preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+                        session_item = CommunityAiSessionItem(
+                            **_session_row_to_item(updated_row, message_count=message_count, last_message_preview=preview)
+                        )
+
+                        yield f"data: {json.dumps({'done': True, 'message_id': assistant_msg_id, 'session_id': session_id, 'content': answer_text, 'session': session_item.model_dump()}, ensure_ascii=False)}\n\n"
+                    except Exception as db_exc:
+                        logger.error("保存 AI 回答失败: %s", db_exc)
+                        yield f"data: {json.dumps({'error': f'保存失败: {str(db_exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                token = chunk.get("token", "")
+                if token:
+                    full_answer.append(token)
+                    yield f"data: {json.dumps({'token': token, 'done': False}, ensure_ascii=False)}\n\n"
+
+        except Exception as exc:
+            logger.error("SSE 流异常: %s", exc)
+            # 保存部分内容
+            partial = "".join(full_answer)
+            if partial.strip():
+                try:
+                    execute_insert(
+                        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                         VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                        [session_id, user_id, partial, str(exc)],
+                    )
+                    execute_update(
+                        "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                        [session_id],
+                    )
+                except Exception:
+                    pass
+            yield f"data: {json.dumps({'error': f'流异常: {str(exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+async def create_ai_session_stream(
+    request: CommunityAiSessionCreate,
+    current_user: UserInfo,
+):
+    """SSE 流式：创建 AI 会话并可选携带首条问题，实时返回 token。"""
+    from fastapi.responses import StreamingResponse
+
+    user_id = _current_user_id(current_user)
+    if user_id is None:
+        raise AppException(code=401, message="未登录或登录状态已失效")
+
+    title = request.question[:30] if request.question else "新的社区 AI 会话"
+    if request.question and len(request.question) > 30:
+        title = request.question[:27] + "..."
+
+    # 插入 session
+    session_id = execute_insert(
+        """INSERT INTO community_ai_session
+         (user_id, title, summary, source_type, source_post_id, source_news_id, status, last_message_at, created_at, updated_at)
+         VALUES (%s, %s, %s, %s, %s, %s, 'active', NOW(), NOW(), NOW())""",
+        [user_id, title, "", request.source_type, request.source_post_id, request.source_news_id],
+    )
+
+    async def event_generator():
+        full_answer: list[str] = []
+
+        if not request.question:
+            # 无首问，直接返回 session 信息
+            row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+            session_item = CommunityAiSessionItem(
+                **_session_row_to_item(row, message_count=0, last_message_preview="")
+            )
+            yield f"data: {json.dumps({'done': True, 'session_id': session_id, 'content': '', 'session': session_item.model_dump(), 'messages': []}, ensure_ascii=False)}\n\n"
+            return
+
+        # 插入 user 消息
+        user_msg_id = execute_insert(
+            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+             VALUES (%s, %s, 'user', %s, 'success', NOW())""",
+            [session_id, user_id, request.question],
+        )
+
+        try:
+            async for chunk in _call_ai_service_stream(request.question):
+                if chunk.get("error"):
+                    partial = "".join(full_answer)
+                    if partial.strip():
+                        try:
+                            execute_insert(
+                                """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                                 VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                                [session_id, user_id, partial, chunk.get("error", "")],
+                            )
+                            execute_update(
+                                "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                                [session_id],
+                            )
+                        except Exception:
+                            pass
+                    yield f"data: {json.dumps({'error': chunk['error'], 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                if chunk.get("done"):
+                    answer_text = "".join(full_answer) or "AI 服务暂时无回复"
+                    try:
+                        assistant_msg_id = execute_insert(
+                            """INSERT INTO community_ai_message (session_id, user_id, role, content, status, created_at)
+                             VALUES (%s, %s, 'assistant', %s, 'success', NOW())""",
+                            [session_id, user_id, answer_text],
+                        )
+                        execute_update(
+                            "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                            [session_id],
+                        )
+
+                        row = execute_one("SELECT * FROM community_ai_session WHERE id = %s", [session_id])
+                        message_count = _db_get_session_message_count(session_id)
+                        last_msg = _db_get_session_last_message(session_id)
+                        preview = normalize_text(last_msg["content"][:80]) if last_msg and last_msg.get("content") else ""
+                        session_item = CommunityAiSessionItem(
+                            **_session_row_to_item(row, message_count=message_count, last_message_preview=preview)
+                        )
+
+                        yield f"data: {json.dumps({'done': True, 'message_id': assistant_msg_id, 'session_id': session_id, 'content': answer_text, 'session': session_item.model_dump()}, ensure_ascii=False)}\n\n"
+                    except Exception as db_exc:
+                        logger.error("保存 AI 回答失败: %s", db_exc)
+                        yield f"data: {json.dumps({'error': f'保存失败: {str(db_exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+                    return
+
+                token = chunk.get("token", "")
+                if token:
+                    full_answer.append(token)
+                    yield f"data: {json.dumps({'token': token, 'done': False}, ensure_ascii=False)}\n\n"
+
+        except Exception as exc:
+            logger.error("SSE 流异常: %s", exc)
+            partial = "".join(full_answer)
+            if partial.strip():
+                try:
+                    execute_insert(
+                        """INSERT INTO community_ai_message (session_id, user_id, role, content, status, error_message, created_at)
+                         VALUES (%s, %s, 'assistant', %s, 'partial', %s, NOW())""",
+                        [session_id, user_id, partial, str(exc)],
+                    )
+                    execute_update(
+                        "UPDATE community_ai_session SET last_message_at = NOW(), updated_at = NOW() WHERE id = %s",
+                        [session_id],
+                    )
+                except Exception:
+                    pass
+            yield f"data: {json.dumps({'error': f'流异常: {str(exc)}', 'done': True}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 

@@ -4,7 +4,7 @@ import re
 from app.common.exceptions import AIServiceException
 from app.core.config import settings
 from app.schemas.comment_summary import CommentSummaryRequest, CommentSummaryResponse
-from app.services.llm_client import call_llm
+from app.services.llm_client import call_summary_llm
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def summarize_comments_mock(request: CommentSummaryRequest) -> CommentSummaryRes
     )
 
 
-def summarize_comments(request: CommentSummaryRequest) -> CommentSummaryResponse:
+async def summarize_comments(request: CommentSummaryRequest) -> CommentSummaryResponse:
     if not request.comments:
         raise AIServiceException(code=400, message="评论列表不能为空")
 
@@ -93,7 +93,7 @@ def summarize_comments(request: CommentSummaryRequest) -> CommentSummaryResponse
 
     try:
         logger.info("调用 LLM 生成评论总结")
-        llm_response = call_llm(messages)
+        llm_response = await call_summary_llm(messages)
         logger.info("LLM 调用成功")
 
         try:

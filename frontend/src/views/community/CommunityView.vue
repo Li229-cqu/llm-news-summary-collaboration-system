@@ -66,7 +66,7 @@
 import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getPostList, getPostDetail, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, type CommunityPost, type PostListParams, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'
+import { getPostList, getPostDetail, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, sendCommunityAiMessageStream, createCommunityAiSessionStream, type StreamCallbacks, type CommunityPost, type PostListParams, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'
 import { useUserStore } from '@/stores/user'
 import PostCard from '@/components/community/PostCard.vue'
 import HotTopicsSidebar from '@/components/community/HotTopicsSidebar.vue'
@@ -199,38 +199,54 @@ async function handleAiSend(question: string) {
   aiCurrentMessages.value.push(userMsg)
   aiCurrentMessages.value.push(loadingMsg)
   aiSending.value = true
+
+  const callbacks: StreamCallbacks = {
+    onToken(token: string) {
+      const msg = loadingMsg as any
+      if (msg.loading) {
+        msg.loading = false
+        msg.content = token
+      } else {
+        msg.content += token
+      }
+    },
+    onDone(data) {
+      loadingMsg.id = data.message_id
+      ;(loadingMsg as any).loading = false
+      loadingMsg.content = data.content
+      loadingMsg.status = 'success'
+      if (data.session) {
+        aiActiveSession.value = data.session
+        const idx = aiSessions.value.findIndex(s => s.id === data.session!.id)
+        if (idx !== -1) {
+          aiSessions.value[idx] = data.session!
+        } else {
+          aiSessions.value.unshift(data.session!)
+        }
+      }
+      aiSending.value = false
+    },
+    onError(error: string) {
+      const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
+      if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = makeTempMsg('assistant', error || 'AI 助手暂时无法回复，请稍后再试。')
+      ElMessage.error('消息发送失败')
+      aiSending.value = false
+    },
+  }
+
   try {
     if (aiActiveSessionId.value) {
-      const res = await sendCommunityAiMessage(aiActiveSessionId.value, { question })
-      // 替换临时消息为真实消息
-      const userIdx = aiCurrentMessages.value.findIndex(m => m.id === userMsg.id)
-      if (userIdx !== -1) aiCurrentMessages.value[userIdx] = res.user_message
-      const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
-      if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = res.assistant_message
-      aiActiveSession.value = res.session
-      const idx = aiSessions.value.findIndex(s => s.id === res.session.id)
-      if (idx !== -1) aiSessions.value[idx] = res.session
+      await sendCommunityAiMessageStream(aiActiveSessionId.value, { question }, callbacks)
     } else {
-      const res = await createCommunityAiSession({ question })
-      aiSessions.value.unshift(res.session)
-      aiActiveSessionId.value = res.session.id
-      aiActiveSession.value = res.session
-      // 合并后端返回的消息，去重
-      const serverMessages = res.messages || []
-      if (serverMessages.length > 0) {
-        const currentIds = new Set(aiCurrentMessages.value.filter(m => !String(m.id).startsWith('temp-')).map(m => m.id))
-        const newMsgs = serverMessages.filter(m => !currentIds.has(m.id))
-        // 移除临时 loading，追加新消息
-        const filtered = aiCurrentMessages.value.filter(m => !String(m.id).startsWith('temp-'))
-        aiCurrentMessages.value = [...filtered, ...newMsgs]
-      }
+      await createCommunityAiSessionStream({ question }, callbacks)
     }
   } catch {
-    // 失败时保留用户消息，loading 改为失败提示
+    // fetch 本身失败（网络错误等）
     const aiIdx = aiCurrentMessages.value.findIndex(m => m.id === loadingMsg.id)
     if (aiIdx !== -1) aiCurrentMessages.value[aiIdx] = makeTempMsg('assistant', 'AI 助手暂时无法回复，请稍后再试。')
     ElMessage.error('消息发送失败')
-  } finally { aiSending.value = false }
+    aiSending.value = false
+  }
 }
 async function handleAiDeleteSession(sessionId: number) { try { await deleteCommunityAiSession(sessionId); aiSessions.value = aiSessions.value.filter(s => s.id !== sessionId); if (aiActiveSessionId.value === sessionId) { if (aiSessions.value.length > 0) { aiActiveSessionId.value = aiSessions.value[0].id; await loadAiSessionDetail(aiActiveSessionId.value) } else { aiActiveSessionId.value = null; aiActiveSession.value = null; aiCurrentMessages.value = [] } } } catch { ElMessage.error('删除会话失败') } }
 
