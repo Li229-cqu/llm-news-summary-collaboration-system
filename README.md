@@ -9,7 +9,7 @@
 - 后端：FastAPI + MySQL + PyMySQL
 - AI 服务：FastAPI，默认支持 mock 结果，后续可切换真实大模型
 - 数据库：MySQL 8.0
-- 爬虫：RSS 新闻爬虫，支持增量抓取与正文解析
+- 爬虫：光明网 RSS 新闻爬虫，支持增量抓取与正文解析
 
 ## 一、项目目录
 
@@ -279,45 +279,47 @@ http://localhost:5173
 | 审核编辑 | `editor` | `123456` |
 | 管理员 | `admin` | `123456` |
 
-## 五、RSS 新闻爬虫
+## 五、新闻爬虫（光明网专用）
 
 爬虫脚本位置：
 
 ```text
-scripts/crawlers/rss_news_crawler.py
+scripts/crawlers/rss_news_crawler.py          # 正式爬虫（写入 news 表）
+scripts/crawlers/gmw_7days_test_crawler.py    # 7 天历史测试（写入测试表）
 ```
+
+当前爬虫只支持**光明网** 7 个频道：
+时政、国际、财经、社会、娱乐、科技、体育。
+
+### 正式爬虫
 
 预览，不入库：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run --max-items 3
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --dry-run
 ```
 
-抓取并写入数据库：
+抓取并写入数据库（每个源 30 条）：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content
 ```
 
-补全文章正文：
+### 7 天历史测试
+
+预览：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --fetch-content --update-existing-content
+backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 50
 ```
 
-归档旧新闻：
+写入测试表：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --cleanup-days 30
+backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 100 --apply --reset
 ```
 
-推荐始终使用 backend 虚拟环境运行爬虫，因为依赖安装在 `backend/.venv` 里。如果直接使用系统 `python`，可能会出现 `ModuleNotFoundError: No module named 'feedparser'`。
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
-```
-
-如果刚更新代码后爬虫报字段不存在，通常是数据库还没有按最新 `schema.sql` 重建。请回到上面的“导入数据库表结构和基础数据”步骤，重建数据库后重新导入 `schema.sql` 和 `seed.sql`。
+详细使用说明见 `docs/gmw_crawler_usage.md`。
 
 ## 六、验证数据库是否有数据
 
