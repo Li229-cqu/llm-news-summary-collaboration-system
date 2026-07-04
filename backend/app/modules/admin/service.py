@@ -488,7 +488,7 @@ def _build_pending_summary() -> PendingSummary:
 def _build_pending_item_detail(row: Dict[str, Any], item_type: str, target_type: str | None = None) -> Dict[str, Any]:
     base = _build_pending_item_base(row, item_type=item_type, target_type=target_type)
     return PendingItemDetail(
-        **base.model_dump(),
+        **base.model_dump(exclude={'tags'}),
         summary=str(row.get('summary') or row.get('content_preview') or row.get('content') or ''),
         content=str(row.get('content') or row.get('summary') or ''),
         cover_image=str(row.get('cover_image') or ''),
