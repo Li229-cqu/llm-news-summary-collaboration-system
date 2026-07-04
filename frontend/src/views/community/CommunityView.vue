@@ -63,10 +63,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getPostList, getPostDetail, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, sendCommunityAiMessageStream, createCommunityAiSessionStream, type StreamCallbacks, type CommunityPost, type PostListParams, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'
+import { useNavigationStateStore } from '@/stores/navigationState'
 import { useUserStore } from '@/stores/user'
 import PostCard from '@/components/community/PostCard.vue'
 import HotTopicsSidebar from '@/components/community/HotTopicsSidebar.vue'
@@ -79,6 +80,17 @@ import PostDetailPanel from '@/components/community/PostDetailPanel.vue'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const navStore = useNavigationStateStore()
+
+function saveCommunityRoute() {
+  navStore.saveCommunityState({
+    routePath: route.fullPath,
+    activeFeedTab: activeFeedTab.value,
+    contentMode: contentMode.value,
+    selectedPostId: selectedPostId.value,
+    aiActiveSessionId: aiActiveSessionId.value,
+  })
+}
 
 // ─── Post List ──
 const posts = ref<CommunityPost[]>([])
@@ -144,6 +156,7 @@ function switchTab(name: string) {
     currentPage.value = 1
     loadPosts(1)
   }
+  saveCommunityRoute()
 }
 
 function openPostDetail(post: CommunityPost) {
@@ -155,6 +168,7 @@ function openPostDetail(post: CommunityPost) {
   }
   selectedPostId.value = postId
   contentMode.value = 'detail'
+  saveCommunityRoute()
 }
 
 function backToPostList() {
@@ -280,6 +294,15 @@ function handleOpenRelatedNews(post: CommunityPost) { if (post.related_news_id) 
 function handleOpenRelatedNewsId(newsId: number | string) { router.push(`/news/${newsId}`) }
 
 onMounted(() => {
+  // 恢复上次离开时的社区子页面状态
+  const last = navStore.communityLastState
+  if (last.activeFeedTab && last.activeFeedTab !== 'recommend') {
+    activeFeedTab.value = last.activeFeedTab as typeof activeFeedTab.value
+    if (last.contentMode === 'detail' && last.selectedPostId) {
+      selectedPostId.value = last.selectedPostId
+      contentMode.value = 'detail'
+    }
+  }
   if (!userStore.userInfo) userStore.loadFromStorage()
   loadPosts()
   loadHotSearch()
@@ -295,6 +318,8 @@ onMounted(() => {
     router.replace({ path: '/community', query: {} })
   }
 })
+
+onBeforeUnmount(() => { saveCommunityRoute() })
 
 async function pinNewPostToTop(postId: string | number) {
   try {

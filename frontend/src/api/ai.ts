@@ -132,6 +132,8 @@ export interface AIGenerateRecordDetail {
   params: Record<string, any>
   result: AIGenerateResponse
   created_at: string
+  title_count?: number
+  risk_level?: 'low' | 'medium' | 'high' | string
 }
 
 export interface AIRecordListResponse {

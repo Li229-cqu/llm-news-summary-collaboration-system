@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
   ChatDotRound,
@@ -41,10 +41,17 @@ import {
 import { unfavoriteNews } from '@/api/interaction'
 import { unfavoritePost } from '@/api/community'
 import { changePasswordApi, getUserProfileApi, updateUserProfileApi, uploadAvatarApi } from '@/api/user'
+import { useNavigationStateStore } from '@/stores/navigationState'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
+const navStore = useNavigationStateStore()
+
+function saveProfileRoute() {
+  navStore.saveProfileState({ routePath: route.fullPath, activeTab: activeTab.value })
+}
 
 const activeTab = ref('insights')
 const loadingTab = ref('')
@@ -204,7 +211,7 @@ const reportClosingText = computed(() => {
 })
 
 function handleResize() {}
-onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); revokePendingAvatarBlob() })
+onBeforeUnmount(() => { saveProfileRoute(); window.removeEventListener('resize', handleResize); revokePendingAvatarBlob() })
 
 const browseSearchKeyword = ref('')
 const favoriteSearchKeyword = ref('')
@@ -941,6 +948,11 @@ function getVisiblePages(current: number, total: number): (number | string)[] {
 }
 
 onMounted(async () => {
+  // 恢复上次离开时的个人中心子页面
+  const last = navStore.profileLastState
+  if (last.activeTab && last.activeTab !== activeTab.value) {
+    activeTab.value = last.activeTab
+  }
   await loadCurrentUserProfile()
   // Load overview stats for quick stats display
   await loadProfileOverview()

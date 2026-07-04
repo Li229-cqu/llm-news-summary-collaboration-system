@@ -48,22 +48,6 @@
       </el-card>
     </div>
 
-    <div v-if="timelineData.relationships?.length" class="timeline-panel__graph">
-      <el-card shadow="never">
-        <template #header>
-          <div class="graph-header">
-            <h3>事件关系图</h3>
-            <span class="graph-subtitle">展示事件之间的因果关系与承接顺序</span>
-          </div>
-        </template>
-        <TimelineGraph
-          :nodes="timelineData.timeline"
-          :relationships="timelineData.relationships"
-          :phases="timelineData.phases || []"
-        />
-      </el-card>
-    </div>
-
     <div class="timeline-panel__body">
       <section class="timeline-panel__timeline">
         <div class="timeline-panel__section-header">
@@ -99,7 +83,6 @@ import { computed } from 'vue'
 import type { TimelineNewsItem, TimelineResponse } from '@/api/timeline'
 import TimelineNodeCard from './TimelineNodeCard.vue'
 import TimelineSourceNewsList from './TimelineSourceNewsList.vue'
-import TimelineGraph from './TimelineGraph.vue'
 
 const props = defineProps<{
   timelineData: TimelineResponse
