@@ -124,7 +124,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
                 <div class="card-summary">{{ getPreviewSummary(record) }}</div>
                 <div class="card-meta">
                   <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
-                    {{ record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险' }}
+                    {{ record.risk_level === 'high' ? '高风险' : record.risk_level === 'medium' ? '中风险' : '低风险' }}
                   </el-tag>
                   <el-tag :type="getSourceTagType(record)" size="small">
                     {{ getSourceLabel(record) }}
@@ -141,7 +141,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
               <div class="card-actions" @click.stop>
                 <el-button type="text" size="small" @click="handleViewDetail(record)">查看</el-button>
                 <el-button type="text" size="small" @click="handleReuse(record)">复用</el-button>
-                <el-button type="text" size="small" @click="handleExport(record)">导出</el-button>
+                <el-button type="text" size="small" @click="handleExport(record)">下载</el-button>
                 <el-button type="text" size="small" class="btn-delete" @click="handleDelete(record)">删除</el-button>
               </div>
             </div>
@@ -152,7 +152,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 
     <el-dialog
       v-model="showExportDialog"
-      title="选择导出格式"
+      title="选择下载格式"
       width="400px"
       class="export-dialog"
     >
@@ -188,8 +188,8 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 }
 
 .page-header {
-  background: #fff;
-  border: 1px solid #f1d4d4;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
   border-radius: 22px;
   padding: 32px 40px;
   margin-bottom: 24px;
@@ -200,13 +200,13 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .header-text p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .main-content {
@@ -236,14 +236,14 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
 }
 
 .record-count {
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .empty-state,
@@ -254,9 +254,9 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
   gap: 12px;
   padding: 60px 20px;
   text-align: center;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
 }
 
 .empty-icon {
@@ -267,13 +267,13 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-primary);
 }
 
 .empty-desc {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .history-list {
@@ -283,9 +283,9 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 }
 
 .history-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   cursor: pointer;
 }
@@ -314,19 +314,19 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 .card-ai-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
 .card-source-title {
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .card-summary {
   font-size: 13px;
-  color: #475569;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
 }
 
@@ -339,7 +339,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 
 .meta-text {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 
 .card-actions {
@@ -351,15 +351,11 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 .card-actions :deep(.el-button) {
   padding: 4px 10px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .card-actions :deep(.el-button:hover) {
-  color: #d92d20;
-}
-
-.card-actions :deep(.btn-delete:hover) {
-  color: #ef4444;
+  color: var(--color-primary);
 }
 
 .export-dialog :deep(.el-dialog__body) {
@@ -379,13 +375,13 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
   padding: 12px;
   border-radius: 6px;
   cursor: pointer;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border: 1px solid transparent;
 }
 
 .format-item.selected {
-  border-color: #ff4d4f;
-  background-color: #fff5f5;
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-soft);
 }
 
 .format-icon {
@@ -399,12 +395,12 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 .format-name {
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-primary);
 }
 
 .format-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 

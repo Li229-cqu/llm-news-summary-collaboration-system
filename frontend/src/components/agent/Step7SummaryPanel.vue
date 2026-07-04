@@ -243,7 +243,7 @@ const riskSummary = computed(() => {
   padding: 10px 12px;
   background: var(--color-bg-hover);
   border-radius: 8px;
-  border-left: 3px solid #e5e7eb;
+  border-left: 3px solid var(--color-border);
   transition: all .15s;
 }
 .s7s__issue-card:hover {
@@ -252,11 +252,11 @@ const riskSummary = computed(() => {
 }
 .s7s__issue--hallucination {
   border-left-color: #ef4444;
-  background: #fef2f2;
+  background: var(--color-primary-soft);
 }
 .s7s__issue--drift {
   border-left-color: #f59e0b;
-  background: #fffbeb;
+  background: var(--color-warning-soft);
 }
 
 .s7s__issue-head {
@@ -293,7 +293,7 @@ const riskSummary = computed(() => {
   margin: 0 0 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #444;
+  color: var(--color-text-primary);
 }
 
 .s7s__issue-reason {
@@ -314,7 +314,7 @@ const riskSummary = computed(() => {
   align-items: baseline;
   gap: 6px;
   font-size: 12px;
-  color: #555;
+  color: var(--color-text-secondary);
 }
 .s7s__check-dot {
   width: 6px;

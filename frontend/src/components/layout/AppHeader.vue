@@ -1,7 +1,8 @@
 <template>
   <header class="app-header">
     <RouterLink class="app-header__brand" to="/home">
-      基于大语言模型的智能新闻摘要与协同互动系统
+      <span class="brand-cn">智闻</span>
+      <span class="brand-en">ZHIWEN</span>
     </RouterLink>
 
     <el-menu
@@ -178,21 +179,39 @@ async function handleUserCommand(command: string) {
   height: var(--header-height);
   flex: 0 0 var(--header-height);
   gap: 16px;
-  padding: 0 24px;
+  padding: 0 24px 0 12px;
   background: var(--color-bg-card);
   border-bottom: 1px solid var(--color-border);
 }
 
 .app-header__brand {
-  flex: 0 1 360px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 1 380px;
+  margin-left: 16px;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: 17px;
-  font-weight: 600;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.brand-cn {
+  font-family: 'SimHei', 'STHeiti', '黑体', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 4px;
+}
+
+.brand-en {
+  font-family: 'Inter', 'SF Pro Display', 'Helvetica Neue', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--color-text-secondary);
+  opacity: 0.75;
 }
 
 .app-header__menu {

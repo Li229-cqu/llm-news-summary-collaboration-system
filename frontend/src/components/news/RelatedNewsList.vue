@@ -115,8 +115,8 @@ function handleClick(newsId: number) {
 }
 
 .related-news-list__tag--hot {
-  color: #d92d20;
-  background: #fff1f0;
-  border-color: #fecaca;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-light);
 }
 </style>

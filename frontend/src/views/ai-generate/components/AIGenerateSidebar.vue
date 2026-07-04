@@ -61,14 +61,14 @@ function navigate(path: string) {
   flex-direction: column;
   background-color: var(--color-bg-card);
   border-radius: 12px;
-  border: 1px solid #f1d4d4;
+  border: 1px solid var(--color-primary-light);
   box-shadow: 0 2px 12px rgba(217, 45, 32, 0.05);
   overflow: hidden;
 }
 
 .sidebar-header {
   padding: 18px 20px 14px;
-  border-bottom: 2px solid #d92d20;
+  border-bottom: 2px solid var(--color-primary);
 }
 
 .sidebar-label {
@@ -92,19 +92,19 @@ function navigate(path: string) {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #4b5563;
+  color: var(--color-text-secondary);
   transition: all 0.2s ease;
   user-select: none;
 }
 
 .nav-item:hover {
-  background-color: #fff5f5;
-  color: #d92d20;
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .nav-item.active {
-  background-color: #fff1f0;
-  color: #d92d20;
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -114,7 +114,7 @@ function navigate(path: string) {
   left: 8px;
   width: 3px;
   height: 20px;
-  background-color: #d92d20;
+  background-color: var(--color-primary);
   border-radius: 2px;
 }
 

@@ -278,7 +278,7 @@ function truncateContent(content: string, maxLength: number) {
   gap: 6px;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: #fef2f2;
+  background: var(--color-primary-soft);
   border-radius: 8px;
   font-size: 13px;
   color: #dc2626;

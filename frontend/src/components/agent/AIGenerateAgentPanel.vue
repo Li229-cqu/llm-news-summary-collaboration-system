@@ -570,8 +570,8 @@ const showLongSummary = computed(() => {
   gap: 16px;
   min-height: 64px;
   padding: 12px 14px;
-  background: #fff;
-  border: 1px solid #f6c8c4;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(217, 45, 32, 0.06);
 }
@@ -603,12 +603,12 @@ const showLongSummary = computed(() => {
 
 .status-pill {
   border-radius: 999px;
-  border-color: #fecaca;
+  border-color: var(--color-primary-light);
 }
 
 .status-text {
   font-size: 12px;
-  color: #667085;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -620,7 +620,7 @@ const showLongSummary = computed(() => {
   height: 5px;
   border-radius: 999px;
   overflow: hidden;
-  background: #fee4e2;
+  background: var(--color-primary-soft);
 }
 
 .progress-line__fill {
@@ -645,16 +645,16 @@ const showLongSummary = computed(() => {
 
 .ghost-btn {
   border-radius: 10px;
-  border-color: #fecaca;
-  color: #b42318;
+  border-color: var(--color-primary-light);
+  color: var(--color-primary);
   height: 40px;
 }
 
 .agent-empty {
   padding: 22px 18px;
   text-align: center;
-  background: #fff;
-  border: 1px dashed #f2c6c3;
+  background: var(--color-bg-card);
+  border: 1px dashed var(--color-primary-light);
   border-radius: 16px;
 }
 
@@ -662,7 +662,7 @@ const showLongSummary = computed(() => {
   margin: 0 0 8px;
   font-size: 18px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .agent-empty__desc {
@@ -670,13 +670,13 @@ const showLongSummary = computed(() => {
   max-width: 700px;
   font-size: 13px;
   line-height: 1.7;
-  color: #667085;
+  color: var(--color-text-secondary);
 }
 
 .agent-empty__hint {
   margin: 10px 0 0;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .result-tabs {
@@ -688,18 +688,18 @@ const showLongSummary = computed(() => {
   position: relative;
   padding: 10px 16px;
   border-radius: 999px;
-  border: 1px solid #f2c6c3;
-  background: #fff;
-  color: #667085;
+  border: 1px solid var(--color-primary-light);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .result-tabs__tab.is-active {
-  color: #d92d20;
-  background: #fff1f0;
-  border-color: #fda29b;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-light);
 }
 
 .result-tabs__dot {
@@ -720,16 +720,16 @@ const showLongSummary = computed(() => {
 .hero-card,
 .mini-card,
 .wide-card {
-  background: #fff;
-  border: 1px solid #f2c6c3;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 10px 28px rgba(217, 45, 32, 0.05);
 }
 
 .hero-card {
-  border-left: 6px solid #b42318;
-  background: linear-gradient(180deg, #fff 0%, #fff8f7 100%);
+  border-left: 6px solid var(--color-primary);
+  background: linear-gradient(180deg, var(--color-bg-card) 0%, var(--color-primary-soft) 100%);
 }
 
 .hero-card__head,
@@ -748,7 +748,7 @@ const showLongSummary = computed(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .hero-card__subtitle,
@@ -756,7 +756,7 @@ const showLongSummary = computed(() => {
 .wide-card__subtitle {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #667085;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -773,20 +773,20 @@ const showLongSummary = computed(() => {
 .hero-section {
   padding: 14px;
   border-radius: 16px;
-  background: #fff;
-  border: 1px solid #f4b4ae;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
 }
 
 .hero-section--accent {
-  background: #fff5f4;
-  border-color: #fda29b;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-light);
 }
 
 .hero-section__label {
   margin-bottom: 10px;
   font-size: 12px;
   font-weight: 700;
-  color: #b42318;
+  color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -804,8 +804,8 @@ const showLongSummary = computed(() => {
   margin: 0;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #fff;
-  border: 1px solid #fed4d0;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
 }
 
 .title-index {
@@ -826,7 +826,7 @@ const showLongSummary = computed(() => {
   flex: 1;
   font-size: 15px;
   line-height: 1.7;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .summary-grid,
@@ -859,17 +859,17 @@ const showLongSummary = computed(() => {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #fff7f7;
-  border: 1px solid #f4b4ae;
-  color: #1f2937;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-light);
+  color: var(--color-text-primary);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .metric-pill--accent {
-  background: #fff1f0;
-  border-color: #fda29b;
-  color: #b42318;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-light);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -889,14 +889,14 @@ const showLongSummary = computed(() => {
   margin: 0;
   font-size: 14px;
   line-height: 1.8;
-  color: #1f2937;
+  color: var(--color-text-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .mini-copy {
   margin-top: 10px;
-  color: #667085;
+  color: var(--color-text-secondary);
 }
 
 .mini-copy--inline {
@@ -906,9 +906,9 @@ const showLongSummary = computed(() => {
 .empty-inline {
   padding: 12px 14px;
   border-radius: 14px;
-  background: #fff7f7;
-  border: 1px dashed #f2c6c3;
-  color: #9ca3af;
+  background: var(--color-primary-soft);
+  border: 1px dashed var(--color-primary-light);
+  color: var(--color-text-muted);
   font-size: 13px;
   text-align: center;
 }
@@ -919,7 +919,7 @@ const showLongSummary = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .elements-table {
@@ -933,7 +933,7 @@ const showLongSummary = computed(() => {
   grid-template-columns: 92px minmax(0, 1fr) 92px minmax(0, 1fr);
   gap: 10px 12px;
   padding: 10px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .element-row:last-child {
@@ -943,13 +943,13 @@ const showLongSummary = computed(() => {
 .element-label {
   font-size: 12px;
   font-weight: 700;
-  color: #b42318;
+  color: var(--color-primary);
 }
 
 .element-value {
   font-size: 13px;
   line-height: 1.7;
-  color: #1f2937;
+  color: var(--color-text-primary);
   word-break: break-word;
 }
 
@@ -969,9 +969,9 @@ const showLongSummary = computed(() => {
   flex-wrap: wrap;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #fff7f7;
-  border: 1px solid #fed4d0;
-  color: #1f2937;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-light);
+  color: var(--color-text-primary);
   line-height: 1.7;
 }
 

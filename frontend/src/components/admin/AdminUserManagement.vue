@@ -379,11 +379,11 @@ onMounted(async () => {
 .admin-user-mgmt { padding: 0; }
 .panel-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px }
 .panel-header h3 { margin:0; font-size:18px }
-.panel-header p { margin:4px 0 0; color:#909399; font-size:13px }
+.panel-header p { margin:4px 0 0; color:var(--color-text-muted); font-size:13px }
 
 .summary-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:16px }
 .summary-card { background: var(--color-bg); border-radius:8px; padding:14px 12px; display:flex; flex-direction:column; gap:4px }
-.summary-card span { font-size:12px; color:#909399 }
+.summary-card span { font-size:12px; color:var(--color-text-muted) }
 .summary-card strong { font-size:20px }
 
 .filter-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center }
@@ -391,6 +391,6 @@ onMounted(async () => {
 
 .behavior-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px }
 .behavior-item { background: var(--color-bg); border-radius:8px; padding:16px 12px; text-align:center; display:flex; flex-direction:column; gap:4px }
-.behavior-num { font-size:22px; font-weight:600; color:#303133 }
-.behavior-label { font-size:12px; color:#909399 }
+.behavior-num { font-size:22px; font-weight:600; color:var(--color-text-primary) }
+.behavior-label { font-size:12px; color:var(--color-text-muted) }
 </style>

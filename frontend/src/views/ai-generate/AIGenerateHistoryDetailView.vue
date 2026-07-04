@@ -145,9 +145,9 @@ function getSourceTagType() {
           <div class="action-bar">
             <el-button @click="router.push('/ai-generate/history')">← 返回列表</el-button>
             <div class="action-right">
-              <el-button type="primary" @click="handleReuse">复用此输入</el-button>
-              <el-button @click="handleExport">导出</el-button>
-              <el-button class="btn-delete" @click="handleDelete">删除</el-button>
+              <el-button @click="handleReuse">复用此输入</el-button>
+              <el-button @click="handleExport">下载</el-button>
+              <el-button @click="handleDelete">删除</el-button>
             </div>
           </div>
 
@@ -213,7 +213,7 @@ function getSourceTagType() {
       </div>
     </div>
 
-    <el-dialog v-model="showExportDialog" title="选择导出格式" width="400px" class="export-dialog">
+    <el-dialog v-model="showExportDialog" title="选择下载格式" width="400px" class="export-dialog">
       <div class="export-format-list">
         <div
           v-for="format in ['txt', 'docx', 'pdf']"
@@ -246,8 +246,8 @@ function getSourceTagType() {
 }
 
 .page-header {
-  background: #fff;
-  border: 1px solid #f1d4d4;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-primary-light);
   border-radius: 22px;
   padding: 32px 40px;
   margin-bottom: 24px;
@@ -257,13 +257,13 @@ function getSourceTagType() {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .header-text p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .main-content {
@@ -293,9 +293,9 @@ function getSourceTagType() {
 .content-section,
 .loading-state,
 .empty-state {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 10px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
 }
 
 .action-bar {
@@ -308,11 +308,6 @@ function getSourceTagType() {
 .action-right {
   display: flex;
   gap: 8px;
-}
-
-.btn-delete {
-  color: #ef4444 !important;
-  border-color: #fecaca !important;
 }
 
 .info-section,
@@ -332,7 +327,7 @@ function getSourceTagType() {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   flex: 1;
 }
 
@@ -345,14 +340,14 @@ function getSourceTagType() {
 
 .provider-model {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .info-meta {
   display: flex;
   gap: 20px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   flex-wrap: wrap;
 }
 
@@ -360,19 +355,19 @@ function getSourceTagType() {
   margin: 0 0 14px;
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .text-block {
   font-size: 14px;
   line-height: 1.8;
-  color: #374151;
+  color: var(--color-text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   padding: 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
 }
 
 .params-grid {
@@ -386,20 +381,20 @@ function getSourceTagType() {
   flex-direction: column;
   gap: 4px;
   padding: 10px 14px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--color-border);
 }
 
 .param-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
 .param-value {
   font-size: 14px;
-  color: #1e293b;
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 
@@ -411,7 +406,7 @@ function getSourceTagType() {
   gap: 12px;
   padding: 60px 20px;
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .empty-icon {
@@ -422,13 +417,13 @@ function getSourceTagType() {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-primary);
 }
 
 .empty-desc {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .export-dialog :deep(.el-dialog__body) {
@@ -448,13 +443,13 @@ function getSourceTagType() {
   padding: 12px;
   border-radius: 6px;
   cursor: pointer;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border: 1px solid transparent;
 }
 
 .format-item.selected {
   border-color: #ff4d4f;
-  background-color: #fff5f5;
+  background-color: var(--color-primary-soft);
 }
 
 .format-icon {
@@ -468,12 +463,12 @@ function getSourceTagType() {
 .format-name {
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-primary);
 }
 
 .format-desc {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 

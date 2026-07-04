@@ -218,7 +218,7 @@ watch(() => [route.query.source, route.query.newsId], () => {
   overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(217, 45, 32, 0.08), transparent 28%),
-    linear-gradient(180deg, #f6f7fb 0%, #f6f7fb 100%);
+    var(--color-bg);
 }
 
 .ai-shell__frame {
@@ -231,8 +231,8 @@ watch(() => [route.query.source, route.query.newsId], () => {
   width: 270px;
   flex-shrink: 0;
   overflow-y: auto;
-  border-right: 1px solid #f2c6c3;
-  background: rgba(255, 255, 255, 0.92);
+  border-right: 1px solid var(--color-primary-light);
+  background: var(--color-bg-card);
   backdrop-filter: blur(10px);
 }
 
@@ -265,7 +265,7 @@ watch(() => [route.query.source, route.query.newsId], () => {
     width: 100%;
     max-height: 42vh;
     border-right: none;
-    border-bottom: 1px solid #f2c6c3;
+    border-bottom: 1px solid var(--color-primary-light);
   }
 
   .ai-shell__main {

@@ -173,7 +173,7 @@ function formatTime(timeStr: string) {
 .empty-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--color-text-primary);
   margin: 0 0 12px;
 }
 
@@ -244,7 +244,7 @@ function formatTime(timeStr: string) {
 }
 .message-row.assistant .message-content {
   background: #f0f4f9;
-  color: #1f2937;
+  color: var(--color-text-primary);
   border-bottom-left-radius: 4px;
 }
 

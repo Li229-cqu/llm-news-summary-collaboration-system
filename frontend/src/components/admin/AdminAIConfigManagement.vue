@@ -457,14 +457,14 @@ onMounted(() => {
 .ai-config-page { padding: 0 4px; }
 .panel-header { margin-bottom: 16px; }
 .panel-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.panel-header p { margin: 6px 0 0; color: #909399; font-size: 13px; }
+.panel-header p { margin: 6px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .section-alert { margin-bottom: 16px; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
 .summary-grid { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
 .summary-card { background: var(--color-bg); border-radius: 6px; padding: 14px 20px; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.sc-label { font-size: 13px; color: #909399; }
-.sc-value { font-size: 24px; font-weight: 600; color: #303133; }
-.hint-text { color: #909399; font-size: 13px; margin-left: 8px; }
+.sc-label { font-size: 13px; color: var(--color-text-muted); }
+.sc-value { font-size: 24px; font-weight: 600; color: var(--color-text-primary); }
+.hint-text { color: var(--color-text-muted); font-size: 13px; margin-left: 8px; }
 .mt16 { margin-top: 16px; }
 .mr8 { margin-right: 8px; }
 .mb8 { margin-bottom: 8px; }

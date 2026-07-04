@@ -127,7 +127,7 @@ function handleClick(item: HotSearchItem) {
   transition: background 0.16s ease;
 }
 .hot-search-item:hover {
-  background: #fef2f2;
+  background: var(--color-primary-soft);
 }
 
 .rank {
@@ -136,7 +136,7 @@ function handleClick(item: HotSearchItem) {
   display: grid;
   place-items: center;
   border-radius: 6px;
-  background: #fef2f2;
+  background: var(--color-primary-soft);
   color: #dc2626;
   font-size: 12px;
   font-weight: 700;
@@ -162,7 +162,7 @@ function handleClick(item: HotSearchItem) {
 .keyword {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -206,7 +206,7 @@ function handleClick(item: HotSearchItem) {
   margin: 0 0 4px;
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .tip-text {

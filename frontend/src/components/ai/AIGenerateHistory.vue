@@ -2,9 +2,10 @@
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
+
 import { useAIDraftStore } from '@/stores/aiDraft'
 import { deleteAIRecord, getAIHistory, getAIRecordDetail, type AIGenerateRecordItem } from '@/api/ai'
-import Step7AuditPanel from '@/components/agent/Step7AuditPanel.vue'
+
 import { exportRecordToWord } from '@/utils/exportWord'
 import {
   formatProviderModel,
@@ -33,6 +34,7 @@ const detailLoading = ref(false)
 const detailError = ref('')
 const exportingId = ref<number | string | null>(null)
 const exportingDetail = ref(false)
+const sourceExpanded = ref(false)
 
 async function loadHistory() {
   listLoading.value = true
@@ -177,8 +179,8 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
           <div class="gh__card-body">
             <div class="gh__card-head">
               <span class="gh__card-src">{{ getPreviewTitle(record) }}</span>
-              <el-tag :type="record.risk_level === 'low' ? 'success' : record.risk_level === 'medium' ? 'warning' : 'danger'" size="small" effect="light">
-                {{ record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险' }}
+              <el-tag :type="record.risk_level === 'high' ? 'danger' : record.risk_level === 'medium' ? 'warning' : 'success'" size="small" effect="light">
+                {{ record.risk_level === 'high' ? '高风险' : record.risk_level === 'medium' ? '中风险' : '低风险' }}
               </el-tag>
               <el-tag :type="getSourceTagType(record)" size="small" effect="light">
                 {{ getSourceLabel(record) }}
@@ -195,10 +197,10 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
           </div>
 
           <div class="gh__card-acts">
-            <el-button size="small" type="primary" plain @click="emit('view-detail', record.id)">查看</el-button>
+            <el-button size="small" plain @click="emit('view-detail', record.id)">查看</el-button>
             <el-button size="small" plain @click="handleReuse(record)">复用</el-button>
-            <el-button size="small" plain :icon="Download" :loading="exportingId === record.id" @click="handleExport(record)">下载</el-button>
-            <el-button size="small" type="danger" plain @click="handleDelete(record)">删除</el-button>
+            <el-button size="small" plain @click="handleExport(record)">下载</el-button>
+            <el-button size="small" plain @click="handleDelete(record)">删除</el-button>
           </div>
         </div>
       </div>
@@ -208,73 +210,113 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
       <el-skeleton v-if="detailLoading" animated :rows="8" />
       <el-alert v-else-if="detailError" :title="detailError" type="error" show-icon />
       <template v-else-if="detail">
-        <div class="gh__detail">
-          <section class="gh__sec">
-            <h3 class="gh__sec-title">输入原文</h3>
-            <p class="gh__text">{{ detail.input_text || '暂无输入内容' }}</p>
+        <!-- 标题头部卡片 -->
+        <section class="ghd__hero">
+          <div class="ghd__hero-row">
+            <h1 class="ghd__hero-title">{{ detail.source_title || 'AI 生成结果' }}</h1>
+            <div class="ghd__hero-badges">
+              <el-tag
+                :type="detail.risk_level === 'high' ? 'danger' : detail.risk_level === 'medium' ? 'warning' : 'success'"
+                size="small" effect="dark" round
+              >
+                {{ detail.risk_level === 'high' ? '高风险' : detail.risk_level === 'medium' ? '中风险' : '低风险' }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="ghd__hero-meta">
+            <span v-if="formatProviderModel(detail.standardResult.provider, detail.standardResult.model)" class="ghd__hero-meta-item">
+              {{ formatProviderModel(detail.standardResult.provider, detail.standardResult.model) }}
+            </span>
+            <span class="ghd__hero-meta-item">{{ detail.created_at }}</span>
+            <span class="ghd__hero-meta-item">{{ detail.title_count ?? detail.params?.title_count ?? '—' }} 个标题</span>
+          </div>
+        </section>
+
+        <div class="ghd__grid">
+          <!-- 原文 -->
+          <section class="ghd__card">
+            <h3 class="ghd__card-title">原文</h3>
+            <template v-if="detail.input_text">
+              <p class="ghd__card-text">{{ sourceExpanded ? detail.input_text : detail.input_text.slice(0, 200) + (detail.input_text.length > 200 ? '…' : '') }}</p>
+              <el-button
+                v-if="detail.input_text.length > 200"
+                class="ghd__card-expand"
+                type="text"
+                @click="sourceExpanded = !sourceExpanded"
+              >
+                {{ sourceExpanded ? '收起' : ' 展开全部（共 ' + detail.input_text.length + ' 字）' }}
+              </el-button>
+            </template>
+            <p v-else class="ghd__card-text ghd__card-text--empty">暂无原文内容</p>
           </section>
 
-          <section class="gh__sec">
-            <h3 class="gh__sec-title">生成参数</h3>
-            <div class="gh__tags">
-              <span class="gh__tag">标题 {{ detail.params.title_count ?? '无' }} 个</span>
-              <span class="gh__tag">{{ detail.params.summary_type === 'extract' ? '抽取式' : detail.params.summary_type === 'generate' ? '生成式' : '无' }}</span>
-              <span class="gh__tag">{{ detail.params.title_style || '无' }}</span>
-              <span class="gh__tag">{{ detail.params.summary_style || '无' }}</span>
-              <span class="gh__tag">
-                {{ detail.params.summary_length === 'short' ? '短摘要' : detail.params.summary_length === 'long' ? '长摘要' : '短摘要+长摘要' }}
-              </span>
+          <!-- 生成参数 -->
+          <section class="ghd__card">
+            <h3 class="ghd__card-title">生成参数</h3>
+            <div class="ghd__kw-list">
+              <el-tag type="info" round>标题数 {{ detail.params.title_count ?? '无' }}</el-tag>
+              <el-tag type="info" round>{{ detail.params.summary_type === 'extract' ? '抽取式' : detail.params.summary_type === 'generate' ? '生成式' : '无' }}</el-tag>
+              <el-tag type="info" round>{{ detail.params.title_style || '默认' }}</el-tag>
+              <el-tag type="info" round>{{ detail.params.summary_style || '默认' }}</el-tag>
+              <el-tag type="info" round>{{ detail.params.summary_length === 'short' ? '短摘要' : detail.params.summary_length === 'long' ? '长摘要' : '短+长' }}</el-tag>
             </div>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.candidate_titles.length">
-            <h3 class="gh__sec-title">候选标题</h3>
-            <div class="gh__titles">
-              <p v-for="(title, index) in detail.standardResult.candidate_titles" :key="index" class="gh__title-item">{{ index + 1 }}. {{ title }}</p>
+          <!-- 候选标题 -->
+          <section class="ghd__card" v-if="detail.standardResult.candidate_titles.length">
+            <h3 class="ghd__card-title">候选标题</h3>
+            <div class="ghd__titles">
+              <div v-for="(title, index) in detail.standardResult.candidate_titles" :key="index" class="ghd__title-row">
+                <span class="ghd__title-num">{{ index + 1 }}</span>
+                <span class="ghd__title-text">{{ title }}</span>
+              </div>
             </div>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.summary_short">
-            <h3 class="gh__sec-title">短摘要</h3>
-            <p class="gh__text">{{ detail.standardResult.summary_short }}</p>
+          <!-- 短摘要 -->
+          <section class="ghd__card" v-if="detail.standardResult.summary_short">
+            <h3 class="ghd__card-title">短摘要</h3>
+            <p class="ghd__card-text">{{ detail.standardResult.summary_short }}</p>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.summary_long">
-            <h3 class="gh__sec-title">长摘要</h3>
-            <p class="gh__text">{{ detail.standardResult.summary_long }}</p>
+          <!-- 长摘要 -->
+          <section class="ghd__card" v-if="detail.standardResult.summary_long">
+            <h3 class="ghd__card-title">长摘要</h3>
+            <p class="ghd__card-text">{{ detail.standardResult.summary_long }}</p>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.summary_points.length">
-            <h3 class="gh__sec-title">摘要要点</h3>
-            <div class="gh__titles">
-              <p v-for="(point, index) in detail.standardResult.summary_points" :key="index" class="gh__title-item">{{ index + 1 }}. {{ point }}</p>
+          <!-- 摘要要点 -->
+          <section class="ghd__card" v-if="detail.standardResult.summary_points.length">
+            <h3 class="ghd__card-title">摘要要点</h3>
+            <div class="ghd__points">
+              <div v-for="(point, index) in detail.standardResult.summary_points" :key="index" class="ghd__point-row">
+                <span class="ghd__point-dot"></span>
+                <span>{{ point }}</span>
+              </div>
             </div>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.keywords.length">
-            <h3 class="gh__sec-title">关键词</h3>
-            <div class="gh__tags">
-              <el-tag v-for="(keyword, index) in detail.standardResult.keywords" :key="index" size="small" :type="index === 0 ? '' : 'info'">
+          <!-- 关键词 -->
+          <section class="ghd__card" v-if="detail.standardResult.keywords.length">
+            <h3 class="ghd__card-title">关键词</h3>
+            <div class="ghd__kw-list">
+              <el-tag v-for="(keyword, index) in detail.standardResult.keywords" :key="index" size="default" type="info" round>
                 {{ keyword }}
               </el-tag>
             </div>
           </section>
 
-          <section class="gh__sec" v-if="detail.standardResult.elements && (detail.standardResult.elements.who || detail.standardResult.elements.what || detail.standardResult.elements.when || detail.standardResult.elements.where || detail.standardResult.elements.why || detail.standardResult.elements.how)">
-            <h3 class="gh__sec-title">新闻六要素</h3>
-            <div class="gh__elements">
-              <div class="gh__el"><span class="gh__el-k">人物</span><span>{{ detail.standardResult.elements.who || '无' }}</span></div>
-              <div class="gh__el"><span class="gh__el-k">事件</span><span>{{ detail.standardResult.elements.what || '无' }}</span></div>
-              <div class="gh__el"><span class="gh__el-k">时间</span><span>{{ detail.standardResult.elements.when || '无' }}</span></div>
-              <div class="gh__el"><span class="gh__el-k">地点</span><span>{{ detail.standardResult.elements.where || '无' }}</span></div>
-              <div class="gh__el"><span class="gh__el-k">原因</span><span>{{ detail.standardResult.elements.why || '无' }}</span></div>
-              <div class="gh__el"><span class="gh__el-k">方式</span><span>{{ detail.standardResult.elements.how || '无' }}</span></div>
+          <!-- 新闻六要素 -->
+          <section class="ghd__card" v-if="detail.standardResult.elements && (detail.standardResult.elements.who || detail.standardResult.elements.what || detail.standardResult.elements.when || detail.standardResult.elements.where || detail.standardResult.elements.why || detail.standardResult.elements.how)">
+            <h3 class="ghd__card-title">新闻六要素</h3>
+            <div class="ghd__elements">
+              <div class="ghd__el"><span class="ghd__el-k">人物</span><span class="ghd__el-v">{{ detail.standardResult.elements.who || '—' }}</span></div>
+              <div class="ghd__el"><span class="ghd__el-k">事件</span><span class="ghd__el-v">{{ detail.standardResult.elements.what || '—' }}</span></div>
+              <div class="ghd__el"><span class="ghd__el-k">时间</span><span class="ghd__el-v">{{ detail.standardResult.elements.when || '—' }}</span></div>
+              <div class="ghd__el"><span class="ghd__el-k">地点</span><span class="ghd__el-v">{{ detail.standardResult.elements.where || '—' }}</span></div>
+              <div class="ghd__el"><span class="ghd__el-k">原因</span><span class="ghd__el-v">{{ detail.standardResult.elements.why || '—' }}</span></div>
+              <div class="ghd__el"><span class="ghd__el-k">方式</span><span class="ghd__el-v">{{ detail.standardResult.elements.how || '—' }}</span></div>
             </div>
-          </section>
-
-          <section class="gh__sec" v-if="detail.standardResult.has_consistency">
-            <h3 class="gh__sec-title">一致性检查</h3>
-            <Step7AuditPanel :consistency-data="detail.standardResult.consistency" />
           </section>
         </div>
       </template>
@@ -305,24 +347,203 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
 .gh__card-src { font-size: 16px; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gh__card-sum { margin: 0 0 6px; font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
 .gh__card-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.gh__card-title { padding: 2px 10px; background: #f3f4f6; border-radius: 4px; font-size: 13px; color: #6b7280; }
-.gh__card-extra { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
-.gh__card-time { font-size: 12px; color: #9ca3af; }
+.gh__card-title { padding: 2px 10px; background: var(--color-bg-hover); border-radius: 4px; font-size: 13px; color: var(--color-text-secondary); }
+.gh__card-extra { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; }
+.gh__card-time { font-size: 12px; color: var(--color-text-muted); }
 .gh__card-acts { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; width: 80px; }
 .gh__card-acts .el-button { width: 100%; margin-left: 0; }
-.gh__detail { display: flex; flex-direction: column; gap: 14px; }
-.gh__sec { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 10px; padding: 16px 20px; }
-.gh__sec-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
-.gh__text { margin: 0; font-size: 14px; line-height: 1.75; color: var(--color-text-secondary); white-space: pre-line; }
-.gh__tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.gh__tag { padding: 3px 10px; background: #f3f4f6; border-radius: 6px; font-size: 13px; color: #6b7280; }
-.gh__titles { display: flex; flex-direction: column; gap: 4px; }
-.gh__title-item { margin: 0; padding: 6px 10px; background: #f9fafb; border-radius: 6px; font-size: 14px; color: var(--color-text-primary); }
-.gh__elements { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.gh__el { font-size: 14px; color: var(--color-text-secondary); display: flex; gap: 6px; }
-.gh__el-k { font-weight: 600; color: var(--color-text-primary); flex-shrink: 0; min-width: 32px; }
+/* ===== Detail: Hero Header ===== */
+.ghd__hero {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 22px 28px;
+  margin-bottom: 20px;
+}
+.ghd__hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ghd__hero-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+}
+.ghd__hero-badges {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.ghd__hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.ghd__hero-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ===== Detail: Card Grid ===== */
+.ghd__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ghd__card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 20px 24px;
+  transition: border-color 0.15s;
+}
+.ghd__card:hover {
+  border-color: var(--color-primary-light);
+}
+.ghd__card-title {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ghd__card-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--color-text-secondary);
+  white-space: pre-line;
+}
+.ghd__card-text--empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.ghd__card-expand {
+  margin-top: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+
+/* ===== Detail: Titles ===== */
+.ghd__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ghd__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--color-bg-hover);
+  border-radius: 10px;
+  border-left: 3px solid var(--color-primary-light);
+  transition: border-color 0.15s;
+}
+.ghd__title-row:hover {
+  border-left-color: var(--color-primary);
+}
+.ghd__title-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.ghd__title-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+/* ===== Detail: Points ===== */
+.ghd__points {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ghd__point-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+.ghd__point-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  margin-top: 8px;
+}
+
+/* ===== Detail: Keywords ===== */
+.ghd__kw-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ===== Detail: Elements ===== */
+.ghd__elements {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ghd__el {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--color-bg-hover);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.ghd__el-k {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.ghd__el-v {
+  color: var(--color-text-secondary);
+  word-break: break-word;
+}
+
+/* ===== Responsive ===== */
 @media (max-width: 900px) {
   .gh__card { flex-direction: column; }
   .gh__card-acts { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .ghd__hero { padding: 16px; }
+  .ghd__elements { grid-template-columns: 1fr; }
+  .ghd__card { padding: 14px 16px; }
 }
 </style>
