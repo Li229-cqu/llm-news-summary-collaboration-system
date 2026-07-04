@@ -1,36 +1,43 @@
 /**
- * AI 生成历史共享逻辑 composable。
- * 提取自 AIGenerateHistory.vue，供历史列表页、历史详情页复用。
+ * AI 生成历史记录共享逻辑。
+ * 统一把列表、详情、复用、导出都收敛到标准结果结构。
  */
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import jsPDF from 'jspdf'
 import {
+  deleteAIRecord,
   getAIHistory,
   getAIRecordDetail,
-  deleteAIRecord,
   type AIGenerateRecordItem,
-  type AIGenerateRecordDetail,
 } from '@/api/ai'
-import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
-import jsPDF from 'jspdf'
+import {
+  formatProviderModel,
+  getAIGenerateSourceLabel,
+  normalizeAIGenerateHistoryDetail,
+  normalizeAIGenerateHistoryRecord,
+  type NormalizedAIGenerateHistoryDetail,
+  type NormalizedAIGenerateHistoryRecord,
+} from '@/utils/normalizeAIGenerateResult'
+import { exportRecordToWord } from '@/utils/exportWord'
+
+type ExportFormat = 'txt' | 'docx' | 'pdf'
 
 export function useAIGenerateHistory() {
-  const historyRecords = ref<AIGenerateRecordItem[]>([])
+  const historyRecords = ref<NormalizedAIGenerateHistoryRecord[]>([])
   const loading = ref(false)
 
   const showExportDialog = ref(false)
-  const selectedExportFormat = ref<string>('')
-  const exportingRecord = ref<AIGenerateRecordItem | null>(null)
-  const exportingDetail = ref<AIGenerateRecordDetail | null>(null)
-
-  // ========== 数据加载 ==========
+  const selectedExportFormat = ref<ExportFormat | ''>('')
+  const exportingRecord = ref<NormalizedAIGenerateHistoryRecord | null>(null)
+  const exportingDetail = ref<NormalizedAIGenerateHistoryDetail | null>(null)
 
   const loadHistory = async () => {
     loading.value = true
     try {
       const response = await getAIHistory()
-      historyRecords.value = response.records
-    } catch (error) {
+      historyRecords.value = (response.records || []).map(record => normalizeAIGenerateHistoryRecord(record))
+    } catch {
       ElMessage.error('加载历史记录失败')
     } finally {
       loading.value = false
@@ -39,100 +46,129 @@ export function useAIGenerateHistory() {
 
   const loadRecordDetail = async (recordId: number | string) => {
     try {
-      return await getAIRecordDetail(recordId)
-    } catch (error) {
+      const detail = await getAIRecordDetail(recordId)
+      return normalizeAIGenerateHistoryDetail(detail)
+    } catch {
       ElMessage.error('获取记录详情失败')
       return null
     }
   }
 
-  // ========== 删除 ==========
-
   const deleteRecord = async (record: AIGenerateRecordItem) => {
     try {
-      await ElMessageBox.confirm(
-        `确定要删除这条历史记录吗？`,
-        '警告',
-        {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning',
-        }
-      )
+      await ElMessageBox.confirm('确定要删除这条历史记录吗？', '警告', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
 
       await deleteAIRecord(record.id)
       ElMessage.success('历史记录已删除')
       await loadHistory()
       return true
     } catch (error: any) {
-      if (error.message !== 'cancel') {
+      if (error?.message !== 'cancel') {
         ElMessage.error('删除失败')
       }
       return false
     }
   }
 
-  // ========== 导出 ==========
+  function formatRiskLabel(level: string) {
+    if (level === 'low') return '低风险'
+    if (level === 'medium') return '中风险'
+    if (level === 'high') return '高风险'
+    return '未知'
+  }
 
-  const generateExportContent = (record: AIGenerateRecordItem, detail: AIGenerateRecordDetail): string => {
-    let content = `【来源标题】${record.source_title}\n`
-    content += `【来源】${record.source === 'manual' ? '手动输入' : '新闻详情导入'}\n`
-    content += `【风险等级】${record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险'}\n`
-    content += `【创建时间】${record.created_at}\n`
-    content += `【标题数量】${record.title_count}\n\n`
+  function formatSummaryForExport(detail: NormalizedAIGenerateHistoryDetail) {
+    const result = detail.standardResult
+    const lines: string[] = []
 
-    content += `=== 输入文本 ===\n${detail.input_text}\n\n`
-
-    content += `=== 生成参数 ===\n`
-    content += `标题数量：${detail.params.title_count}\n`
-    content += `摘要类型：${detail.params.summary_type}\n`
-    content += `标题风格：${detail.params.title_style}\n`
-    content += `摘要风格：${detail.params.summary_style}\n`
-    content += `摘要长度：${detail.params.summary_length}\n\n`
-
-    content += `=== 生成结果 ===\n\n`
-
-    if (detail.result.candidate_titles && detail.result.candidate_titles.length > 0) {
-      content += `【候选标题】\n`
-      detail.result.candidate_titles.forEach((title, index) => {
-        content += `${index + 1}. ${title}\n`
+    if (result.candidate_titles.length > 0) {
+      lines.push('【候选标题】')
+      result.candidate_titles.forEach((title, index) => {
+        lines.push(`${index + 1}. ${title}`)
       })
-      content += '\n'
+      lines.push('')
     }
 
-    const summaryText = detail.params.summary_length === 'short'
-      ? detail.result.summary_short
-      : detail.result.summary_long
-    if (summaryText) {
-      content += `【摘要】\n${summaryText}\n\n`
+    if (result.summary_short) {
+      lines.push('【短摘要】')
+      lines.push(result.summary_short)
+      lines.push('')
     }
 
-    if (detail.result.consistency) {
-      content += `【一致性分析】\n`
-      content += `风险等级：${detail.result.consistency.risk_level}\n`
-      content += `匹配度：${detail.result.consistency.score}\n`
-      content += `问题：${detail.result.consistency.issues?.join('；') || '无'}\n`
-      content += `建议：${detail.result.consistency.suggestions?.join('；') || '无'}\n\n`
+    if (result.summary_long) {
+      lines.push('【长摘要】')
+      lines.push(result.summary_long)
+      lines.push('')
     }
 
-    if (detail.result.keywords && detail.result.keywords.length > 0) {
-      content += `【关键词】\n${detail.result.keywords.join('、')}\n`
+    if (result.summary_points.length > 0) {
+      lines.push('【摘要要点】')
+      result.summary_points.forEach((point, index) => {
+        lines.push(`${index + 1}. ${point}`)
+      })
+      lines.push('')
     }
 
-    return content
+    if (result.keywords.length > 0) {
+      lines.push('【关键词】')
+      lines.push(result.keywords.join('、'))
+      lines.push('')
+    }
+
+    const elements = result.elements
+    if (elements.who || elements.what || elements.when || elements.where || elements.why || elements.how) {
+      lines.push('【新闻六要素】')
+      lines.push(`人物/主体：${elements.who || '无'}`)
+      lines.push(`事件：${elements.what || '无'}`)
+      lines.push(`时间：${elements.when || '无'}`)
+      lines.push(`地点：${elements.where || '无'}`)
+      lines.push(`原因：${elements.why || '无'}`)
+      lines.push(`方式：${elements.how || '无'}`)
+      lines.push('')
+    }
+
+    if (result.has_consistency) {
+      lines.push('【一致性检测】')
+      lines.push(`评分：${result.consistency.score}`)
+      lines.push(`风险等级：${formatRiskLabel(result.consistency.risk_level)}`)
+      lines.push(`问题提示：${(result.consistency.issues || []).join('；') || '无'}`)
+      lines.push(`修改建议：${(result.consistency.suggestions || []).join('；') || '无'}`)
+      lines.push('')
+    }
+
+    lines.push('【风险与证据】')
+    if (result.risk_details) {
+      lines.push(`风险说明：${result.risk_details}`)
+    }
+    if (typeof result.evidence_coverage === 'number') {
+      lines.push(`证据覆盖率：${(result.evidence_coverage * 100).toFixed(0)}%`)
+    }
+
+    lines.push('')
+    lines.push('【来源信息】')
+    lines.push(`生成来源：${getAIGenerateSourceLabel(result.generation_source, result.generation_source)}`)
+    const modelText = formatProviderModel(result.provider, result.model)
+    if (modelText) {
+      lines.push(`模型信息：${modelText}`)
+    }
+    if (result.fallback_reason) {
+      lines.push(`回退原因：${result.fallback_reason}`)
+    }
+
+    return lines.filter(line => line !== undefined && line !== null).join('\n').trim()
   }
 
   const openExportDialog = async (record: AIGenerateRecordItem) => {
-    try {
-      const detail = await loadRecordDetail(record.id)
-      if (!detail) return
-      exportingRecord.value = record
-      exportingDetail.value = detail
-      selectedExportFormat.value = ''
-      showExportDialog.value = true
-    } catch (error) {
-      ElMessage.error('获取记录详情失败')
-    }
+    const detail = await loadRecordDetail(record.id)
+    if (!detail) return
+    exportingRecord.value = normalizeAIGenerateHistoryRecord(record)
+    exportingDetail.value = detail
+    selectedExportFormat.value = ''
+    showExportDialog.value = true
   }
 
   const confirmExport = async () => {
@@ -148,222 +184,95 @@ export function useAIGenerateHistory() {
       return
     }
 
-    const content = generateExportContent(record, detail)
-    const fileName = `ai-record-${record.id}-${new Date().toISOString().split('T')[0]}`
-    const format = selectedExportFormat.value
+    const fileName = `ai-record-${record.id}-${new Date().toISOString().slice(0, 10)}`
 
     try {
-      if (format === 'txt') {
+      if (selectedExportFormat.value === 'txt') {
+        const content = [
+          'AI 标题摘要生成记录',
+          '',
+          `生成时间：${record.created_at || '无'}`,
+          `生成来源：${getAIGenerateSourceLabel(detail.standardResult.generation_source, detail.standardResult.generation_source)}`,
+          `模型信息：${formatProviderModel(detail.standardResult.provider, detail.standardResult.model) || '无'}`,
+          detail.standardResult.fallback_reason ? `回退原因：${detail.standardResult.fallback_reason}` : '',
+          '',
+          '【输入内容】',
+          detail.input_text || '无',
+          '',
+          '【生成参数】',
+          `标题数量：${detail.params?.title_count ?? '无'}`,
+          `摘要类型：${detail.params?.summary_type === 'extract' ? '抽取式' : detail.params?.summary_type === 'generate' ? '生成式' : '无'}`,
+          `标题风格：${detail.params?.title_style || '无'}`,
+          `摘要风格：${detail.params?.summary_style || '无'}`,
+          `摘要长度：${detail.params?.summary_length || '无'}`,
+          '',
+          formatSummaryForExport(detail),
+        ].filter(Boolean).join('\n')
+
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
         const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${fileName}.txt`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `${fileName}.txt`
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
         URL.revokeObjectURL(url)
-      } else if (format === 'docx') {
-        const docChildren: Paragraph[] = [
-          new Paragraph({
-            text: record.source_title,
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `来源：${record.source === 'manual' ? '手动输入' : '新闻详情导入'}  ` }),
-              new TextRun({ text: `风险等级：${record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险'}  ` }),
-              new TextRun({ text: `创建时间：${record.created_at}` }),
-            ],
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            text: '输入文本',
-            heading: HeadingLevel.HEADING_2,
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: detail.input_text,
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            text: '生成参数',
-            heading: HeadingLevel.HEADING_2,
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: `标题数量：${detail.params.title_count} | 摘要类型：${detail.params.summary_type} | 标题风格：${detail.params.title_style}`,
-            spacing: { after: 50 },
-          }),
-          new Paragraph({
-            text: `摘要风格：${detail.params.summary_style} | 摘要长度：${detail.params.summary_length}`,
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            text: '生成结果',
-            heading: HeadingLevel.HEADING_2,
-            spacing: { after: 100 },
-          }),
-        ]
-
-        if (detail.result.candidate_titles && detail.result.candidate_titles.length > 0) {
-          docChildren.push(
-            new Paragraph({
-              text: '候选标题',
-              heading: HeadingLevel.HEADING_3,
-              spacing: { after: 50 },
-            })
-          )
-          detail.result.candidate_titles.forEach((title, index) => {
-            docChildren.push(
-              new Paragraph({
-                text: `${index + 1}. ${title}`,
-                spacing: { after: 50 },
-              })
-            )
-          })
-        }
-
-        const docxSummary = detail.params.summary_length === 'short'
-          ? detail.result.summary_short
-          : detail.result.summary_long
-        if (docxSummary) {
-          docChildren.push(
-            new Paragraph({
-              text: '摘要',
-              heading: HeadingLevel.HEADING_3,
-              spacing: { after: 50 },
-            }),
-            new Paragraph({
-              text: docxSummary,
-              spacing: { after: 200 },
-            })
-          )
-        }
-
-        if (detail.result.consistency) {
-          docChildren.push(
-            new Paragraph({
-              text: '一致性分析',
-              heading: HeadingLevel.HEADING_3,
-              spacing: { after: 50 },
-            }),
-            new Paragraph({
-              text: `风险等级：${detail.result.consistency.risk_level} | 匹配度：${detail.result.consistency.score}`,
-              spacing: { after: 50 },
-            }),
-            new Paragraph({
-              text: `问题：${detail.result.consistency.issues?.join('；') || '无'}`,
-              spacing: { after: 50 },
-            }),
-            new Paragraph({
-              text: `建议：${detail.result.consistency.suggestions?.join('；') || '无'}`,
-              spacing: { after: 200 },
-            })
-          )
-        }
-
-        if (detail.result.keywords && detail.result.keywords.length > 0) {
-          docChildren.push(
-            new Paragraph({
-              text: '关键词',
-              heading: HeadingLevel.HEADING_3,
-              spacing: { after: 50 },
-            }),
-            new Paragraph({
-              text: detail.result.keywords.join('、'),
-            })
-          )
-        }
-
-        const doc = new DocxDocument({
-          creator: 'LLM News System',
-          title: record.source_title,
-          sections: [
-            {
-              properties: {},
-              children: docChildren,
-            },
-          ],
-        })
-
-        const blob = await Packer.toBlob(doc)
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${fileName}.docx`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      } else if (format === 'pdf') {
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4',
-        })
-
-        const fontSize = 10
-        const lineHeight = 14
+      } else if (selectedExportFormat.value === 'docx') {
+        await exportRecordToWord(detail)
+      } else if (selectedExportFormat.value === 'pdf') {
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
         const margin = 20
+        const lineHeight = 7
         const maxWidth = pdf.internal.pageSize.getWidth() - margin * 2
+        const pageHeight = pdf.internal.pageSize.getHeight()
         let y = margin
 
-        pdf.setFontSize(16)
-        pdf.setTextColor(0, 0, 0)
-        pdf.text(record.source_title, margin, y)
-        y += 20
-
-        pdf.setFontSize(10)
-        pdf.setTextColor(100, 100, 100)
-        pdf.text(`来源：${record.source === 'manual' ? '手动输入' : '新闻详情导入'} | 风险等级：${record.risk_level === 'low' ? '低风险' : record.risk_level === 'medium' ? '中风险' : '高风险'} | 创建时间：${record.created_at}`, margin, y)
-        y += 15
-
-        const addSection = (title: string, text: string) => {
-          pdf.setFontSize(12)
-          pdf.setTextColor(0, 0, 0)
-          pdf.text(title, margin, y)
-          y += 10
-
-          pdf.setFontSize(fontSize)
-          pdf.setTextColor(50, 50, 50)
-          const lines = pdf.splitTextToSize(text, maxWidth)
-          lines.forEach((line: string) => {
-            if (y > pdf.internal.pageSize.getHeight() - margin) {
+        const writeLine = (text: string, size = 10, color: [number, number, number] = [0, 0, 0]) => {
+          pdf.setFontSize(size)
+          pdf.setTextColor(color[0], color[1], color[2])
+          const lines = pdf.splitTextToSize(text, maxWidth) as string[]
+          for (const line of lines) {
+            if (y > pageHeight - margin) {
               pdf.addPage()
               y = margin
             }
             pdf.text(line, margin, y)
             y += lineHeight
-          })
-          y += 10
+          }
         }
 
-        addSection('输入文本', detail.input_text)
-
-        const paramsText = `标题数量：${detail.params.title_count}\n摘要类型：${detail.params.summary_type}\n标题风格：${detail.params.title_style}\n摘要风格：${detail.params.summary_style}\n摘要长度：${detail.params.summary_length}`
-        addSection('生成参数', paramsText)
-
-        if (detail.result.candidate_titles && detail.result.candidate_titles.length > 0) {
-          addSection('候选标题', detail.result.candidate_titles.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n'))
+        writeLine('AI 标题摘要生成记录', 16)
+        y += 4
+        writeLine(`生成时间：${record.created_at || '无'} | 生成来源：${getAIGenerateSourceLabel(detail.standardResult.generation_source, detail.standardResult.generation_source)}`, 9, [100, 100, 100])
+        const modelText = formatProviderModel(detail.standardResult.provider, detail.standardResult.model)
+        if (modelText) {
+          y += 2
+          writeLine(`模型信息：${modelText}`, 9, [100, 100, 100])
         }
-
-        const pdfSummary = detail.params.summary_length === 'short'
-          ? detail.result.summary_short
-          : detail.result.summary_long
-        if (pdfSummary) {
-          addSection('摘要', pdfSummary)
+        if (detail.standardResult.fallback_reason) {
+          y += 2
+          writeLine(`回退原因：${detail.standardResult.fallback_reason}`, 9, [100, 100, 100])
         }
+        y += 4
 
-        if (detail.result.consistency) {
-          const consistencyText = `风险等级：${detail.result.consistency.risk_level}\n匹配度：${detail.result.consistency.score}\n问题：${detail.result.consistency.issues?.join('；') || '无'}\n建议：${detail.result.consistency.suggestions?.join('；') || '无'}`
-          addSection('一致性分析', consistencyText)
-        }
+        const sections: Array<[string, string]> = [
+          ['输入内容', detail.input_text || '无'],
+          ['生成参数', [
+            `标题数量：${detail.params?.title_count ?? '无'}`,
+            `摘要类型：${detail.params?.summary_type === 'extract' ? '抽取式' : detail.params?.summary_type === 'generate' ? '生成式' : '无'}`,
+            `标题风格：${detail.params?.title_style || '无'}`,
+            `摘要风格：${detail.params?.summary_style || '无'}`,
+            `摘要长度：${detail.params?.summary_length || '无'}`,
+          ].join('\n')],
+          ['生成结果', formatSummaryForExport(detail)],
+        ]
 
-        if (detail.result.keywords && detail.result.keywords.length > 0) {
-          addSection('关键词', detail.result.keywords.join('、'))
+        for (const [title, content] of sections) {
+          writeLine(title, 12)
+          y += 1
+          writeLine(content || '无', 10, [60, 60, 60])
+          y += 3
         }
 
         pdf.save(`${fileName}.pdf`)
@@ -372,18 +281,16 @@ export function useAIGenerateHistory() {
       ElMessage.success('导出成功')
       showExportDialog.value = false
       selectedExportFormat.value = ''
-    } catch (error) {
+    } catch {
       ElMessage.error('导出失败')
     }
   }
 
-  // ========== 工具函数 ==========
-
   const getRiskLevelType = (level: string): 'success' | 'warning' | 'danger' | 'info' => {
     const map: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
-      'low': 'success',
-      'medium': 'warning',
-      'high': 'danger',
+      low: 'success',
+      medium: 'warning',
+      high: 'danger',
     }
     return map[level] || 'info'
   }
@@ -396,32 +303,25 @@ export function useAIGenerateHistory() {
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMins < 60) {
-      return `${diffMins} 分钟前`
-    } else if (diffHours < 24) {
-      return `${diffHours} 小时前`
-    } else if (diffDays < 7) {
-      return `${diffDays} 天前`
-    } else {
-      return date.toLocaleDateString('zh-CN')
-    }
+    if (diffMins < 60) return `${diffMins} 分钟前`
+    if (diffHours < 24) return `${diffHours} 小时前`
+    if (diffDays < 7) return `${diffDays} 天前`
+    return date.toLocaleDateString('zh-CN')
   }
 
   return {
-    // 状态
     historyRecords,
     loading,
     showExportDialog,
     selectedExportFormat,
     exportingRecord,
     exportingDetail,
-    // 方法
     loadHistory,
     loadRecordDetail,
     deleteRecord,
     openExportDialog,
     confirmExport,
-    generateExportContent,
+    generateExportContent: formatSummaryForExport,
     getRiskLevelType,
     formatDate,
   }

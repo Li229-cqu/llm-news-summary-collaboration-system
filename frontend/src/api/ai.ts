@@ -60,7 +60,12 @@ export interface AIGenerateResponse {
   keywords: string[]
   elements: NewsElement
   consistency: ConsistencyCheck
-  source?: 'mock' | 'llm' | 'demo'
+  has_consistency?: boolean
+  source?: 'mock' | 'llm' | 'fallback' | 'demo'
+  generation_source?: 'llm' | 'mock' | 'fallback'
+  provider?: string
+  model?: string
+  fallback_reason?: string
   evidence_chain?: EvidenceChain
   evidence_chain_short?: EvidenceChain
   evidence_chain_long?: EvidenceChain
@@ -112,7 +117,7 @@ export interface AIGenerateRecordItem {
   source_title: string
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
-  ai_source?: 'mock' | 'llm' | 'demo'
+  ai_source?: 'mock' | 'llm' | 'fallback' | 'demo'
   created_at: string
   candidate_titles?: string[]
   summary_short?: string

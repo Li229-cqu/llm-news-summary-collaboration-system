@@ -8,12 +8,12 @@ interface Props {
 defineProps<Props>()
 
 const elementLabels = {
-  who: '谁(Who)',
-  what: '什么(What)',
-  when: '何时(When)',
-  where: '何地(Where)',
-  why: '为什么(Why)',
-  how: '怎样(How)',
+  who: '人物/主体',
+  what: '事件',
+  when: '时间',
+  where: '地点',
+  why: '原因',
+  how: '方式',
 }
 </script>
 

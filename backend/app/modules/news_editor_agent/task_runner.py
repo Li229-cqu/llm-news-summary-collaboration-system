@@ -21,7 +21,11 @@ import random
 import time
 from typing import Any, Dict, List, Optional
 
-from app.modules.news_editor_agent.mock_api import MOCK_STEP_OUTPUTS, STEP_META_MOCK
+from app.modules.news_editor_agent.mock_api import (
+    MOCK_STEP_OUTPUTS,
+    STEP_META_MOCK,
+    _build_mock_generate_output,
+)
 from app.modules.news_editor_agent.service import AgentService
 from app.modules.news_editor_agent.sse import SSEEvent, sse_manager
 
@@ -44,7 +48,7 @@ class MockTaskRunner:
     STEP_DELAY_MAX_MS = 1200
 
     @staticmethod
-    async def run(task_id: int, input_text: str = "") -> None:
+    async def run(task_id: int, input_text: str = "", pipeline_params: Optional[Dict[str, Any]] = None) -> None:
         """执行 mock 8 步流水线。
 
         Args:
@@ -99,6 +103,11 @@ class MockTaskRunner:
 
             # ── 获取 mock 输出 ──────────────────────────────
             mock_output = MOCK_STEP_OUTPUTS.get(step_name, {"result": f"{step_label} 完成"})
+            if step_name == "generate_title_summary":
+                mock_output = _build_mock_generate_output(
+                    input_text=input_text,
+                    pipeline_params=pipeline_params or {},
+                )
 
             # ── 写入步骤日志 ─────────────────────────────────
             step_start = _now_text()
@@ -200,7 +209,7 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def schedule_mock_task(task_id: int, input_text: str = "") -> None:
+def schedule_mock_task(task_id: int, input_text: str = "", pipeline_params: Optional[Dict[str, Any]] = None) -> None:
     """使用 asyncio.create_task 后台启动 MockTaskRunner。
 
     与 service.py 的 schedule_agent_task() 结构一致，
@@ -209,7 +218,7 @@ def schedule_mock_task(task_id: int, input_text: str = "") -> None:
 
     async def _runner():
         try:
-            await MockTaskRunner.run(task_id, input_text)
+            await MockTaskRunner.run(task_id, input_text, pipeline_params=pipeline_params)
         except Exception as exc:
             logger.exception(
                 "❌ [MockTaskRunner] 后台任务 %s 崩溃: %s", task_id, exc

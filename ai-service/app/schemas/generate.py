@@ -40,7 +40,11 @@ class GenerateResponse(BaseModel):
     keywords: list[str]
     elements: NewsElement
     consistency: ConsistencyCheck
-    source: Literal["mock", "llm"] = "mock"
+    source: Literal["mock", "llm", "fallback", "demo"] = "mock"
+    generation_source: Optional[Literal["mock", "llm", "fallback"]] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    fallback_reason: Optional[str] = None
     evidence_chain: Optional[EvidenceChain] = None
     evidence_chain_short: Optional[EvidenceChain] = None
     evidence_chain_long: Optional[EvidenceChain] = None

@@ -69,7 +69,7 @@ def _normalize_risk_level(value: Any) -> str:
 
 
 def _normalize_ai_source(value: Any) -> str:
-    return str(value or "mock") if str(value or "mock") in {"mock", "llm", "demo"} else "mock"
+    return str(value or "mock") if str(value or "mock") in {"mock", "llm", "fallback", "demo"} else "mock"
 
 
 def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
@@ -128,6 +128,7 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
         elements=NewsElement(**elements_raw),
         consistency=ConsistencyCheck(**consistency_raw),
         source=_normalize_ai_source(row.get("ai_source")),
+        generation_source=_normalize_ai_source(row.get("ai_source")),
         evidence_chain=EvidenceChain(**evidence_chain_raw) if evidence_chain_raw else None,
         risk_level=_normalize_risk_level(row.get("risk_level") or consistency_raw.get("risk_level", "low")),
         risk_details=row.get("risk_details") or "",
