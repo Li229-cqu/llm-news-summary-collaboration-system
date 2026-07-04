@@ -154,9 +154,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  aiDraft.resetDraft()
-  clearGenerationState()
-  sessionStorage.removeItem('ai_draft_from_news')
+  // 离开页面时保留草稿和生成状态，用户切回来可以继续
+  // 用户可主动点"清空"或"重置"按钮手动清空
 })
 
 watch(() => [route.query.source, route.query.newsId], () => {

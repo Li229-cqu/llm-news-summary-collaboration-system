@@ -122,6 +122,14 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior(to, _from, savedPosition) {
+    // 浏览器后退/前进：恢复到离开时的位置
+    if (savedPosition) {
+      return savedPosition
+    }
+    // 新页面导航：回到顶部
+    return { top: 0 }
+  },
 })
 
 router.beforeEach((to) => {

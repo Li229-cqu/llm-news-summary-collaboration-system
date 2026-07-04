@@ -308,6 +308,38 @@ function saveFeedState(): void {
   })
 }
 
+/** 延迟恢复滚动位置：等待页面内容渲染到足够高度后再滚动 */
+function restoreScrollPosition(targetY: number): void {
+  if (!targetY || targetY <= 0) return
+
+  const maxAttempts = 8
+  let attempts = 0
+
+  const tryRestore = () => {
+    attempts += 1
+    const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)
+    const canScroll = scrollHeight - window.innerHeight >= targetY - 20
+
+    if (canScroll || attempts >= maxAttempts) {
+      window.scrollTo({ top: targetY, behavior: 'auto' })
+      // 二次确认，防止图片加载把位置顶回去
+      setTimeout(() => {
+        if (Math.abs(window.scrollY - targetY) > 80) {
+          window.scrollTo({ top: targetY, behavior: 'auto' })
+        }
+      }, 200)
+      return
+    }
+    setTimeout(tryRestore, 80)
+  }
+
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      setTimeout(tryRestore, 80)
+    })
+  })
+}
+
 /** 尝试从 Pinia 缓存恢复首页新闻流状态，成功返回 true */
 function restoreFeedState(): boolean {
   const cache = feedStore.getCache(feedCacheKey.value)
@@ -320,13 +352,7 @@ function restoreFeedState(): boolean {
   isRecommendationFeed.value = cache.isRecommendationFeed
   recommendationHasMore.value = cache.recommendationHasMore
 
-  // DOM 渲染完成后恢复滚动位置
-  nextTick(() => {
-    requestAnimationFrame(() => {
-      window.scrollTo(0, cache.scrollTop)
-    })
-  })
-
+  restoreScrollPosition(cache.scrollTop)
   return true
 }
 

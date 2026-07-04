@@ -231,10 +231,12 @@ async function loadComments() {
 }
 
 function goHome() {
-  if (route.query.from === 'timeline') {
+  // 优先浏览器后退，保留上一页的 URL、query 和滚动位置
+  if (window.history.length > 1) {
     router.back()
     return
   }
+  // 直接打开新闻详情 URL（无历史记录），退回到首页
   router.push('/home')
 }
 

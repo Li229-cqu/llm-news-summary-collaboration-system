@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -2250,8 +2252,20 @@ def unbind_admin_topic_news(topic_id: int, request: AdminTopicBindNewsRequest) -
     affected = execute_update(f'UPDATE news SET topic_id = NULL, updated_at = NOW() WHERE topic_id = %s AND id IN ({placeholders})', [topic_id] + news_ids)
     return AdminTopicActionResult(topic_id=topic_id, action='unbind_news', affected_count=affected, message='Success').model_dump()
 
+# ── Dashboard 5 分钟服务端缓存 ──
+_dashboard_cache: dict[str, Any] | None = None
+_dashboard_cache_expires: float = 0.0
+_DASHBOARD_CACHE_TTL = 300  # 秒
+
+
 def get_dashboard() -> AdminDashboard:
-    """获取后台概览数据，数据库优先。"""
+    """获取后台概览数据（5 分钟缓存）。"""
+    global _dashboard_cache, _dashboard_cache_expires
+
+    now = time.time()
+    if _dashboard_cache is not None and now < _dashboard_cache_expires:
+        return copy.deepcopy(_dashboard_cache)
+
     try:
         user_count = _safe_count('SELECT COUNT(*) AS total FROM user')
         news_count = _safe_count('SELECT COUNT(*) AS total FROM news WHERE status = 1')
@@ -2293,7 +2307,7 @@ def get_dashboard() -> AdminDashboard:
             row = execute_one("SELECT COUNT(*) AS total FROM event_timeline WHERE generate_status != 'generated'")
             timeline_pending = int((row or {}).get('total') or 0)
 
-        return AdminDashboard(
+        result = AdminDashboard(
             user_count=user_count,
             news_count=news_count,
             post_count=post_count,
@@ -2311,6 +2325,9 @@ def get_dashboard() -> AdminDashboard:
             timeline_pending_count=timeline_pending,
             pending_total=pending_total,
         )
+        _dashboard_cache = copy.deepcopy(result)
+        _dashboard_cache_expires = time.time() + _DASHBOARD_CACHE_TTL
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.exception('admin dashboard query failed')
         raise AppException(code=500, message='后台首页统计查询失败，请检查数据库连接和表结构') from exc
