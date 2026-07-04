@@ -642,10 +642,66 @@ def get_hot_news(limit: int = 10, category_id: Optional[int] = None) -> list[dic
     return rows or []
 
 
-def search_news(keyword: Optional[str], page: int = 1, page_size: int = 10) -> dict[str, Any]:
+def search_news(
+    keyword: Optional[str],
+    page: int = 1,
+    page_size: int = 10,
+    title_only: bool = False,
+) -> dict[str, Any]:
     """搜索新闻，只读取数据库。"""
     if not keyword or not keyword.strip():
         return paginate([], page=page, page_size=page_size)
+    if title_only:
+        normalized_page = max(page, 1)
+        normalized_page_size = max(page_size, 1)
+        where_sql = "n.status = 1 AND n.title LIKE %s"
+        like_value = f"%{keyword.strip()}%"
+        total_row = execute_one(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM news n
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            WHERE {where_sql}
+            """,
+            [like_value],
+        )
+        rows = execute_query(
+            f"""
+            SELECT
+                n.id,
+                n.title,
+                n.summary,
+                n.content,
+                n.cover_image,
+                n.category_id,
+                COALESCE(nc.name, '未分类') AS category_name,
+                n.topic_id,
+                COALESCE(nt.topic_name, '') AS topic_name,
+                n.source,
+                n.editor,
+                n.publish_time,
+                n.view_count,
+                n.like_count,
+                n.comment_count,
+                n.favorite_count,
+                n.status,
+                n.tags,
+                {_news_source_url_select()}
+            FROM news n
+            LEFT JOIN news_category nc ON nc.id = n.category_id
+            LEFT JOIN news_topic nt ON nt.id = n.topic_id
+            WHERE {where_sql}
+            ORDER BY n.publish_time DESC, n.id DESC
+            LIMIT %s OFFSET %s
+            """,
+            [like_value, normalized_page_size, (normalized_page - 1) * normalized_page_size],
+        )
+        return {
+            "list": [_format_news_row(row) for row in rows],
+            "total": int((total_row or {}).get("total") or 0),
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+        }
     return _db_news_list(keyword=keyword, page=page, page_size=page_size)
 
 

@@ -85,6 +85,7 @@ export interface HotNewsParams {
 
 export interface SearchNewsParams {
   keyword: string
+  title_only?: boolean
   page?: number
   page_size?: number
 }

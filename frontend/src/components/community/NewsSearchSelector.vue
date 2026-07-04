@@ -79,7 +79,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Link, Search } from '@element-plus/icons-vue'
-import { searchNews, getNewsList, type NewsItem } from '@/api/news'
+import { searchNews, type NewsItem } from '@/api/news'
 
 const emit = defineEmits<{
   (e: 'select', news: NewsItem): void
@@ -102,16 +102,8 @@ async function doSearch() {
   loading.value = true
   hasSearched.value = true
   try {
-    // 同时走关键词搜索 + 按分类名搜索，合并去重
-    const [keywordRes, categoryRes] = await Promise.all([
-      searchNews({ keyword: kw, page: 1, page_size: 10 }).catch(() => ({ list: [] as NewsItem[] })),
-      getNewsList({ category: kw, page: 1, page_size: 10 }).catch(() => ({ list: [] as NewsItem[] })),
-    ])
-    const map = new Map<number, NewsItem>()
-    for (const item of [...(keywordRes.list || []), ...(categoryRes.list || [])]) {
-      if (!map.has(item.id)) map.set(item.id, item)
-    }
-    results.value = Array.from(map.values())
+    const keywordRes = await searchNews({ keyword: kw, title_only: true, page: 1, page_size: 10 })
+    results.value = keywordRes.list || []
   } catch {
     results.value = []
     ElMessage.error('新闻搜索失败，请稍后重试')

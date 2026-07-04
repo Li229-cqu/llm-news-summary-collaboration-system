@@ -70,10 +70,13 @@ async def hot_news(
 @router.get("/search")
 async def news_search(
     keyword: str = Query(...),
+    title_only: bool = Query(default=False, description="仅按标题搜索"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1),
 ) -> ApiResponse[Any]:
-    return success_response(search_news(keyword=keyword, page=page, page_size=page_size))
+    return success_response(
+        search_news(keyword=keyword, page=page, page_size=page_size, title_only=title_only)
+    )
 
 @router.get("/subscribed")
 async def subscribed_news(
