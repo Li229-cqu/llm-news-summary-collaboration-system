@@ -396,12 +396,20 @@ export function normalizeAIGenerateHistoryDetail(
 }
 
 export function formatProviderModel(provider?: string, model?: string): string {
-  const p = provider?.trim()
-  const m = model?.trim()
+  const p = formatProviderLabel(provider)
+  const m = formatProviderLabel(model)
   if (p && m) return `${p} / ${m}`
   if (p) return p
   if (m) return m
   return ''
+}
+
+export function formatProviderLabel(provider?: string): string {
+  const value = provider?.trim()
+  if (!value) return ''
+  const lower = value.toLowerCase()
+  if (lower === 'mock' || lower === 'local') return 'NLP'
+  return value.replace(/mock/gi, 'NLP')
 }
 
 export function getAIGenerateSourceLabel(source?: string, generationSource?: string): string {

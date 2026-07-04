@@ -11,6 +11,7 @@
 
 import { computed, ref, watch, onMounted } from 'vue'
 import { getTaskDAG, type DAGNode } from '@/api/agentAnalysis'
+import { formatProviderLabel } from '@/utils/normalizeAIGenerateResult'
 
 export interface DAGStep {
   name: string
@@ -274,7 +275,7 @@ function getStep(name: string): DAGStep | undefined {
             font-size="10"
           >
             {{ step.latencyMs }}ms
-            <template v-if="step.provider"> · {{ step.provider }}</template>
+            <template v-if="step.provider"> · {{ formatProviderLabel(step.provider) || step.provider }}</template>
           </text>
         </g>
       </svg>

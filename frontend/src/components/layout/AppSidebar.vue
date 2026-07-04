@@ -34,7 +34,6 @@ const selectedSubscriptionIds = ref<number[]>([])
 const activeCategory = computed(() => String(route.query.category_id ?? ''))
 const isSubscriptionActive = computed(() => route.query.tab === 'subscription')
 const isTimelineActive = computed(() => route.path.startsWith('/timeline'))
-
 function normalizeCategory(category: NewsCategory): SidebarCategory {
   if (category.code === 'recommend') {
     return {
@@ -110,6 +109,10 @@ function selectSubscriptionTab() {
   })
 }
 
+function goToTimeline() {
+  router.push('/timeline')
+}
+
 function ensureLogin() {
   if (userStore.isLoggedIn) {
     return true
@@ -148,10 +151,6 @@ async function handleSubscriptionClick() {
   if (subscriptionExpanded.value && !subscriptionCategories.value.length) {
     await loadSubscriptionOptions()
   }
-}
-
-function goToTimeline() {
-  router.push('/timeline')
 }
 
 async function saveSubscriptions() {
@@ -264,6 +263,7 @@ onMounted(loadCategories)
         <span class="app-sidebar__timeline-arrow">→</span>
       </button>
     </div>
+
   </aside>
 </template>
 
@@ -719,7 +719,6 @@ onMounted(loadCategories)
   color: var(--color-primary);
 }
 
-/* 暗色模式 */
 :root.dark .app-sidebar__timeline-trigger:hover {
   background: color-mix(in srgb, var(--color-primary) 8%, rgba(255,255,255,.04));
 }
@@ -735,4 +734,5 @@ onMounted(loadCategories)
 :root.dark .app-sidebar__timeline-desc {
   color: var(--color-text-muted);
 }
+
 </style>

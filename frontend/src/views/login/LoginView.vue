@@ -226,13 +226,6 @@ function goToTab(tab: string) {
             <span class="link-btn" @click="goToTab('register')">立即注册</span>
           </div>
 
-          <el-alert class="login-account-hint" type="info" :closable="false" title="测试账号">
-            <template #default>
-              <div>普通用户：user / 123456</div>
-              <div>审核编辑：editor / 123456</div>
-              <div>管理员：admin / 123456</div>
-            </template>
-          </el-alert>
         </el-tab-pane>
 
         <el-tab-pane label="注册" name="register">
@@ -415,11 +408,6 @@ p {
   margin-top: 20px;
   color: var(--color-text-secondary);
   font-size: 14px;
-}
-
-.login-account-hint {
-  margin-top: 20px;
-  line-height: 1.8;
 }
 
 .reset-tip {

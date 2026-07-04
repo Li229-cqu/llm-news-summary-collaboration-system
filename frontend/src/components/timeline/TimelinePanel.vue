@@ -8,7 +8,7 @@
         </div>
 
         <el-tag type="primary" effect="plain">
-          {{ timelineData.source === 'cache' ? '缓存时间线' : timelineData.source === 'ai-service' ? 'AI 生成' : '本地 mock' }}
+          {{ timelineData.source === 'cache' ? '缓存时间线' : timelineData.source === 'ai-service' ? 'AI 生成' : '本地 NLP' }}
         </el-tag>
       </div>
 

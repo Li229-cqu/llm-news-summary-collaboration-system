@@ -17,6 +17,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { AIGenerateResponse } from '@/api/ai'
 import { useNewsEditorAgentStore, AGENT_STEPS } from '@/stores/newsEditorAgent'
+import { formatProviderLabel } from '@/utils/normalizeAIGenerateResult'
 import Step7SummaryPanel from './Step7SummaryPanel.vue'
 
 const props = defineProps<{
@@ -210,7 +211,8 @@ function formatMs(ms: number): string {
           <span class="step-result-card__meta">
             <span class="meta-time">{{ formatMs(step.latencyMs) }}</span>
             <span v-if="step.provider" class="meta-provider">
-              {{ step.provider === 'local' ? '💻' : '🤖' }} {{ step.provider }}
+              {{ formatProviderLabel(step.provider) === 'NLP' ? '🧠' : step.provider === 'local' ? '💻' : '🤖' }}
+              {{ formatProviderLabel(step.provider) || step.provider }}
               <template v-if="step.model">/ {{ step.model }}</template>
             </span>
             <span v-if="step.tokens > 0" class="meta-tokens">{{ step.tokens }} tokens</span>

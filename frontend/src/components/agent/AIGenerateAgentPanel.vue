@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { AIGenerateResponse } from '@/api/ai'
 import { useNewsEditorAgentStore } from '@/stores/newsEditorAgent'
+import { formatProviderLabel } from '@/utils/normalizeAIGenerateResult'
 import Step7SummaryPanel from './Step7SummaryPanel.vue'
 
 const props = defineProps<{
@@ -306,7 +307,7 @@ const showLongSummary = computed(() => {
                   </div>
                   <div class="metric-box">
                     <span class="metric-box__label">来源</span>
-                    <strong>{{ keywordStep.provider || '本地规则' }}</strong>
+                    <strong>{{ formatProviderLabel(keywordStep.provider) || 'NLP' }}</strong>
                   </div>
                   <div class="metric-box">
                     <span class="metric-box__label">耗时</span>

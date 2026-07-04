@@ -27,6 +27,7 @@ import {
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const router = useRouter()
+const HIDDEN_TOPIC_NAMES = new Set(['低空经济与无人机产业', '新能源汽车与智能交通'])
 
 // ── 自动生成事件脉络 ────────────────────────────────────────────
 const autoClusterForm = reactive({
@@ -348,13 +349,21 @@ const jsonText = ref('')
 const summaryCards = computed(() => {
   const s = timelineData.value?.summary
   return [
-    { key: 'topic_count', label: '全部主题', value: s?.topic_count ?? '--' },
+    { key: 'topic_count', label: '全部主题', value: visibleTimelineItems.value.length > 0 ? visibleTimelineItems.value.length : (s?.topic_count ?? '--') },
     { key: 'generated', label: '已生成 Timeline', value: s?.generated_count ?? '--' },
     { key: 'not_generated', label: '未生成 Timeline', value: s?.not_generated_count ?? '--' },
     { key: 'failed', label: '生成失败', value: s?.failed_count ?? '--' },
     { key: 'insufficient', label: '相关新闻不足', value: s?.insufficient_news_count ?? '--' },
     { key: 'cache_error', label: '缓存异常', value: s?.cache_error_count ?? '--' },
   ]
+})
+
+function isHiddenTopicName(topicName: string): boolean {
+  return HIDDEN_TOPIC_NAMES.has(topicName.trim())
+}
+
+const visibleTimelineItems = computed(() => {
+  return (timelineData.value?.items || []).filter(item => !isHiddenTopicName(item.topic_name))
 })
 
 const statusTagType = (status: string) => {
@@ -831,7 +840,7 @@ onMounted(async () => {
     </div>
 
     <!-- table -->
-    <el-table v-loading="loading" :data="timelineData?.items || []" border>
+    <el-table v-loading="loading" :data="visibleTimelineItems" border>
       <el-table-column prop="topic_name" label="事件主题" min-width="200" show-overflow-tooltip />
       <el-table-column label="关键词" min-width="200">
         <template #default="scope">
@@ -867,7 +876,7 @@ onMounted(async () => {
     <el-pagination
       class="pager"
       layout="total, prev, pager, next, sizes"
-      :total="timelineData?.total || 0"
+      :total="visibleTimelineItems.length"
       v-model:current-page="query.page"
       v-model:page-size="query.page_size"
       @current-change="loadList"

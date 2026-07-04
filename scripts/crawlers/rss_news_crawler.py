@@ -154,6 +154,20 @@ def parse_publish_time(rss_entry: Any, page_time: str = "") -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def parse_datetime_safe(time_str: str) -> datetime | None:
+    if not time_str:
+        return None
+    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+        try:
+            return datetime.strptime(time_str.strip(), fmt)
+        except ValueError:
+            continue
+    try:
+        return date_parser.parse(time_str)
+    except Exception:
+        return None
+
+
 def fetch_feed(url: str) -> feedparser.FeedParserDict:
     r = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; gmw-crawler/1.0)"})
     with urlopen(r, timeout=15) as resp: return feedparser.parse(resp.read())
@@ -184,7 +198,7 @@ def is_image_used_by_other(conn: pymysql.connections.Connection, img_url: str, s
     return False
 
 
-def crawl_source(conn, source, max_items, dry_run, fetch_content, update_existing):
+def crawl_source(conn, source, max_items, dry_run, fetch_content, update_existing, since_days=0):
     start = datetime.now()
     logger.info("抓取: %s", source["name"])
     stats = {"parsed": 0, "inserted": 0, "updated": 0, "skipped": 0, "failed": 0}
@@ -205,6 +219,11 @@ def crawl_source(conn, source, max_items, dry_run, fetch_content, update_existin
                     stats["skipped"] += 1; continue
                 cover = images[0] if images else ""
                 pub_time = parse_publish_time(entry, page_time)
+                if since_days > 0:
+                    pub_dt = parse_datetime_safe(pub_time)
+                    if pub_dt is None or pub_dt < datetime.now() - timedelta(days=since_days):
+                        stats["skipped"] += 1
+                        continue
                 cat_id = cat_map.get(source["category_code"])
                 if not cat_id: stats["failed"] += 1; continue
 
@@ -271,6 +290,7 @@ def print_stats(conn):
 def parse_args(argv):
     p = argparse.ArgumentParser(description="光明网 RSS 新闻爬虫")
     p.add_argument("--limit-per-source", type=int, default=DEFAULT_MAX_ITEMS)
+    p.add_argument("--since-days", type=int, default=0, help="仅保留最近 N 天内的新闻，0 表示不过滤")
     p.add_argument("--dry-run", action="store_true", help="预览不写库")
     p.add_argument("--fetch-content", action="store_true", help="抓取文章详情页")
     p.add_argument("--update-existing", action="store_true", help="更新已有新闻的正文和图片")
@@ -281,11 +301,25 @@ def main(argv=None):
     setup_logging(); load_env()
     args = parse_args(argv or sys.argv[1:])
     conn = pymysql.connect(**get_db_config())
-    logger.info("DB: %s  dry_run=%s limit=%d", os.getenv("DB_NAME","?"), args.dry_run, args.limit_per_source)
+    logger.info(
+        "DB: %s  dry_run=%s limit=%d since_days=%d",
+        os.getenv("DB_NAME","?"),
+        args.dry_run,
+        args.limit_per_source,
+        args.since_days,
+    )
     total = {"parsed": 0, "inserted": 0, "updated": 0, "skipped": 0, "failed": 0}
     try:
         for src in GMW_RSS_SOURCES:
-            st = crawl_source(conn, src, args.limit_per_source, args.dry_run, args.fetch_content, args.update_existing)
+            st = crawl_source(
+                conn,
+                src,
+                args.limit_per_source,
+                args.dry_run,
+                args.fetch_content,
+                args.update_existing,
+                args.since_days,
+            )
             for k in total: total[k] += st[k]
         if not args.dry_run:
             filter_duplicate_images(conn)

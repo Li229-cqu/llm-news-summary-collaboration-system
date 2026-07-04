@@ -308,7 +308,7 @@ const sourceLabel = computed(() => {
   const src = timelineData.value?.source
   if (src === 'ai-service') return 'AI 生成'
   if (src === 'cache') return '缓存数据'
-  if (src === 'mock') return '示例数据'
+  if (src === 'mock') return 'NLP 规则生成'
   return '未知'
 })
 

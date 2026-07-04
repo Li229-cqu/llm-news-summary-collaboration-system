@@ -14,6 +14,7 @@ import { useNewsEditorAgentStore } from '@/stores/newsEditorAgent'
 import AgentDAGView from '@/components/agent/AgentDAGView.vue'
 import AgentReplayView from '@/components/agent/AgentReplayView.vue'
 import AgentExplainPanel from '@/components/agent/AgentExplainPanel.vue'
+import { formatProviderLabel } from '@/utils/normalizeAIGenerateResult'
 
 const store = useNewsEditorAgentStore()
 
@@ -189,8 +190,8 @@ onUnmounted(() => {
                   <span v-if="step.latencyMs > 0" class="step__latency">⏱ {{ formatMs(step.latencyMs) }}</span>
                   <span v-if="step.tokens > 0" class="step__tokens">🔤 {{ step.tokens }} tokens</span>
                   <span v-if="step.provider" class="step__provider">
-                    {{ step.provider === 'local' ? '💻' : step.provider === 'mock' ? '📦' : '🤖' }}
-                    {{ step.provider }}<template v-if="step.model"> / {{ step.model }}</template>
+                    {{ formatProviderLabel(step.provider) === 'NLP' ? '🧠' : step.provider === 'local' ? '💻' : '🤖' }}
+                    {{ formatProviderLabel(step.provider) || step.provider }}<template v-if="step.model"> / {{ step.model }}</template>
                   </span>
                 </div>
                 <div v-if="step.status === 'failed'" class="step__error">{{ step.error || '执行失败' }}</div>

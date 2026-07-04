@@ -20,8 +20,8 @@
               <p class="timeline-hero__kicker">EVENT TIMELINE · 智能事件追踪</p>
               <h1 class="timeline-hero__title">事件脉络</h1>
               <p class="timeline-hero__subtitle">AI 聚合同一话题下的多篇新闻，提炼事件关键进展</p>
-              <div v-if="!loadingTopics && !topicError && topics.length" class="timeline-hero__stats">
-                <span>共 <strong>{{ topics.length }}</strong> 个事件话题</span>
+              <div v-if="!loadingTopics && !topicError && visibleTopics.length" class="timeline-hero__stats">
+                <span>共 <strong>{{ visibleTopics.length }}</strong> 个事件话题</span>
                 <span class="timeline-hero__stats-sep">·</span>
                 <span>可生成脉络 <strong>{{ availableCount }}</strong> 个</span>
               </div>
@@ -46,16 +46,16 @@
         </div>
 
         <!-- 空态 -->
-        <div v-else-if="!topics.length" class="timeline-page__empty">
+        <div v-else-if="!visibleTopics.length" class="timeline-page__empty">
           <el-empty description="暂无事件脉络话题" :image-size="56" />
         </div>
 
         <!-- 来源筛选 -->
-        <div v-if="!loadingTopics && !topicError && topics.length" class="timeline-source-filter">
+        <div v-if="!loadingTopics && !topicError && visibleTopics.length" class="timeline-source-filter">
           <el-radio-group v-model="topicSourceFilter" size="small">
-            <el-radio-button value="all">全部 ({{ topics.length }})</el-radio-button>
-            <el-radio-button value="auto">自动生成 ({{ topics.filter(t=>(t.source_type||'manual')==='auto').length }})</el-radio-button>
-            <el-radio-button value="manual">人工维护 ({{ topics.filter(t=>(t.source_type||'manual')==='manual').length }})</el-radio-button>
+            <el-radio-button value="all">全部 ({{ visibleTopics.length }})</el-radio-button>
+            <el-radio-button value="auto">自动生成 ({{ visibleTopics.filter(t=>(t.source_type||'manual')==='auto').length }})</el-radio-button>
+            <el-radio-button value="manual">人工维护 ({{ visibleTopics.filter(t=>(t.source_type||'manual')==='manual').length }})</el-radio-button>
           </el-radio-group>
         </div>
 
@@ -127,6 +127,7 @@ import { getTimelineTopics, type TimelineTopic } from '@/api/timeline'
 const router = useRouter()
 
 const SCROLL_KEY = 'timeline:list-scroll'
+const HIDDEN_TOPIC_NAMES = new Set(['低空经济与无人机产业', '新能源汽车与智能交通'])
 
 // ── 事件话题 ──
 const topics = ref<TimelineTopic[]>([])
@@ -135,12 +136,18 @@ const topicError = ref('')
 
 const topicSourceFilter = ref<'all' | 'manual' | 'auto'>('all')
 
+function isHiddenTopic(topic: TimelineTopic): boolean {
+  return HIDDEN_TOPIC_NAMES.has(topic.topic_name.trim())
+}
+
+const visibleTopics = computed(() => topics.value.filter(topic => !isHiddenTopic(topic)))
+
 const filteredTopics = computed(() => {
-  if (topicSourceFilter.value === 'all') return topics.value
-  return topics.value.filter((t) => (t.source_type || 'manual') === topicSourceFilter.value)
+  if (topicSourceFilter.value === 'all') return visibleTopics.value
+  return visibleTopics.value.filter((t) => (t.source_type || 'manual') === topicSourceFilter.value)
 })
 
-const availableCount = computed(() => topics.value.filter((t) => t.news_count >= 2).length)
+const availableCount = computed(() => visibleTopics.value.filter((t) => t.news_count >= 2).length)
 
 /** 格式化时间显示 */
 function formatAutoTime(dateStr?: string | null): string {
