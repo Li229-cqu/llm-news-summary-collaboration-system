@@ -45,7 +45,7 @@ const rangeEnd = computed(() => {
 
 // ── Chinese label maps ──
 function riskLevelCn(r: string) {
-  const map: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险', unknown: '未知' }
+  const map: Record<string, string> = { low: '低质量', medium: '中质量', high: '高质量', unknown: '未知' }
   return map[r] || r || '未知'
 }
 function statusCnLabel(s: string | number) {
@@ -162,14 +162,14 @@ function renderAiTrend() {
   if (!data.length) { aiChart.clear(); return }
   aiChart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['AI 调用', '降级', '高风险'], top: 0 },
+    legend: { data: ['AI 调用', '降级', '高质量'], top: 0 },
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
     xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
       { name: 'AI 调用', type: 'bar', data: data.map(d => d.ai_count), barMaxWidth: 12 },
       { name: '降级', type: 'line', data: data.map(d => d.fallback_count), smooth: true, symbol: 'none' },
-      { name: '高风险', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
+      { name: '高质量', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
     ],
   }, true)
 }
@@ -233,7 +233,7 @@ async function loadRisk() {
   try {
     aiRisk.value = await getAdminAnalyticsAiRisk({ start_time: rangeStart.value, end_time: rangeEnd.value })
   } catch (e) {
-    ElMessage.error('加载 AI 风险数据失败，请检查后端服务是否启动')
+    ElMessage.error('加载 AI 生成质量数据失败，请检查后端服务是否启动')
   } finally { riskLoading.value = false }
 }
 
@@ -477,8 +477,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       <el-card class="content-card" shadow="never" v-loading="riskLoading">
         <div class="card-header">
           <div>
-            <h3>AI 风险分布</h3>
-            <p class="card-subtitle">AI 生成记录风险等级统计</p>
+            <h3>AI 生成质量分布</h3>
+            <p class="card-subtitle">AI 生成记录质量等级统计</p>
           </div>
         </div>
         <template v-if="riskStats && riskStats.total > 0">
@@ -499,7 +499,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
                   <span class="risk-stat-value">{{ lvl.count }}</span>
                 </div>
                 <div v-if="riskStats.levels.some(l => l.level === 'high')" class="risk-high-alert">
-                  <el-tag type="danger" effect="plain" size="small">存在高风险记录，建议及时复核</el-tag>
+                  <el-tag type="danger" effect="plain" size="small">存在高质量异常记录，建议及时复核</el-tag>
                 </div>
               </div>
             </div>
@@ -523,8 +523,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
             </div>
           </div>
         </template>
-        <el-empty v-else-if="aiRisk && aiRisk.items && aiRisk.items.length === 0" description="暂无 AI 风险统计数据" />
-        <el-empty v-else description="暂无 AI 风险统计数据" />
+        <el-empty v-else-if="aiRisk && aiRisk.items && aiRisk.items.length === 0" description="暂无 AI 生成质量统计数据" />
+        <el-empty v-else description="暂无 AI 生成质量统计数据" />
       </el-card>
     </div>
 
@@ -610,7 +610,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="risk_level" label="风险" width="70">
+        <el-table-column prop="risk_level" label="质量" width="70">
           <template #default="{ row }">{{ row.risk_level ? riskLevelCn(row.risk_level) : '-' }}</template>
         </el-table-column>
         <el-table-column prop="related_info" label="关联信息" width="160" show-overflow-tooltip />

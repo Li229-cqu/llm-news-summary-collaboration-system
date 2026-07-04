@@ -71,6 +71,15 @@ function formatMs(ms: number): string {
   return ms + 'ms'
 }
 
+function qualityText(level: string): string {
+  switch (level) {
+    case 'low': return '低质量'
+    case 'medium': return '中质量'
+    case 'high': return '高质量'
+    default: return level || '未知'
+  }
+}
+
 // 清理 SSE 连接
 onUnmounted(() => {
   store.disconnect()
@@ -249,7 +258,7 @@ onUnmounted(() => {
                 <h3 class="result-block__title">🔍 一致性检查</h3>
                 <div class="result-row">
                   <el-tag :type="store.result.consistency.risk_level === 'low' ? 'success' : store.result.consistency.risk_level === 'medium' ? 'warning' : 'danger'" size="small">
-                    风险: {{ store.result.consistency.risk_label || store.result.consistency.risk_level }}
+                    质量: {{ qualityText(store.result.consistency.risk_level) }}
                   </el-tag>
                 </div>
                 <ul v-if="store.result.consistency.suggestions?.length" class="result-list">

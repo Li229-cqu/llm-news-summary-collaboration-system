@@ -10,9 +10,9 @@ const props = defineProps<Props>()
 
 const riskLevelText = computed(() => {
   const map: Record<string, string> = {
-    low: '低风险',
-    medium: '中风险',
-    high: '高风险',
+    low: '低质量',
+    medium: '中质量',
+    high: '高质量',
   }
   return map[props.consistency.risk_level] || '未知'
 })
@@ -53,7 +53,7 @@ const scoreStatus = computed(() => {
     </div>
 
     <div class="risk-section">
-      <span class="risk-label">风险等级：</span>
+      <span class="risk-label">质量等级：</span>
       <el-tag :type="riskLevelType" size="large">
         {{ riskLevelText }}
       </el-tag>

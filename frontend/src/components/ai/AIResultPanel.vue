@@ -101,9 +101,9 @@ const getRiskLevelColor = (level: string) => {
 
 const getRiskLevelText = (level: string) => {
   switch (level) {
-    case 'high': return '高风险'
-    case 'medium': return '中风险'
-    case 'low': return '低风险'
+    case 'high': return '高质量'
+    case 'medium': return '中质量'
+    case 'low': return '低质量'
     default: return '未知'
   }
 }
@@ -184,10 +184,10 @@ const handleLongSummaryClick = (event: Event) => {
 
     <div v-else class="result-content">
       <div v-if="riskLevel || evidenceCoverage !== undefined || riskDetails" class="result-section">
-        <h4 class="section-title">风险与证据</h4>
+        <h4 class="section-title">质量与证据</h4>
         <div class="risk-panel">
           <div class="risk-item">
-            <span class="risk-label">风险等级</span>
+            <span class="risk-label">质量等级</span>
             <el-tag :type="getRiskLevelColor(riskLevel || '')" size="medium">
               {{ getRiskLevelText(riskLevel || '') }}
             </el-tag>
@@ -314,7 +314,7 @@ const handleLongSummaryClick = (event: Event) => {
       </div>
 
       <div v-if="currentSentenceEvidence.risk_level !== undefined" class="evidence-risk">
-        <span class="evidence-label">风险等级</span>
+        <span class="evidence-label">质量等级</span>
         <el-tag :type="getRiskLevelColor(['low', 'medium', 'high'][currentSentenceEvidence.risk_level] || '')">
           {{ getRiskLevelText(['low', 'medium', 'high'][currentSentenceEvidence.risk_level] || '') }}
         </el-tag>

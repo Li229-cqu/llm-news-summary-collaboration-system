@@ -255,7 +255,6 @@ const showLongSummary = computed(() => {
             <div class="mini-card__head">
               <div>
                 <p class="mini-card__title">Step 1 正文清洗</p>
-                <p class="mini-card__subtitle">压缩噪声，保留有效新闻文本</p>
               </div>
               <el-tag :type="stepBadgeType(cleanStep?.status || 'pending')" size="small">
                 {{ stepStateText(cleanStep?.status || 'pending') }}
@@ -292,7 +291,6 @@ const showLongSummary = computed(() => {
             <div class="mini-card__head">
               <div>
                 <p class="mini-card__title">Step 2 关键词提取</p>
-                <p class="mini-card__subtitle">关键词数量、来源和耗时压缩到一行</p>
               </div>
               <el-tag :type="stepBadgeType(keywordStep?.status || 'pending')" size="small">
                 {{ stepStateText(keywordStep?.status || 'pending') }}
@@ -300,10 +298,20 @@ const showLongSummary = computed(() => {
             </div>
             <div class="mini-card__body">
               <template v-if="keywordStep?.output">
-                <div class="metric-line metric-line--single">
-                  <span class="metric-pill">关键词 {{ (keywordStep.output.keywords || []).length || 0 }} 个</span>
-                  <span class="metric-pill">{{ keywordStep.provider || 'N/A' }}</span>
-                  <span class="metric-pill">{{ formatMs(keywordStep.latencyMs || 0) }}</span>
+                <div class="metric-grid">
+                  <div class="metric-box">
+                    <span class="metric-box__label">关键词</span>
+                    <strong>{{ (keywordStep.output.keywords || []).length || 0 }}</strong>
+                    <span class="metric-box__unit">个</span>
+                  </div>
+                  <div class="metric-box">
+                    <span class="metric-box__label">来源</span>
+                    <strong>{{ keywordStep.provider || '本地规则' }}</strong>
+                  </div>
+                  <div class="metric-box">
+                    <span class="metric-box__label">耗时</span>
+                    <strong>{{ formatMs(keywordStep.latencyMs || 0) }}</strong>
+                  </div>
                 </div>
                 <div class="tag-row">
                   <el-tag
@@ -327,7 +335,6 @@ const showLongSummary = computed(() => {
           <div class="wide-card__head">
             <div>
               <p class="wide-card__title">Step 3 六要素识别</p>
-              <p class="wide-card__subtitle">两列三行的紧凑表格，长文本允许换行但不会撑出大块空白。</p>
             </div>
             <el-tag :type="stepBadgeType(elementStep?.status || 'pending')" size="small">
               {{ stepStateText(elementStep?.status || 'pending') }}
@@ -362,7 +369,6 @@ const showLongSummary = computed(() => {
           <div class="hero-card__head">
             <div>
               <p class="hero-card__title">Step 4 标题摘要生成</p>
-              <p class="hero-card__subtitle">核心结果在这里，放在第一页最下方，保留强视觉强调。</p>
             </div>
             <el-tag :type="stepBadgeType(summaryStep?.status || 'pending')" size="small" class="step-tag">
               {{ stepStateText(summaryStep?.status || 'pending') }}
@@ -415,7 +421,6 @@ const showLongSummary = computed(() => {
             <div class="mini-card__head">
               <div>
                 <p class="mini-card__title">Step 5 话题匹配</p>
-                <p class="mini-card__subtitle">将生成结果映射到更准确的编辑主题</p>
               </div>
               <el-tag :type="stepBadgeType(topicStep?.status || 'pending')" size="small">
                 {{ stepStateText(topicStep?.status || 'pending') }}
@@ -423,24 +428,27 @@ const showLongSummary = computed(() => {
             </div>
             <div class="mini-card__body">
               <template v-if="topicStep?.output">
-                <div class="tag-row">
-                  <el-tag v-if="topicStep.output.primary_topic" type="danger" effect="dark" size="small" class="soft-tag">
-                    {{ topicStep.output.primary_topic }}
-                  </el-tag>
-                  <el-tag
-                    v-for="(item, index) in (topicStep.output.secondary_topics || [])"
-                    :key="index"
-                    type="info"
-                    effect="light"
-                    size="small"
-                    class="soft-tag"
-                  >
-                    {{ item }}
-                  </el-tag>
+                <div class="topic-match">
+                  <div v-if="topicStep.output.primary_topic" class="topic-primary">
+                    <span class="topic-label">主话题</span>
+                    <strong>{{ topicStep.output.primary_topic }}</strong>
+                  </div>
+                  <div v-if="(topicStep.output.secondary_topics || []).length" class="topic-secondary">
+                    <span class="topic-label">相关话题</span>
+                    <div class="topic-chip-row">
+                      <span
+                        v-for="(item, index) in (topicStep.output.secondary_topics || [])"
+                        :key="index"
+                        class="topic-chip"
+                      >
+                        {{ item }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div class="metric-line metric-line--single">
-                  <span class="metric-pill">置信度 {{ ((topicStep.output.confidence || 0) * 100).toFixed(0) }}%</span>
-                  <span class="metric-pill">{{ topicStep.output.topic_category || '暂无' }}</span>
+                <div class="topic-meta">
+                  <span>置信度 {{ ((topicStep.output.confidence || 0) * 100).toFixed(0) }}%</span>
+                  <span>{{ topicStep.output.topic_category || '未分类' }}</span>
                 </div>
               </template>
               <div v-else class="empty-inline">等待话题匹配结果</div>
@@ -451,7 +459,6 @@ const showLongSummary = computed(() => {
             <div class="mini-card__head">
               <div>
                 <p class="mini-card__title">Step 6 时间线适配</p>
-                <p class="mini-card__subtitle">判断是否需要更新及适合的发布时间位置</p>
               </div>
               <el-tag :type="stepBadgeType(timelineStep?.status || 'pending')" size="small">
                 {{ stepStateText(timelineStep?.status || 'pending') }}
@@ -483,7 +490,6 @@ const showLongSummary = computed(() => {
           <div class="wide-card__head">
             <div>
               <p class="wide-card__title">Step 7 一致性检查</p>
-              <p class="wide-card__subtitle">评分、风险和证据覆盖率分开呈现，不再挤成大块内容。</p>
             </div>
             <el-tag :type="stepBadgeType(consistencyStep?.status || 'pending')" size="small">
               {{ stepStateText(consistencyStep?.status || 'pending') }}
@@ -498,7 +504,6 @@ const showLongSummary = computed(() => {
           <div class="wide-card__head">
             <div>
               <p class="wide-card__title">Step 8 编辑建议生成</p>
-              <p class="wide-card__subtitle">直接给出是否可发、如何修改、优先级如何排序。</p>
             </div>
             <el-tag :type="stepBadgeType(suggestionStep?.status || 'pending')" size="small">
               {{ stepStateText(suggestionStep?.status || 'pending') }}
@@ -746,18 +751,10 @@ const showLongSummary = computed(() => {
 .mini-card__title,
 .wide-card__title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 800;
   color: var(--color-text-primary);
-}
-
-.hero-card__subtitle,
-.mini-card__subtitle,
-.wide-card__subtitle {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
 }
 
 .hero-card__body,
@@ -824,7 +821,7 @@ const showLongSummary = computed(() => {
 
 .title-text {
   flex: 1;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--color-text-primary);
 }
@@ -852,6 +849,43 @@ const showLongSummary = computed(() => {
 
 .metric-line--single {
   gap: 10px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-box {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-light);
+}
+
+.metric-box__label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.metric-box strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 700;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-box__unit {
+  margin-left: 3px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .metric-pill {
@@ -884,10 +918,83 @@ const showLongSummary = computed(() => {
   border-radius: 999px;
 }
 
+.topic-match {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topic-primary,
+.topic-secondary {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--color-primary-light);
+  background: var(--color-bg-card);
+}
+
+.topic-primary {
+  background: linear-gradient(135deg, var(--color-primary-soft), var(--color-bg-card));
+  border-left: 4px solid var(--color-primary);
+}
+
+.topic-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.topic-primary strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.topic-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.topic-chip {
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.topic-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.topic-meta span {
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--color-primary-soft);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
 .summary-text,
 .mini-copy {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.8;
   color: var(--color-text-primary);
   white-space: pre-wrap;
@@ -972,6 +1079,7 @@ const showLongSummary = computed(() => {
   background: var(--color-primary-soft);
   border: 1px solid var(--color-primary-light);
   color: var(--color-text-primary);
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -992,6 +1100,13 @@ const showLongSummary = computed(() => {
 
   .element-row {
     grid-template-columns: 88px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .metric-grid,
+  .topic-meta {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -56,9 +56,9 @@ function riskTag(level: string): 'success' | 'warning' | 'danger' | 'info' {
 
 function riskText(level: string): string {
   switch (level) {
-    case 'low': return '低风险'
-    case 'medium': return '中风险'
-    case 'high': return '高风险'
+    case 'low': return '低质量'
+    case 'medium': return '中质量'
+    case 'high': return '高质量'
     default: return level || '未知'
   }
 }
@@ -94,7 +94,7 @@ function simStats(simMap: any[]) {
   <div class="s7a" v-if="consistencyData">
     <!-- ═══ 风险等级 ═══ -->
     <div class="s7a__risk-row">
-      <span class="s7a__risk-label">风险等级</span>
+      <span class="s7a__risk-label">质量等级</span>
       <el-tag :type="riskTag(consistencyData.risk_level)" effect="dark" size="small">
         {{ riskText(consistencyData.risk_level) }}
       </el-tag>

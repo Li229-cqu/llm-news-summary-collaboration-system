@@ -4171,10 +4171,19 @@ def get_admin_analytics_ai_risk(start_time: str | None = None, end_time: str | N
         ORDER BY FIELD(risk_level, 'low', 'medium', 'high', 'unknown')
     """
     rows = execute_query(sql, params)
+    count_map = {'low': 0, 'medium': 0, 'high': 0, 'unknown': 0}
     for row in rows:
+        risk_level = str(row.get('risk_level') or '')
+        count = int(row.get('count') or 0)
+        if risk_level in count_map:
+            count_map[risk_level] = count
+        else:
+            count_map['unknown'] += count
+
+    for risk_level in ('low', 'medium', 'high', 'unknown'):
         items.append(AdminAiRiskItem(
-            risk_level=str(row.get('risk_level') or ''),
-            count=int(row.get('count') or 0),
+            risk_level=risk_level,
+            count=count_map[risk_level],
         ).model_dump())
 
     return AdminAnalyticsAiRiskResponse(items=items).model_dump()

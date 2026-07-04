@@ -204,11 +204,11 @@ export async function exportRecordToWord(record: AIGenerateRecordDetail): Promis
     children.push(headingBlock('一致性检查', HeadingLevel.HEADING_2))
     const c = result.consistency as Record<string, any>
 
-    const riskLabel: Record<string, string> = { low: '低风险', medium: '中风险', high: '高风险' }
+    const riskLabel: Record<string, string> = { low: '低质量', medium: '中质量', high: '高质量' }
     const riskColor: Record<string, string> = { low: COLOR_GREEN, medium: COLOR_WARN, high: COLOR_BRAND }
 
     children.push(para(
-      `风险等级：${riskLabel[c.risk_level] || c.risk_level}`,
+      `质量等级：${riskLabel[c.risk_level] || c.risk_level}`,
       { bold: true, color: riskColor[c.risk_level] || COLOR_PRIMARY },
     ))
 

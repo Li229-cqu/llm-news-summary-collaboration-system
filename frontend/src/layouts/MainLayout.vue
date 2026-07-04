@@ -8,7 +8,11 @@
       </aside>
 
       <main class="layout-main" :class="{ 'layout-main--community': isCommunityRoute, 'layout-main--admin': isAdminRoute }">
-        <RouterView />
+        <RouterView v-slot="{ Component, route: childRoute }">
+          <KeepAlive :max="8">
+            <component :is="Component" :key="childRoute.fullPath" />
+          </KeepAlive>
+        </RouterView>
       </main>
     </div>
   </div>

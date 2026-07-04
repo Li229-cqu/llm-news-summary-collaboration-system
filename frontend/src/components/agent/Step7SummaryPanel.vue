@@ -47,9 +47,9 @@ function riskTag(level: string): 'success' | 'warning' | 'danger' | 'info' {
 
 function riskText(level: string): string {
   switch (level) {
-    case 'low': return '低风险'
-    case 'medium': return '中风险'
-    case 'high': return '高风险'
+    case 'low': return '低质量'
+    case 'medium': return '中质量'
+    case 'high': return '高质量'
     default: return level || '未知'
   }
 }
@@ -113,7 +113,7 @@ const riskSummary = computed(() => {
   const data = props.consistencyData
   if (!data) return ''
   const simMap = data.similarity_map || []
-  if (!simMap.length) return data.risk_label || ''
+  if (!simMap.length) return riskText(data.risk_level || '')
 
   const total = simMap.length
   const hallucinations = simMap.filter((s: any) => s.type === 'hallucination').length
@@ -135,7 +135,7 @@ const riskSummary = computed(() => {
     <!-- ═══ 风险总览 ═══ -->
     <div class="s7s__summary">
       <div class="s7s__risk-row">
-        <span class="s7s__risk-label">综合风险</span>
+        <span class="s7s__risk-label">综合质量</span>
         <el-tag :type="riskTag(consistencyData.risk_level)" effect="dark" size="small">
           {{ riskText(consistencyData.risk_level) }}
         </el-tag>

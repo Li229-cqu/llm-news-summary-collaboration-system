@@ -85,7 +85,7 @@ const FUNC_TYPE_LABELS: Record<string, string> = {
   timeline_generation: 'Timeline 生成',
   ai_chat: 'AI 对话',
 }
-const RISK_LEVEL_LABELS: Record<string, string> = { low: '低', medium: '中', high: '高' }
+const RISK_LEVEL_LABELS: Record<string, string> = { low: '低质量', medium: '中质量', high: '高质量' }
 const RECORD_STATUS_LABELS: Record<number, string> = { 0: '失败', 1: '成功', 2: '处理中', 3: '待处理' }
 
 async function loadAIConfig() {
@@ -329,8 +329,8 @@ onMounted(() => {
               <el-form-item v-else label="结果缓存">
                 <el-alert title="当前后端暂未接入 AI 结果缓存，缓存配置作为二期功能处理。" type="info" show-icon :closable="false" />
               </el-form-item>
-              <el-form-item label="低风险阈值"><el-input-number v-model="aiConfigForm.risk_threshold_low" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
-              <el-form-item label="中风险阈值"><el-input-number v-model="aiConfigForm.risk_threshold_medium" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
+              <el-form-item label="低质量阈值"><el-input-number v-model="aiConfigForm.risk_threshold_low" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
+              <el-form-item label="中质量阈值"><el-input-number v-model="aiConfigForm.risk_threshold_medium" :min="0" :max="1" :step="0.1" :precision="2" /></el-form-item>
               <el-form-item>
                 <el-button type="primary" :loading="aiConfigSaving" @click="saveAIConfig">保存配置</el-button>
                 <el-button :loading="aiConfigTesting" @click="testConnection">测试连接</el-button>
@@ -396,7 +396,7 @@ onMounted(() => {
             <el-option label="处理中" :value="2" />
             <el-option label="待处理" :value="3" />
           </el-select>
-          <el-select v-model="recordsQuery.risk_level" placeholder="风险等级" clearable style="width: 110px" @change="recordsQuery.page=1;loadCallRecords()">
+          <el-select v-model="recordsQuery.risk_level" placeholder="质量等级" clearable style="width: 110px" @change="recordsQuery.page=1;loadCallRecords()">
             <el-option label="低" value="low" />
             <el-option label="中" value="medium" />
             <el-option label="高" value="high" />
@@ -420,20 +420,20 @@ onMounted(() => {
           <el-table-column label="功能类型" width="130"><template #default="scope">{{ FUNC_TYPE_LABELS[scope.row.function_type] || scope.row.function_type }}</template></el-table-column>
           <el-table-column prop="input_length" label="输入长度" width="90" />
           <el-table-column label="状态" width="90"><template #default="scope"><el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small">{{ RECORD_STATUS_LABELS[scope.row.status] || '未知' }}</el-tag></template></el-table-column>
-          <el-table-column label="风险等级" width="90"><template #default="scope"><el-tag v-if="scope.row.risk_level" :type="scope.row.risk_level === 'high' ? 'danger' : scope.row.risk_level === 'medium' ? 'warning' : 'success'" size="small">{{ RISK_LEVEL_LABELS[scope.row.risk_level] || scope.row.risk_level }}</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
+          <el-table-column label="质量等级" width="90"><template #default="scope"><el-tag v-if="scope.row.risk_level" :type="scope.row.risk_level === 'high' ? 'danger' : scope.row.risk_level === 'medium' ? 'warning' : 'success'" size="small">{{ RISK_LEVEL_LABELS[scope.row.risk_level] || scope.row.risk_level }}</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
           <el-table-column label="兜底" width="70"><template #default="scope"><el-tag v-if="scope.row.is_fallback" type="warning" size="small">是</el-tag><span v-else class="hint-text">--</span></template></el-table-column>
           <el-table-column prop="created_at" label="时间" width="170" />
         </el-table>
         <el-pagination v-if="recordsData && recordsData.total > (recordsQuery.page_size || 10)" v-model:current-page="recordsQuery.page" layout="total, prev, pager, next" :total="recordsData.total" :page-size="recordsQuery.page_size" class="mt16" @current-change="loadCallRecords" />
       </el-tab-pane>
 
-      <el-tab-pane label="风险规则" name="risk">
-        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区当前为只读说明，用于查看敏感词、风险阈值、降级策略和风险规则；编辑仍通过 AI 模型配置或后端配置完成。" />
+      <el-tab-pane label="质量规则" name="risk">
+        <el-alert class="section-alert" type="info" show-icon :closable="false" title="本区当前为只读说明，用于查看敏感词、质量阈值、降级策略和质量规则；编辑仍通过 AI 模型配置或后端配置完成。" />
         <el-row :gutter="20" v-loading="aiConfigLoading">
           <el-col :span="12"><el-card header="敏感词规则"><el-tag v-for="(word, i) in aiConfig?.sensitive_words || []" :key="i" class="mr8 mb8" type="danger">{{ word }}</el-tag><el-empty v-if="!aiConfig?.sensitive_words?.length" description="未配置敏感词" :image-size="80" /></el-card></el-col>
-          <el-col :span="12"><el-card header="风险等级阈值"><el-descriptions :column="1" border size="small"><el-descriptions-item label="低风险阈值">&le; {{ aiConfig?.risk_threshold_low ?? '--' }}</el-descriptions-item><el-descriptions-item label="中风险阈值">&le; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item><el-descriptions-item label="高风险范围">&gt; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item></el-descriptions></el-card></el-col>
+          <el-col :span="12"><el-card header="质量等级阈值"><el-descriptions :column="1" border size="small"><el-descriptions-item label="低质量阈值">&le; {{ aiConfig?.risk_threshold_low ?? '--' }}</el-descriptions-item><el-descriptions-item label="中质量阈值">&le; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item><el-descriptions-item label="高质量范围">&gt; {{ aiConfig?.risk_threshold_medium ?? '--' }}</el-descriptions-item></el-descriptions></el-card></el-col>
           <el-col :span="12" style="margin-top: 20px"><el-card header="降级策略"><pre v-if="aiConfig?.fallback_strategy && Object.keys(aiConfig.fallback_strategy).length" class="json-view">{{ JSON.stringify(aiConfig.fallback_strategy, null, 2) }}</pre><el-empty v-else description="未配置降级策略" :image-size="80" /></el-card></el-col>
-          <el-col :span="12" style="margin-top: 20px"><el-card header="风险规则配置"><pre v-if="aiConfig?.risk_rules?.length" class="json-view">{{ JSON.stringify(aiConfig.risk_rules, null, 2) }}</pre><el-empty v-else description="未配置风险规则" :image-size="80" /></el-card></el-col>
+          <el-col :span="12" style="margin-top: 20px"><el-card header="质量规则配置"><pre v-if="aiConfig?.risk_rules?.length" class="json-view">{{ JSON.stringify(aiConfig.risk_rules, null, 2) }}</pre><el-empty v-else description="未配置质量规则" :image-size="80" /></el-card></el-col>
         </el-row>
       </el-tab-pane>
     </el-tabs>

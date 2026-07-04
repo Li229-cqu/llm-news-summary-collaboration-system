@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -965,6 +965,21 @@ onMounted(async () => {
   loadWeeklyReport()
   window.addEventListener('resize', handleResize)
 })
+
+onActivated(async () => {
+  await loadProfileOverview()
+
+  if (activeTab.value === 'history') {
+    await loadBrowseHistory(currentPage.value)
+    loadBrowseCapsuleData()
+  } else if (activeTab.value === 'favorites') {
+    await loadFavorites(currentPage.value)
+  } else if (activeTab.value === 'comments') {
+    await loadComments(currentPage.value)
+  } else if (activeTab.value === 'ai-records') {
+    await loadAIRecords(currentPage.value)
+  }
+})
 </script>
 
 <template>
@@ -1571,7 +1586,7 @@ onMounted(async () => {
                       :type="item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'"
                       size="small"
                     >
-                      {{ item.risk_level === 'high' ? '高风险' : item.risk_level === 'medium' ? '中风险' : '低风险' }}
+                      {{ item.risk_level === 'high' ? '高质量' : item.risk_level === 'medium' ? '中质量' : '低质量' }}
                     </el-tag>
                     <el-button type="primary" text :icon="ZoomIn" size="small" @click="openAIRecordDetail(item)">
                       查看详情
@@ -1704,7 +1719,7 @@ onMounted(async () => {
             size="small"
             :type="currentAIRecord.risk_level === 'high' ? 'danger' : currentAIRecord.risk_level === 'medium' ? 'warning' : 'success'"
           >
-            {{ currentAIRecord.risk_level === 'high' ? '高风险' : currentAIRecord.risk_level === 'medium' ? '中风险' : '低风险' }}
+            {{ currentAIRecord.risk_level === 'high' ? '高质量' : currentAIRecord.risk_level === 'medium' ? '中质量' : '低质量' }}
           </el-tag>
         </div>
 

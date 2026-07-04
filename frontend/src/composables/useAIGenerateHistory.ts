@@ -75,9 +75,9 @@ export function useAIGenerateHistory() {
   }
 
   function formatRiskLabel(level: string) {
-    if (level === 'low') return '低风险'
-    if (level === 'medium') return '中风险'
-    if (level === 'high') return '高风险'
+    if (level === 'low') return '低质量'
+    if (level === 'medium') return '中质量'
+    if (level === 'high') return '高质量'
     return '未知'
   }
 
@@ -134,15 +134,15 @@ export function useAIGenerateHistory() {
     if (result.has_consistency) {
       lines.push('【一致性检测】')
       lines.push(`评分：${result.consistency.score}`)
-      lines.push(`风险等级：${formatRiskLabel(result.consistency.risk_level)}`)
+      lines.push(`质量等级：${formatRiskLabel(result.consistency.risk_level)}`)
       lines.push(`问题提示：${(result.consistency.issues || []).join('；') || '无'}`)
       lines.push(`修改建议：${(result.consistency.suggestions || []).join('；') || '无'}`)
       lines.push('')
     }
 
-    lines.push('【风险与证据】')
+    lines.push('【质量与证据】')
     if (result.risk_details) {
-      lines.push(`风险说明：${result.risk_details}`)
+      lines.push(`质量说明：${result.risk_details}`)
     }
     if (typeof result.evidence_coverage === 'number') {
       lines.push(`证据覆盖率：${(result.evidence_coverage * 100).toFixed(0)}%`)
