@@ -493,7 +493,7 @@ function formatMs(ms: number): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f0f0;
+  background: var(--color-bg-hover);
   border: 2px solid #e8e8e8;
   font-size: 12px;
   font-weight: 700;
@@ -501,9 +501,9 @@ function formatMs(ms: number): string {
   color: #ccc;
 }
 .progress-seg.is-active {
-  background: #fff5f5;
-  border-color: #ff4d4f;
-  color: #ff4d4f;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   animation: seg-pulse 1.2s ease-in-out infinite;
 }
 .progress-seg.is-done {
@@ -526,15 +526,15 @@ function formatMs(ms: number): string {
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 .progress-label__count { font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
-.progress-label__name { color: #ff4d4f; font-weight: 500; }
+.progress-label__name { color: var(--color-primary); font-weight: 500; }
 
 /* ── 当前步骤卡片 ── */
 .current-step-card {
-  background: #fff5f5;
-  border: 1px solid #ffccc7;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-light);
   border-radius: 12px;
   padding: 14px 18px;
 }
@@ -547,7 +547,7 @@ function formatMs(ms: number): string {
 .current-step-card__badge {
   font-size: 12px;
   font-weight: 600;
-  color: #ff4d4f;
+  color: var(--color-primary);
   background: #ffe4e4;
   padding: 2px 10px;
   border-radius: 10px;
@@ -642,7 +642,7 @@ function formatMs(ms: number): string {
 }
 .element-key {
   font-weight: 600;
-  color: #666;
+  color: var(--color-text-secondary);
   flex-shrink: 0;
 }
 .element-val {
@@ -683,7 +683,7 @@ function formatMs(ms: number): string {
   border-radius: 14px;
 }
 .agent-empty__title { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 8px; }
-.agent-empty__desc { font-size: 13px; color: #666; line-height: 1.6; margin: 0 auto; max-width: 480px; }
+.agent-empty__desc { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin: 0 auto; max-width: 480px; }
 .agent-empty__hint { margin-top: 10px; font-size: 12px; color: #999; }
 
 /* ── 完成总结 ── */
@@ -766,8 +766,8 @@ function formatMs(ms: number): string {
   cursor: default;
 }
 .similarity-item:hover {
-  border-left-color: #ff4d4f;
-  background: #fff5f5;
+  border-left-color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 .sim-header {
   display: flex;
@@ -832,7 +832,7 @@ function formatMs(ms: number): string {
 }
 .hover-card {
   background: var(--color-bg-card);
-  border: 1px solid #ffccc7;
+  border: 1px solid var(--color-primary-light);
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,.12);

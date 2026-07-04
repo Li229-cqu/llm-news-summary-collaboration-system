@@ -330,7 +330,7 @@ onMounted(() => {
 .actor-name {
   font-weight: 600;
   font-size: 14px;
-  color: #1f2937;
+  color: var(--color-text-primary);
 }
 
 .action-desc {
@@ -346,7 +346,7 @@ onMounted(() => {
 .comment-content {
   margin-top: 4px;
   padding: 8px 10px;
-  background: #f3f6fc;
+  background: var(--color-bg-hover);
   border-radius: 6px;
   font-size: 13px;
   color: #374151;
@@ -359,7 +359,7 @@ onMounted(() => {
 .target-post-card {
   margin-top: 4px;
   padding: 8px 10px;
-  background: #fef2f2;
+  background: var(--color-primary-soft);
   border: 1px solid #f5dfdf;
   border-radius: 6px;
   cursor: pointer;

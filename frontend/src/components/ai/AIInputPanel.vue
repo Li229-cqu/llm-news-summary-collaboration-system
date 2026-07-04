@@ -168,12 +168,12 @@ const handleFileChange = async (event: Event) => {
 .title {
   font-size: 15px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-primary);
 }
 
 .collapse-btn {
   padding: 0;
-  color: #d92d20;
+  color: var(--color-primary);
 }
 
 .collapse-btn--inline {
@@ -198,7 +198,7 @@ const handleFileChange = async (event: Event) => {
   margin-bottom: 12px;
   border: 1px solid #fecaca;
   border-radius: 10px;
-  background: #fff1f0;
+  background: var(--color-primary-soft);
 }
 
 .collapsed-summary__main {
@@ -211,24 +211,24 @@ const handleFileChange = async (event: Event) => {
 .collapsed-summary__title {
   font-size: 14px;
   font-weight: 600;
-  color: #b42318;
+  color: var(--color-primary);
 }
 
 .collapsed-summary__meta {
   font-size: 12px;
-  color: #667085;
+  color: var(--color-text-secondary);
 }
 
 .text-input {
   width: 100%;
   height: 280px;
   padding: 14px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.6;
-  color: #374151;
+  color: var(--color-text-primary);
   background: var(--color-bg-card);
   resize: vertical;
   transition: border-color 0.2s ease;
@@ -237,33 +237,33 @@ const handleFileChange = async (event: Event) => {
 
 .text-input:focus {
   outline: none;
-  border-color: #ff4d4f;
+  border-color: var(--color-primary);
 }
 
 .text-input::placeholder {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 
 .char-count {
   margin-top: 8px;
   text-align: right;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .count-number {
   font-weight: 600;
-  color: #ff4d4f;
+  color: var(--color-primary);
 }
 
 .empty-tip {
   padding: 12px 14px;
   margin-bottom: 12px;
-  background-color: #f9fafb;
+  background-color: var(--color-bg-hover);
   border-radius: 6px;
   font-size: 14px;
-  color: #6b7280;
-  border-left: 3px solid #d1d5db;
+  color: var(--color-text-secondary);
+  border-left: 3px solid var(--color-border);
 }
 
 .action-buttons {
@@ -278,9 +278,9 @@ const handleFileChange = async (event: Event) => {
 }
 
 .action-buttons :deep(.el-button--default:hover) {
-  color: #d92d20;
-  border-color: #fda29b;
-  background: #fff5f4;
+  color: var(--color-primary);
+  border-color: var(--color-primary-light);
+  background: var(--color-primary-soft);
 }
 
 .hidden-file-input {

@@ -311,12 +311,12 @@ async function pinNewPostToTop(postId: string | number) {
 }</script>
 
 <style scoped>
-.page-container { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(circle at 18% 10%, rgba(220, 38, 38, 0.08), transparent 28%), linear-gradient(180deg, #fef2f2 0%, #fef7f7 100%); }
+.page-container { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--color-bg); }
 
 /* ── 顶部一行 ── */
 .top-bar { display: flex; align-items: center; gap: 12px; padding: 12px 32px; flex-shrink: 0; flex-wrap: wrap; }
 .top-bar-title { margin: 0; color: var(--color-text-primary); font-size: 20px; font-weight: 800; white-space: nowrap; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.title-icon { color: #dc2626; font-size: 16px; }
+.title-icon { color: var(--color-primary); font-size: 16px; }
 .top-bar-search { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px; max-width: 420px; }
 .top-bar-search .search-input { flex: 1; }
 .top-bar-search :deep(.el-input__wrapper) { height: 34px; border-radius: 8px; }
@@ -332,13 +332,13 @@ async function pinNewPostToTop(postId: string | number) {
 .main-card :deep(.el-card__body) { padding: 16px 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .scroll-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
 .app-card { border: 1px solid rgba(238, 210, 210, 0.86); border-radius: 12px; box-shadow: 0 8px 24px rgba(130, 34, 34, 0.08); background: var(--color-bg-card); }
-.feed-tabs { display: flex; align-items: center; gap: 36px; margin: 0 0 12px; padding: 0; height: 40px; border-bottom: 1px solid #f5dfdf; flex-shrink: 0; }
-.feed-tab { position: relative; border: 0; background: transparent; color: #7c5c5c; font-size: 15px; font-weight: 600; cursor: pointer; padding: 0; height: 40px; transition: color 0.2s; }
-.feed-tab.active { color: #dc2626; }
-.feed-tab.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 999px; background: #dc2626; }
-.feed-tab:hover { color: #dc2626; }
+.feed-tabs { display: flex; align-items: center; gap: 36px; margin: 0 0 12px; padding: 0; height: 40px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+.feed-tab { position: relative; border: 0; background: transparent; color: var(--color-text-secondary); font-size: 15px; font-weight: 600; cursor: pointer; padding: 0; height: 40px; transition: color 0.2s; }
+.feed-tab.active { color: var(--color-primary); }
+.feed-tab.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 999px; background: var(--color-primary); }
+.feed-tab:hover { color: var(--color-primary); }
 .posts-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 16px; }
-.ai-tab-container { display: flex; height: 100%; min-height: 0; border: 1px solid #f0dada; border-radius: 8px; overflow: hidden; }
+.ai-tab-container { display: flex; height: 100%; min-height: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
 .loading-container { display: flex; justify-content: center; padding: 40px; }
 .empty-state { padding: 40px; }
 .pagination { margin-top: 16px; display: flex; justify-content: center; flex-shrink: 0; }

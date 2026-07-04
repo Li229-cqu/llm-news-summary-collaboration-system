@@ -43,8 +43,11 @@
   --color-bg-card: #1f2933;
   --color-text-primary: #e5e7eb;
   --color-text-secondary: #aeb8c4;
+  --color-text-muted: #6b7280;
   --color-bg-hover: #252d3a;
   --color-border: #3b4654;
+  --color-border-light: #2a3340;
+  --color-warning-soft: #3d2e0a;
 
   --el-color-primary: #f87171;
   --el-color-primary-light-3: #ef4444;

@@ -95,7 +95,7 @@ function safeY(): string {
 
 .dt__head {
   padding: 10px 14px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dt__badge {
@@ -134,7 +134,7 @@ function safeY(): string {
 .dt__del-text {
   color: #dc2626;
   text-decoration: line-through;
-  background: #fef2f2;
+  background: var(--color-primary-soft);
   padding: 4px 8px;
   border-radius: 4px;
   word-break: break-all;
@@ -142,7 +142,7 @@ function safeY(): string {
 
 .dt__orig-text {
   color: #b45309;
-  background: #fffbeb;
+  background: var(--color-warning-soft);
   padding: 4px 8px;
   border-radius: 4px;
   word-break: break-all;
@@ -151,7 +151,7 @@ function safeY(): string {
 
 .dt__clean-text {
   color: #16a34a;
-  background: #f0fdf4;
+  background: var(--color-bg-hover);
   padding: 4px 8px;
   border-radius: 4px;
   word-break: break-all;
@@ -159,7 +159,7 @@ function safeY(): string {
 
 .dt__add-text {
   color: #16a34a;
-  background: #f0fdf4;
+  background: var(--color-bg-hover);
   padding: 4px 8px;
   border-radius: 4px;
   word-break: break-all;

@@ -145,7 +145,7 @@ async function handleTabChange(tabKey: string) {
   overflow: hidden;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  background: #fef7f7;
+  background: var(--color-bg);
 }
 
 .admin-layout {
@@ -161,7 +161,7 @@ async function handleTabChange(tabKey: string) {
   flex-direction: column;
   padding: 24px 18px;
   background: var(--color-bg-card);
-  border-right: 1px solid #f5dfdf;
+  border-right: 1px solid var(--color-border);
   gap: 20px;
 }
 
@@ -175,9 +175,9 @@ async function handleTabChange(tabKey: string) {
   align-items: center;
   text-align: center;
   padding: 28px 16px 20px;
-  background: linear-gradient(180deg, #fef2f2 0%, var(--color-bg-hover) 50%, var(--color-bg-card) 100%);
+  background: linear-gradient(180deg, var(--color-primary-soft) 0%, var(--color-bg-hover) 50%, var(--color-bg-card) 100%);
   border-radius: 18px;
-  border: 1px solid #f5dfdf;
+  border: 1px solid var(--color-border);
   gap: 12px;
 }
 

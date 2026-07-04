@@ -88,22 +88,22 @@ function resetAll() { aiDraft.resetParams(); ElMessage.success('已恢复默认�
   width: 100%; padding: 8px 10px 8px 20px; text-align: left; font-size: 13px; color: var(--color-text-secondary);
   background: none; border: none; border-radius: 6px; cursor: pointer; transition: all .12s;
 }
-.ps__opt:hover { background: #fef2f2; color: #1f2937; }
+.ps__opt:hover { background: var(--color-primary-soft); color: var(--color-primary); }
 .ps__opt.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 600; }
 
 .ps__footer { padding: 12px 20px; border-top: 1px solid var(--color-border); }
 .ps__reset {
   width: 100%; padding: 8px; font-size: 13px; color: var(--color-text-muted); background: var(--color-bg-hover);
-  border: 1px solid #f3f4f6; border-radius: 6px; cursor: pointer; transition: all .15s;
+  border: 1px solid var(--color-border); border-radius: 6px; cursor: pointer; transition: all .15s;
 }
-.ps__reset:hover { background: var(--color-primary-soft); border-color: #fecaca; color: var(--color-primary); }
+.ps__reset:hover { background: var(--color-primary-soft); border-color: var(--color-primary-light); color: var(--color-primary); }
 
 .ps__history { padding: 0 20px 16px; }
 .ps__history-btn {
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 10px; background: var(--color-primary-soft); border: 1px solid #fecaca;
+  padding: 10px; background: var(--color-primary-soft); border: 1px solid var(--color-primary-light);
   border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--color-primary);
   cursor: pointer; transition: all .15s;
 }
-.ps__history-btn:hover { background: #fee2e2; }
+.ps__history-btn:hover { background: var(--color-primary-light); }
 </style>

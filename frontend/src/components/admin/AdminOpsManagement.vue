@@ -411,9 +411,9 @@ onMounted(async () => {
 .status-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .status-card :deep(.el-card__body) { display: flex; gap: 12px; align-items: flex-start; }
 .status-card__icon { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--el-fill-color-light); color: var(--el-text-color-secondary); }
-.status-card__icon--success { background: #ecfdf5; color: #16a34a; }
-.status-card__icon--danger { background: #fef2f2; color: #dc2626; }
-.status-card__icon--warning { background: #fffbeb; color: #d97706; }
+.status-card__icon--success { background: var(--color-bg-hover); color: #16a34a; }
+.status-card__icon--danger { background: var(--color-primary-soft); color: #dc2626; }
+.status-card__icon--warning { background: var(--color-warning-soft); color: #d97706; }
 .status-card__title { font-weight: 700; margin-bottom: 8px; color: var(--el-text-color-primary); }
 .toolbar-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
 .db-desc { margin-bottom: 14px; }

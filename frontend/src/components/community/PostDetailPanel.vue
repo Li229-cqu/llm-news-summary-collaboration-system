@@ -392,19 +392,19 @@ import { nextTick } from 'vue'
 .post-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .post-meta { display: flex; flex-direction: column; }
 .post-author { font-weight: 600; font-size: 15px; }
-.post-time { font-size: 12px; color: #999; }
-.post-title { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 16px; line-height: 1.4; }
-.post-content { color: #333; line-height: 1.8; font-size: 15px; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+.post-time { font-size: 12px; color: var(--color-text-muted); }
+.post-title { font-size: 24px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 16px; line-height: 1.4; }
+.post-content { color: var(--color-text-primary); line-height: 1.8; font-size: 15px; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
 
 .post-images { margin-bottom: 16px; }
-.post-images-title { font-size: 15px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+.post-images-title { font-size: 15px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 10px; }
 .post-images-grid { display: flex; flex-wrap: wrap; gap: 12px; }
 .post-detail-image { max-width: 100%; max-height: 400px; border-radius: 8px; border: 1px solid var(--color-border); cursor: zoom-in; width: auto; }
 
 .post-tags { margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
-.post-related-news { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 10px 14px; background: #fef2f2; border-radius: 8px; font-size: 14px; color: #dc2626; cursor: pointer; }
-.post-related-news:hover { background: #fee2e2; }
-.post-stats { display: flex; gap: 28px; margin-bottom: 16px; color: #999; font-size: 14px; }
+.post-related-news { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 10px 14px; background: var(--color-primary-soft); border-radius: 8px; font-size: 14px; color: #dc2626; cursor: pointer; }
+.post-related-news:hover { background: var(--color-primary-light); }
+.post-stats { display: flex; gap: 28px; margin-bottom: 16px; color: var(--color-text-muted); font-size: 14px; }
 .post-actions-bar { display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
 .post-actions-bar .action-active { color: #dc2626; }
 .post-actions-bar .action-favorited { color: #f59e0b; }
@@ -412,10 +412,10 @@ import { nextTick } from 'vue'
 /* Summary */
 .summary-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .summary-title { font-weight: 700; font-size: 16px; color: #1f2937; }
-.summary-content p { color: #333; line-height: 1.7; margin: 0 0 12px; }
+.summary-content p { color: var(--color-text-primary); line-height: 1.7; margin: 0 0 12px; }
 .summary-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .summary-points { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; }
-.summary-points-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+.summary-points-title { font-size: 13px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 8px; }
 .summary-points ul { margin: 0; padding-left: 20px; }
 .summary-points li { font-size: 13px; color: #6b7280; line-height: 1.8; }
 .summary-hint { color: #9ca3af; font-size: 14px; text-align: center; padding: 16px 0; }
