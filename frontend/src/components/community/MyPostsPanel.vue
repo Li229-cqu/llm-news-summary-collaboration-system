@@ -21,15 +21,7 @@
         @comment="handleView"
         @open-related-news="handleOpenRelatedNews"
       />
-      <el-pagination
-        v-if="total > pageSize"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        :total="total"
-        layout="prev, pager, next"
-        @current-change="loadPosts"
-        class="pagination"
-      />
+      <PaginationBar v-if="total > pageSize" :current-page="currentPage" :total-pages="Math.ceil(total / pageSize)" @change="loadPosts" />
     </div>
   </div>
 </template>
@@ -37,6 +29,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import {
   getMyCommunityPosts,
   toggleLike,

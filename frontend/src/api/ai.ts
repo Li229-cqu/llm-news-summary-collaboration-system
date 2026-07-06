@@ -74,41 +74,8 @@ export interface AIGenerateResponse {
   evidence_coverage?: number
 }
 
-export interface AIAsyncTaskResult {
-  task_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  result?: AIGenerateResponse
-  error?: string
-}
-
-/** 调用 AI 生成标题和摘要（同步模式）。 */
-export function generateTitleSummary(data: AIGenerateRequest) {
-  return request.post<AIGenerateResponse, AIGenerateResponse, AIGenerateRequest>(
-    '/api/ai/generate',
-    data,
-    { timeout: 300000 }  // 5分钟 timeout
-  )
-}
-
-/** 调用 AI 生成标题和摘要（异步模式）。 */
-export function generateTitleSummaryAsync(data: AIGenerateRequest) {
-  return request.post<{ task_id: string }, { task_id: string }, AIGenerateRequest>(
-    '/api/ai/generate/async',
-    data,
-    { timeout: 10000 }  // 创建任务很快
-  )
-}
-
-/** 查询异步任务结果。 */
-export function getAsyncTaskResult(taskId: string) {
-  return request.get<
-    { task_id: string; status: string; result?: AIGenerateResponse; error?: string },
-    { task_id: string; status: string; result?: AIGenerateResponse; error?: string }
-  >(
-    `/api/ai/generate/async/${taskId}`,
-    { timeout: 5000 }
-  )
-}
+// AIAsyncTaskResult / generateTitleSummary / generateTitleSummaryAsync / getAsyncTaskResult
+// 已移除：第一版直连 LLM 路径，已被 Agent 流水线（/api/news-editor-agent/run-text）取代。
 
 export interface AIGenerateRecordItem {
   id: number | string
@@ -179,9 +146,4 @@ export function uploadFile(formData: FormData) {
   )
 }
 
-export const aiApi = {
-  generate: generateTitleSummary,
-  getRecords: getAIHistory,
-  getRecordDetail: getAIRecordDetail,
-  deleteRecord: deleteAIRecord,
-}
+// aiApi 便捷对象已移除：第一版直连路径已被 Agent 流水线取代。

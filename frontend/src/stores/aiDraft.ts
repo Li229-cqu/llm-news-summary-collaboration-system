@@ -31,8 +31,6 @@ export const useAIDraftStore = defineStore('aiDraft', {
     inputText: '',
     params: { ...DEFAULT_PARAMS },
     result: null as AIGenerateResponse | null,
-    loading: false,
-    error: '',
   }),
 
   actions: {
@@ -86,17 +84,7 @@ export const useAIDraftStore = defineStore('aiDraft', {
       this.result = null
     },
 
-    /** 设置加载状态 */
-    setLoading(loading: boolean) {
-      this.loading = loading
-    },
-
-    /** 设置错误信息 */
-    setError(error: string) {
-      this.error = error
-    },
-
-    /** 重置草稿（清空所有输入、结果、错误，恢复默认参数） */
+    /** 重置草稿（清空所有输入、结果，恢复默认参数） */
     resetDraft() {
       this.sourceNewsId = null
       this.sourceTitle = ''
@@ -104,8 +92,6 @@ export const useAIDraftStore = defineStore('aiDraft', {
       this.inputText = ''
       this.params = { ...DEFAULT_PARAMS }
       this.result = null
-      this.error = ''
-      this.loading = false
     },
   },
 })

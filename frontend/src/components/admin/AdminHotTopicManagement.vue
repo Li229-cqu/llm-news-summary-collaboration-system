@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import {
   getAdminHotTopicDetail,
   getAdminHotTopicList,
@@ -147,7 +148,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination class="pager" layout="total, prev, pager, next, sizes" :total="hotData?.total || 0" v-model:current-page="hotQuery.page" v-model:page-size="hotQuery.page_size" @current-change="loadHotList" @size-change="loadHotList" />
+      <PaginationBar :current-page="hotQuery.page" :total-pages="Math.ceil((hotData?.total || 0) / hotQuery.page_size)" @change="(p: number) => { hotQuery.page = p; loadHotList(); }" />
     </el-card>
 
     <el-drawer v-model="detailVisible" title="热搜详情" size="520px">

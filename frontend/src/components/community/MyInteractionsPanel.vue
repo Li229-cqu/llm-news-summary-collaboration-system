@@ -37,14 +37,7 @@
             </div>
           </div>
         </div>
-        <el-pagination
-          v-if="likesTotal > pageSize"
-          :current-page="likesPage"
-          :page-size="pageSize"
-          :total="likesTotal"
-          layout="prev, pager, next"
-          @current-change="(p: number) => loadLikes(p)"
-          class="pagination"
+        <PaginationBar v-if="likesTotal > pageSize" :current-page="likesPage" :total-pages="Math.ceil(likesTotal / pageSize)" @change="(p: number) => loadLikes(p)"
         />
       </div>
     </div>
@@ -75,14 +68,7 @@
             </div>
           </div>
         </div>
-        <el-pagination
-          v-if="commentsTotal > pageSize"
-          :current-page="commentsPage"
-          :page-size="pageSize"
-          :total="commentsTotal"
-          layout="prev, pager, next"
-          @current-change="(p: number) => loadComments(p)"
-          class="pagination"
+        <PaginationBar v-if="commentsTotal > pageSize" :current-page="commentsPage" :total-pages="Math.ceil(commentsTotal / pageSize)" @change="(p: number) => loadComments(p)"
         />
       </div>
     </div>
@@ -112,14 +98,7 @@
             </div>
           </div>
         </div>
-        <el-pagination
-          v-if="favoritesTotal > pageSize"
-          :current-page="favoritesPage"
-          :page-size="pageSize"
-          :total="favoritesTotal"
-          layout="prev, pager, next"
-          @current-change="(p: number) => loadFavorites(p)"
-          class="pagination"
+        <PaginationBar v-if="favoritesTotal > pageSize" :current-page="favoritesPage" :total-pages="Math.ceil(favoritesTotal / pageSize)" @change="(p: number) => loadFavorites(p)"
         />
       </div>
     </div>
@@ -129,6 +108,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { Link } from '@element-plus/icons-vue'
 import {
   getMyReceivedLikes,

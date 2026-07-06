@@ -285,18 +285,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
             <p class="ghd__card-text">{{ detail.standardResult.summary_long }}</p>
           </section>
 
-          <!-- 摘要要点 -->
-          <section class="ghd__card" v-if="detail.standardResult.summary_points.length">
-            <h3 class="ghd__card-title">摘要要点</h3>
-            <div class="ghd__points">
-              <div v-for="(point, index) in detail.standardResult.summary_points" :key="index" class="ghd__point-row">
-                <span class="ghd__point-dot"></span>
-                <span>{{ point }}</span>
-              </div>
-            </div>
-          </section>
-
-          <!-- 关键词 -->
+<!-- 关键词 -->
           <section class="ghd__card" v-if="detail.standardResult.keywords.length">
             <h3 class="ghd__card-title">关键词</h3>
             <div class="ghd__kw-list">

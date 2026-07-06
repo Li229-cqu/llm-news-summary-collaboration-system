@@ -526,13 +526,29 @@ class AgentService:
             "why": elem_output.get("why", ""),
             "how": elem_output.get("how", ""),
         }
+        # ── 从 Step 7 提取真实风险等级 ──
+        risk_level_from_check = check_output.get("risk_level", "")
+        if risk_level_from_check not in {"low", "medium", "high"}:
+            risk_level_from_check = check_output.get("risk_label", "")
+            rl_map = {"低风险": "low", "中等风险": "medium", "高风险": "high"}
+            risk_level_from_check = rl_map.get(risk_level_from_check, "")
+
         check_result = {
-            "risk_level": check_output.get("risk_level", "low"),
+            "risk_level": risk_level_from_check or "medium",
             "score": check_output.get("overall_score", 0),
             "issues": [],
             "suggestions": check_output.get("suggestions", []),
         }
         total_ms = sum(r.time_ms for r in collected)
+
+        # ── 判断 AI 来源 ──
+        real_providers = {"deepseek", "zhipu", "glm"}
+        used_real_llm = any(
+            r.meta and r.meta.provider and r.meta.provider.lower() in real_providers
+            for r in collected
+        )
+        # 使用标准枚举值: llm / fallback
+        actual_ai_source = "llm" if used_real_llm else "fallback"
 
         now = _now_text()
         user_id = task.get("user_id", 0) if task else 0
@@ -575,9 +591,9 @@ class AgentService:
                     _dump_json(keywords),
                     _dump_json(news_elements),
                     _dump_json(check_result),
-                    "llm",
+                    actual_ai_source,
                     total_ms,
-                    check_output.get("risk_level", "low"),
+                    risk_level_from_check or "medium",
                     "",
                     0.0,
                     None,

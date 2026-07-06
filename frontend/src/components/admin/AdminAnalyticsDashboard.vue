@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, View, TrendCharts, UserFilled, Files, Message, DataBoard, Warning } from '@element-plus/icons-vue'
 import * as echarts from 'echarts/core'
@@ -609,13 +610,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination
-        v-model:current-page="contentPage"
-        v-model:page-size="contentPageSize"
-        layout="total, prev, pager, next"
-        :total="contentTotal"
-        @current-change="loadContentOverview()"
-      />
+      <PaginationBar :current-page="contentPage" :total-pages="Math.ceil(contentTotal / contentPageSize)" @change="(p: number) => { contentPage = p; loadContentOverview(); }" />
     </el-card>
   </section>
 </template>

@@ -40,7 +40,7 @@
               <div v-else class="posts-list">
                 <PostCard v-for="post in posts" :key="post.id" :post="post" @view="openPostDetail" @like="handleLike" @favorite="handleFavorite" @comment="openPostDetail" @open-related-news="handleOpenRelatedNews" />
               </div>
-              <el-pagination v-if="postTotal > pageSize" :current-page="currentPage" :page-size="pageSize" :total="postTotal" layout="prev, pager, next" @current-change="loadPosts" class="pagination" />
+              <PaginationBar v-if="postTotal > pageSize" :current-page="currentPage" :total-pages="Math.ceil(postTotal / pageSize)" @change="loadPosts" />
             </template>
             <PostDetailPanel
               v-else-if="activeFeedTab === 'recommend' && contentMode === 'detail' && selectedPostId"
@@ -64,6 +64,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getPostList, getPostDetail, toggleLike, toggleFavorite, unfavoritePost, getHotSearch, getAvailableTags, createCommunityAiSession, getCommunityAiSessions, getCommunityAiSessionDetail, sendCommunityAiMessage, deleteCommunityAiSession, sendCommunityAiMessageStream, createCommunityAiSessionStream, type StreamCallbacks, type CommunityPost, type PostListParams, type HotSearchItem, type TagCount, type CommunityAiSession, type CommunityAiMessage } from '@/api/community'

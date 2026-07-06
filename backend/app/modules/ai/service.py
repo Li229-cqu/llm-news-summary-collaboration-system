@@ -5,8 +5,6 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-import httpx
-
 from app.common.exceptions import AppException
 from app.core.config import settings
 from app.db.database import execute_one, execute_query, execute_update
@@ -69,7 +67,29 @@ def _normalize_risk_level(value: Any) -> str:
 
 
 def _normalize_ai_source(value: Any) -> str:
-    return str(value or "mock") if str(value or "mock") in {"mock", "llm", "fallback", "demo"} else "mock"
+    """统一 ai_source 为标准枚举值。
+
+    标准值: llm / fallback / mock / demo
+    兼容旧值: nlp_rule / local_rules / fallback_rule → fallback
+              deepseek / zhipu / glm → llm
+    未知值: fallback（保守，不默认 mock 也不默认 llm）
+    """
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return "fallback"
+    # real LLM providers → llm
+    if raw in {"llm", "deepseek", "zhipu", "glm"}:
+        return "llm"
+    # fallback / local rules → fallback
+    if raw in {"fallback", "nlp_rule", "local_rules", "fallback_rule", "local", "nlp"}:
+        return "fallback"
+    # mock / demo → as-is
+    if raw == "mock":
+        return "mock"
+    if raw == "demo":
+        return "demo"
+    # unknown → fallback (conservative)
+    return "fallback"
 
 
 def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
@@ -136,98 +156,12 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
     )
 
 
-async def _call_ai_service(request: AIGenerateRequest) -> AIGenerateResponse:
-    endpoint = f"{settings.ai_service_url.rstrip('/')}/ai/generate-title-summary"
-    logger.info(f"🚀 [REAL API] 调用 AI 服务: {endpoint}")
-    logger.info(f"📋 [REAL API] 请求参数: input_text长度={len(request.input_text)}, title_count={request.title_count}")
-    try:
-        async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
-            response = await client.post(endpoint, json=request.model_dump())
-            logger.info(f"📡 [REAL API] 响应状态码: {response.status_code}")
-            response.raise_for_status()
-            payload = response.json()
-        logger.info("✅ [REAL API] AI 服务调用成功")
-    except httpx.TimeoutException as exc:
-        logger.error(f"❌ [REAL API] AI 服务调用超时: {str(exc)}")
-        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
-    except httpx.HTTPStatusError as exc:
-        logger.error(f"❌ [REAL API] AI 服务返回错误状态码: {exc.response.status_code}, 响应内容: {exc.response.text[:500]}")
-        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
-    except httpx.RequestError as exc:
-        logger.error(f"❌ [REAL API] AI 服务网络请求失败: {type(exc).__name__}: {str(exc)}")
-        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
-
-    if payload.get("code") != 200:
-        logger.error(f"❌ [REAL API] AI 服务返回错误: {payload.get('message')}")
-        raise AppException(
-            code=payload.get("code", 503),
-            message=payload.get("message", AI_SERVICE_UNAVAILABLE_MESSAGE),
-        )
-
-    try:
-        logger.info("✅ [REAL API] AI 生成结果解析成功")
-        return AIGenerateResponse(**payload["data"])
-    except (KeyError, TypeError, ValueError) as exc:
-        logger.error(f"❌ [REAL API] AI 生成结果解析失败: {str(exc)}")
-        raise AppException(code=503, message=AI_SERVICE_UNAVAILABLE_MESSAGE) from exc
-
-
-import uuid
-import asyncio
-
-async_tasks: Dict[str, Dict[str, Any]] = {}
-
-
-async def _create_async_task(request: AIGenerateRequest, current_user: Optional[Any] = None) -> str:
-    task_id = str(uuid.uuid4())
-    async_tasks[task_id] = {
-        "status": "pending",
-        "request": request,
-        "result": None,
-        "error": None,
-    }
-    
-    async def execute_task():
-        task = async_tasks.get(task_id)
-        if not task:
-            return
-        
-        try:
-            async_tasks[task_id]["status"] = "running"
-            result = await _call_ai_service(request)
-            async_tasks[task_id]["status"] = "completed"
-            async_tasks[task_id]["result"] = result
-            
-            try:
-                _save_ai_record(request, result, current_user=current_user)
-            except Exception as exc:
-                logger.warning("AI 生成记录保存失败：%s", exc)
-                
-        except Exception as exc:
-            async_tasks[task_id]["status"] = "failed"
-            async_tasks[task_id]["error"] = str(exc)
-            logger.error(f"❌ 异步任务 {task_id} 执行失败: {str(exc)}")
-    
-    asyncio.create_task(execute_task())
-    return task_id
-
-
-async def _get_async_task_result(task_id: str) -> Dict[str, Any]:
-    task = async_tasks.get(task_id)
-    if not task:
-        raise AppException(code=404, message="任务不存在")
-    
-    result_data = {
-        "task_id": task_id,
-        "status": task["status"],
-    }
-    
-    if task["status"] == "completed" and task["result"]:
-        result_data["result"] = task["result"]
-    elif task["status"] == "failed" and task["error"]:
-        result_data["error"] = task["error"]
-    
-    return result_data
+# ── 以下函数已移除（第一版直连 LLM 路径） ──
+# _call_ai_service()        — 直接调用 ai-service /ai/generate-title-summary
+# _create_async_task()      — 异步任务创建
+# _get_async_task_result()  — 异步任务结果查询
+# async_tasks               — 异步任务内存存储
+# 以上功能已被 news_editor_agent/pipeline.py Agent 流水线 + SSE 取代
 
 
 def _save_ai_record(
@@ -398,6 +332,15 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
 
     records: list[dict[str, Any]] = []
     for row in rows:
+        # 优先从 check_result JSON 中解析 risk_level，比 DB 列更准确
+        db_risk = _normalize_risk_level(row.get("risk_level"))
+        check_json = _load_json(row.get("check_result"), None)
+        check_risk = ""
+        if isinstance(check_json, dict):
+            check_risk = _normalize_risk_level(check_json.get("risk_level", ""))
+        # check_result JSON 优先级高于 DB 列（DB 列可能是旧默认值）
+        resolved_risk = check_risk or db_risk or "medium"
+
         records.append(
             {
                 "id": row["id"],
@@ -405,7 +348,7 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
                 "source_news_id": row["source_news_id"],
                 "source_title": row["source_title"],
                 "title_count": row["title_count"],
-                "risk_level": _normalize_risk_level(row.get("risk_level")),
+                "risk_level": resolved_risk,
                 "ai_source": _normalize_ai_source(row.get("ai_source")),
                 "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
                 "candidate_titles": _load_json(row.get("candidate_titles"), []),
@@ -495,27 +438,8 @@ def _delete_ai_record_from_db(record_id: Union[int, str], current_user: Optional
     return affected_rows > 0
 
 
-async def generate_title_summary(
-    request: AIGenerateRequest,
-    current_user: Optional[Any] = None,
-) -> AIGenerateResponse:
-    """调用 ai-service 生成结果，并同步保存到数据库。"""
-    if not request.input_text.strip():
-        raise AppException(code=400, message="输入文本不能为空")
-
-    if not 1 <= request.title_count <= 5:
-        raise AppException(code=400, message="标题数量必须在 1-5 范围内")
-
-    import time
-    start_time = time.time()
-    result = await _call_ai_service(request)
-    response_ms = int((time.time() - start_time) * 1000)
-    
-    try:
-        _save_ai_record(request, result, current_user=current_user, response_ms=response_ms)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("AI 生成记录保存失败，继续返回结果：%s", exc)
-    return result
+# generate_title_summary() 已移除 — 第一版同步直连 LLM 端点。
+# 该功能已被 Agent 流水线 Step 4 (pipeline.py generate_title_summary_step) 取代。
 
 
 def get_ai_records(current_user: Optional[Any] = None) -> list[AIGenerateRecordItem]:

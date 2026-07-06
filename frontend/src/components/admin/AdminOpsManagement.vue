@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Warning, CircleCheck, CircleClose, QuestionFilled } from '@element-plus/icons-vue'
 import {
@@ -378,7 +379,7 @@ onMounted(async () => {
             <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
             <el-table-column label="详情" width="90"><template #default="{ row }"><el-button text type="primary" @click="viewLogDetail(row)">查看</el-button></template></el-table-column>
           </el-table>
-          <el-pagination v-model:current-page="logPage" v-model:page-size="logPageSize" layout="total, prev, pager, next" :total="logTotal" @current-change="loadLogs" />
+          <PaginationBar :current-page="logPage" :total-pages="Math.ceil(logTotal / logPageSize)" @change="(p: number) => { logPage = p; loadLogs(); }" />
         </el-tab-pane>
       </el-tabs>
     </el-card>

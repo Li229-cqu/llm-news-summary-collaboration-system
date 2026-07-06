@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import {
   Check,
   Delete,
@@ -460,14 +461,7 @@ onMounted(() => {
 
       <div class="pending-footer">
         <span>共 {{ total }} 条</span>
-        <el-pagination
-          background
-          layout="prev, pager, next, total"
-          :page-size="pageSize"
-          :current-page="page"
-          :total="total"
-          @current-change="handlePageChange"
-        />
+        <PaginationBar :current-page="page" :total-pages="Math.ceil(total / pageSize)" @change="handlePageChange" />
       </div>
     </el-card>
 

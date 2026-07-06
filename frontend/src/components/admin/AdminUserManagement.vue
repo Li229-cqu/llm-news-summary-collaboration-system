@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import {
   type AdminUserDetail,
   type AdminUserListResponse,
@@ -289,15 +290,7 @@ onMounted(async () => {
       </el-table-column>
     </el-table>
 
-    <el-pagination
-      class="pager"
-      layout="total, prev, pager, next, sizes"
-      :total="userData?.total || 0"
-      v-model:current-page="query.page"
-      v-model:page-size="query.page_size"
-      @current-change="loadList"
-      @size-change="loadList"
-    />
+    <PaginationBar :current-page="query.page" :total-pages="Math.ceil((userData?.total || 0) / query.page_size)" @change="(p: number) => { query.page = p; loadList(); }" />
 
     <!-- detail drawer -->
     <el-drawer v-model="detailVisible" title="用户详情" size="600px">

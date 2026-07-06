@@ -64,7 +64,6 @@ const hasResult = () => {
     (result.candidate_titles?.length ?? 0) > 0 ||
     !!result.summary_short ||
     !!result.summary_long ||
-    (result.summary_points?.length ?? 0) > 0 ||
     (result.keywords?.length ?? 0) > 0 ||
     !!result.elements?.who ||
     !!result.elements?.what ||
@@ -82,7 +81,6 @@ const hasResult = () => {
 const showCandidateTitles = computed(() => (displayResult.value?.candidate_titles?.length ?? 0) > 0)
 const showSummaryShort = computed(() => !!displayResult.value?.summary_short)
 const showSummaryLong = computed(() => !!displayResult.value?.summary_long)
-const showSummaryPoints = computed(() => (displayResult.value?.summary_points?.length ?? 0) > 0)
 const showKeywords = computed(() => (displayResult.value?.keywords?.length ?? 0) > 0)
 const showElements = computed(() => {
   const elements = displayResult.value?.elements
@@ -259,15 +257,6 @@ const handleLongSummaryClick = (event: Event) => {
         </div>
       </div>
 
-      <div v-if="showSummaryPoints" class="result-section">
-        <h4 class="section-title">摘要要点</h4>
-        <ul class="points-list">
-          <li v-for="(point, index) in (displayResult?.summary_points ?? [])" :key="index" class="point-item">
-            {{ point }}
-          </li>
-        </ul>
-      </div>
-
       <div v-if="showKeywords">
         <KeywordTags :keywords="displayResult?.keywords ?? []" class="result-section" />
       </div>
@@ -379,7 +368,7 @@ const handleLongSummaryClick = (event: Event) => {
 .copy-button { flex-shrink: 0; margin-left: 8px; color: var(--color-text-secondary); padding: 4px 8px; font-size: 12px; }
 .copy-button:hover { color: #ff4d4f; }
 .summary-item { position: relative; padding: 14px; background-color: var(--color-bg-hover); border-radius: 6px; }
-.summary-text { margin: 0; font-size: 14px; line-height: 1.7; color: var(--color-text-primary); word-break: break-word; white-space: pre-wrap; }
+.summary-text { margin: 0; font-size: 14px; line-height: 1.85; color: var(--color-text-primary); word-break: break-word; white-space: pre-wrap; text-indent: 2em; }
 .sentence-clickable { display: inline-block; padding: 2px 4px; margin: 2px; border-radius: 3px; border-bottom: 1px dashed currentColor; cursor: pointer; transition: opacity 0.2s; }
 .sentence-clickable:hover { opacity: 0.7; }
 .copy-button-summary { display: block; margin-top: 10px; color: var(--color-text-secondary); padding: 4px 8px; font-size: 12px; }

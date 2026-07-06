@@ -174,7 +174,7 @@ function normalizeEvidenceChain(value: unknown): EvidenceChain | undefined {
 function hasRealStepSignal(steps: AgentStepSnapshot[] = []): boolean {
   return steps.some(step => {
     const provider = toStringValue(step.provider).toLowerCase()
-    return provider && provider !== 'mock' && provider !== 'local'
+    return provider && provider !== 'mock' && provider !== 'local' && provider !== 'nlp' && provider !== 'fallback_rule'
   })
 }
 
@@ -280,7 +280,7 @@ function normalizeFromAgentResult(source: unknown, steps: AgentStepSnapshot[]): 
   const rawConsistency = isRecord(source) ? source.consistency : undefined
 
   const sourceTag = pickResultSource(isRecord(source) ? source.source : undefined)
-    ?? (provider && provider !== 'mock' && provider !== 'local'
+    ?? (provider && provider !== 'mock' && provider !== 'local' && provider !== 'nlp' && provider !== 'fallback_rule'
       ? 'llm'
       : hasRealStepSignal(steps)
         ? 'llm'
@@ -356,7 +356,8 @@ export function normalizeAIGenerateHistoryRecord(
   record: AIGenerateRecordItem | (Partial<AIGenerateRecordItem> & Record<string, unknown>),
 ): NormalizedAIGenerateHistoryRecord {
   const standardResult = normalizeAIGenerateResult(record)
-  const displaySource = resolveSource(standardResult, record.ai_source)
+  // 来源优先用后端标准化后的 ai_source，API 数据比客户端推算更可靠
+  const displaySource = record.ai_source || resolveSource(standardResult, record.ai_source)
 
   return {
     id: record.id ?? '',
@@ -364,7 +365,7 @@ export function normalizeAIGenerateHistoryRecord(
     source_news_id: record.source_news_id ?? null,
     source_title: record.source_title ?? '',
     title_count: typeof record.title_count === 'number' ? record.title_count : 0,
-    risk_level: record.risk_level ?? standardResult.consistency?.risk_level ?? 'low',
+    risk_level: record.risk_level ?? standardResult.consistency?.risk_level ?? 'medium',
     ai_source: record.ai_source,
     created_at: record.created_at ?? '',
     candidate_titles: Array.isArray(record.candidate_titles) ? record.candidate_titles : standardResult.candidate_titles,

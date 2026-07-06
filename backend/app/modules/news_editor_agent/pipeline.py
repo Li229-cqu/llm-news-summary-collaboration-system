@@ -35,10 +35,17 @@ import time
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import httpx
-
-from app.core.config import settings
 from app.core.llm_provider_policy import get_step_provider
+from app.modules.news_editor_agent.fallback_nlp import (
+    split_sentences,
+    extract_keywords_fallback,
+    extract_elements_fallback,
+    generate_title_summary_fallback,
+    match_topic_fallback,
+    judge_timeline_fallback,
+    check_consistency_fallback,
+    edit_suggestions_fallback,
+)
 from app.modules.news_editor_agent.schema import AgentContext, StepMeta, StepResult
 from app.services.llm_service import llm_service
 
@@ -66,61 +73,6 @@ def _step_label(name: str) -> str:
 
 def _step_order(name: str) -> int:
     return STEP_META.get(name, {}).get("order", 0)
-
-
-# ═══════════════════════════════════════════════════════════
-# AI Service 调用工具
-# ═══════════════════════════════════════════════════════════
-
-AI_SERVICE_TIMEOUT = 120.0  # AI 服务超时（秒）
-
-
-def _ai_url(endpoint: str) -> str:
-    """构建 AI 服务完整 URL。"""
-    base = settings.ai_service_url.rstrip("/")
-    return f"{base}/ai/{endpoint.lstrip('/')}"
-
-
-async def _call_ai(
-    endpoint: str,
-    payload: Dict[str, Any],
-    timeout: float = AI_SERVICE_TIMEOUT,
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """调用 AI 服务端点。
-
-    Returns:
-        (data_dict, error_message)
-        - 成功: (data_dict, None)
-        - 失败/不可用: (None, error_message)
-    """
-    url = _ai_url(endpoint)
-    logger.info("🤖 [AI Call] %s", url)
-    start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.post(url, json=payload)
-            elapsed_ms = int((time.time() - start) * 1000)
-            logger.info("📡 [AI Call] %s → HTTP %s (%s ms)", endpoint, resp.status_code, elapsed_ms)
-
-            if resp.status_code == 404:
-                return None, f"AI 端点不存在: {endpoint}"
-
-            resp.raise_for_status()
-            body = resp.json()
-
-        if body.get("code") == 200 and "data" in body:
-            return body["data"], None
-
-        return body, None
-
-    except httpx.TimeoutException:
-        return None, f"AI 服务超时: {endpoint}"
-    except httpx.ConnectError:
-        return None, f"AI 服务不可达: {endpoint}"
-    except httpx.HTTPStatusError as e:
-        return None, f"AI 服务 HTTP {e.response.status_code}: {endpoint}"
-    except Exception as e:
-        return None, f"AI 调用异常: {type(e).__name__}: {str(e)}"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -332,12 +284,6 @@ async def clean_step(ctx: AgentContext) -> StepResult:
 # Step 2: 关键词提取（调用 AI extract-elements）
 # ═══════════════════════════════════════════════════════════
 
-_MOCK_KEYWORDS: Dict[str, Any] = {
-    "keywords": ["人工智能", "政策发布", "产业升级", "国际合作", "技术创新"],
-    "total_count": 5,
-}
-
-
 async def extract_keywords_step(ctx: AgentContext) -> StepResult:
     """Step 2: 调用 LLM 提取关键词。"""
     text = ctx.cleaned_text or ctx.raw_text
@@ -387,34 +333,23 @@ async def extract_keywords_step(ctx: AgentContext) -> StepResult:
     else:
         logger.info("ℹ️ [extract_keywords] %s 未配置/未启用，使用 mock", provider)
 
-    # ── Mock fallback ─────────────────────────────────
+    # ── NLP fallback ──────────────────────────────────
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_KEYWORDS)
-    ctx.keywords = mock["keywords"]
+    keywords_fb = extract_keywords_fallback(text)
+    ctx.keywords = [k.get("word", k) if isinstance(k, dict) else k for k in keywords_fb]
     return StepResult(
         step="extract_keywords",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output={"keywords": keywords_fb, "total_count": len(keywords_fb), "llm": False},
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
 # ═══════════════════════════════════════════════════════════
 # Step 3: 六要素识别（调用 AI extract-elements）
 # ═══════════════════════════════════════════════════════════
-
-_MOCK_ELEMENTS: Dict[str, Any] = {
-    "who": ["科技部", "工信部"],
-    "what": "发布新一代人工智能发展规划",
-    "when": "2026年6月",
-    "where": "北京",
-    "why": "推动AI产业高质量发展",
-    "how": "通过政策引导与资金支持",
-}
-
 
 async def extract_elements_step(ctx: AgentContext) -> StepResult:
     """Step 3: 调用 LLM 识别新闻六要素（5W1H）。
@@ -510,34 +445,23 @@ async def extract_elements_step(ctx: AgentContext) -> StepResult:
     else:
         logger.info("ℹ️ [extract_elements] %s 未配置/未启用，使用 mock", provider)
 
-    # ── Mock fallback ─────────────────────────────────
+    # ── NLP fallback ──────────────────────────────────
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_ELEMENTS)
-    ctx.news_elements = mock
+    elements_fb = extract_elements_fallback(text)
+    ctx.news_elements = elements_fb.get("news_elements", elements_fb)
     return StepResult(
         step="extract_elements",
         status="completed",
         input=input_snapshot,
-        output={"news_elements": mock},
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output=elements_fb,
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
 # ═══════════════════════════════════════════════════════════
 # Step 4: 标题摘要生成（调用 AI generate-title-summary）
 # ═══════════════════════════════════════════════════════════
-
-_MOCK_GENERATE: Dict[str, Any] = {
-    "candidate_titles": [
-        "两部委联合发布新一代AI发展规划",
-        "人工智能产业迎来政策利好",
-    ],
-    "summary_short": "科技部与工信部联合发布新一代人工智能发展规划。",
-    "summary_long": "2026年6月，科技部与工信部在北京联合发布新一代人工智能发展规划，旨在通过政策引导与资金支持推动AI产业高质量发展。",
-}
-
 
 async def generate_step(ctx: AgentContext) -> StepResult:
     """Step 4: 调用 LLM 生成标题与摘要。
@@ -667,33 +591,30 @@ async def generate_step(ctx: AgentContext) -> StepResult:
     else:
         logger.info("ℹ️ [generate] %s 未配置/未启用，使用 mock", provider)
 
-    # ── Mock fallback ─────────────────────────────────
+    # ── NLP fallback ──────────────────────────────────
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.2)
-    mock = dict(_MOCK_GENERATE)
-    ctx.title = mock["candidate_titles"][0]
-    ctx.summary = mock["summary_short"]
+    gen_fb = generate_title_summary_fallback(
+        text, params=params,
+        keywords=ctx.keywords if ctx.keywords else None,
+        elements=ctx.news_elements if ctx.news_elements else None,
+    )
+    titles = gen_fb.get("candidate_titles", [])
+    ctx.title = titles[0] if titles else ""
+    ctx.summary = gen_fb.get("summary_short", "")
+    ctx.summary_long = gen_fb.get("summary_long", "")
     return StepResult(
         step="generate_title_summary",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=200,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=200),
+        output=gen_fb,
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
 # ═══════════════════════════════════════════════════════════
 # Step 5: 话题匹配（调用 AI match-topic，暂无则 mock）
 # ═══════════════════════════════════════════════════════════
-
-_MOCK_TOPIC: Dict[str, Any] = {
-    "primary_topic": "科技政策",
-    "secondary_topics": ["人工智能", "产业经济"],
-    "confidence": 0.92,
-    "matched_from": "预定义话题库",
-}
-
 
 async def match_topic_step(ctx: AgentContext) -> StepResult:
     """Step 5: 调用 LLM 匹配新闻话题分类。"""
@@ -752,16 +673,15 @@ async def match_topic_step(ctx: AgentContext) -> StepResult:
         logger.info("ℹ️ [match_topic] %s 未配置/未启用，使用 mock", provider)
 
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_TOPIC)
-    ctx.topic = mock
+    topic_fb = match_topic_fallback(text, keywords=ctx.keywords if ctx.keywords else None)
+    ctx.topic = topic_fb
     return StepResult(
         step="match_topic",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output={**topic_fb, "llm": False},
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
@@ -769,16 +689,9 @@ async def match_topic_step(ctx: AgentContext) -> StepResult:
 # Step 6: 时间线适配（调用 AI judge-timeline-fit，暂无则 mock）
 # ═══════════════════════════════════════════════════════════
 
-_MOCK_TIMELINE: Dict[str, Any] = {
-    "is_timely": True,
-    "recommended_position": "要闻区/科技频道",
-    "time_sensitivity": "高",
-    "related_events": ["2026年1月AI座谈会", "2025年12月科技工作会议"],
-}
-
-
 async def judge_timeline_step(ctx: AgentContext) -> StepResult:
     """Step 6: 调用 LLM 判断新闻时效性与时间线适配。"""
+    text = ctx.cleaned_text or ctx.raw_text
     input_snapshot = {
         "text": (ctx.cleaned_text or ctx.raw_text)[:200],
         "when": ctx.news_elements.get("when", "") if ctx.news_elements else "",
@@ -833,48 +746,21 @@ async def judge_timeline_step(ctx: AgentContext) -> StepResult:
         logger.info("ℹ️ [judge_timeline] %s 未配置/未启用，使用 mock", provider)
 
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_TIMELINE)
-    ctx.timeline = mock
+    timeline_fb = judge_timeline_fallback(text)
+    ctx.timeline = timeline_fb
     return StepResult(
         step="judge_timeline",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output={**timeline_fb, "llm": False},
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
 # ═══════════════════════════════════════════════════════════
 # Step 7: 一致性检查（调用 AI check-consistency）
 # ═══════════════════════════════════════════════════════════
-
-_MOCK_CONSISTENCY: Dict[str, Any] = {
-    "risk_level": "low",
-    "risk_label": "低风险",
-    "check_items": [
-        {"name": "标题-正文一致性", "status": "pass", "message": "标题准确反映正文内容"},
-        {"name": "摘要-正文一致性", "status": "pass", "message": "摘要与正文一致"},
-        {"name": "数据准确性", "status": "pass", "message": "关键数据与原文一致"},
-    ],
-    "suggestions": ["可补充具体资金数额", "建议引用原文关键段落"],
-    "similarity_map": [
-        {"summary_sentence": "今年前五个月新能源汽车销量达224.7万辆", "source_sentence": "全国新能源汽车销量达到224.7万辆", "score": 0.92, "type": "match", "reason": "数据完全一致，措辞微调"},
-        {"summary_sentence": "同比增长46.8%，市场占有率达27.7%", "source_sentence": "同比增长46.8%，市场占有率达到27.7%", "score": 0.95, "type": "match", "reason": "完全匹配原文数据"},
-        {"summary_sentence": "多家车企在固态电池领域取得突破", "source_sentence": "多家车企宣布在固态电池领域取得重大突破", "score": 0.88, "type": "match", "reason": "核心信息一致，省略了'重大'"},
-        {"summary_sentence": "能量密度突破500Wh/kg", "source_sentence": "固态电池能量密度已突破500Wh/kg", "score": 0.91, "type": "match", "reason": "关键数据准确"},
-        {"summary_sentence": "充电基础设施累计达630万台", "source_sentence": "全国充电基础设施累计达630万台", "score": 0.93, "type": "match", "reason": "数据完全一致"},
-    ],
-    "highlight_segments": [
-        {"text_range": "全国新能源汽车销量达到224.7万辆，同比增长46.8%，市场占有率达到27.7%", "score": 0.94, "covered": True},
-        {"text_range": "多家车企宣布在固态电池领域取得重大突破", "score": 0.88, "covered": True},
-        {"text_range": "固态电池能量密度已突破500Wh/kg，预计明年将率先搭载于旗下高端车型", "score": 0.85, "covered": True},
-        {"text_range": "全国充电基础设施累计达630万台，同比增长56%", "score": 0.93, "covered": True},
-        {"text_range": "业内专家表示，随着技术进步和政策支持，新能源汽车产业正处于快速发展的黄金期", "score": 0.50, "covered": False},
-    ],
-}
-
 
 async def check_step(ctx: AgentContext) -> StepResult:
     """Step 7: 调用 Zhipu 进行一致性检查 + 原文对齐分析。
@@ -958,16 +844,17 @@ async def check_step(ctx: AgentContext) -> StepResult:
         logger.info("ℹ️ [check] %s 未配置/未启用，使用 mock", provider)
 
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_CONSISTENCY)
-    ctx.consistency = mock
+    consistency_fb = check_consistency_fallback(
+        text, (ctx.summary or "") + " " + (ctx.summary_long or "")
+    )
+    ctx.consistency = consistency_fb
     return StepResult(
         step="check_consistency",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output={**consistency_fb, "llm": False},
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 
@@ -975,28 +862,69 @@ async def check_step(ctx: AgentContext) -> StepResult:
 # Step 8: 编辑建议生成（LLM 汇总 context，暂无独立端点则 mock）
 # ═══════════════════════════════════════════════════════════
 
-_MOCK_EDIT_SUGGESTIONS: Dict[str, Any] = {
-    "suggestions": [
-        {
-            "type": "标题优化",
-            "original": "",
-            "suggested": "【重磅】两部委联合发布AI新规划",
-            "reason": "增加新闻冲击力",
-        },
-        {
-            "type": "结构建议",
-            "detail": "导语后可增加背景段落",
-            "priority": "中",
-        },
-        {
-            "type": "事实核查",
-            "detail": "确认具体发布日期",
-            "priority": "高",
-        },
-    ],
-    "overall_score": 88,
-    "ready_to_publish": True,
+# ── 建议类型归一化映射表 ──────────────────────────────
+_EDIT_TYPE_NORMALIZE_MAP: Dict[str, str] = {
+    # 英文 → 中文
+    "title": "标题优化", "headline": "标题优化", "heading": "标题优化",
+    "summary": "摘要优化", "abstract": "摘要优化", "digest": "摘要优化",
+    "fact": "事实核查", "fact check": "事实核查", "fact_check": "事实核查",
+    "consistency": "事实核查", "evidence": "事实核查", "verification": "事实核查",
+    "element": "要素补充", "5w1h": "要素补充", "who": "要素补充",
+    "what": "要素补充", "when": "要素补充", "where": "要素补充",
+    "why": "要素补充", "how": "要素补充", "six_elements": "要素补充",
+    "structure": "结构建议", "format": "结构建议", "layout": "结构建议",
+    "quality": "质量提醒", "risk": "质量提醒", "warning": "质量提醒",
+    "publish": "发布建议", "release": "发布建议", "deploy": "发布建议",
+    "keyword": "要素补充", "keywords": "要素补充",
+    # 中文变体 → 统一
+    "标题": "标题优化", "标题建议": "标题优化", "标题修改": "标题优化",
+    "摘要": "摘要优化", "内容摘要": "摘要优化", "摘要修改": "摘要优化",
+    "事实": "事实核查", "核查": "事实核查", "一致性": "事实核查",
+    "要素": "要素补充", "六要素": "要素补充",
+    "结构": "结构建议", "格式": "结构建议",
+    "质量": "质量提醒", "风险": "质量提醒",
+    "发布": "发布建议",
+    "优化": "质量提醒",
+    "建议": "质量提醒",
 }
+
+# 关键词 → 兜底类型映射（按 detail/reason 中的关键词判断）
+_TYPE_KEYWORD_HINTS: list = [
+    (["标题", "title", "headline"], "标题优化"),
+    (["摘要", "summary", "abstract"], "摘要优化"),
+    (["事实", "核查", "fact", "consistency", "一致"], "事实核查"),
+    (["要素", "5w1h", "element", "要素"], "要素补充"),
+    (["结构", "structure", "format", "分段", "段落"], "结构建议"),
+    (["质量", "风险", "quality", "risk", "警告"], "质量提醒"),
+    (["发布", "publish", "release", "上线"], "发布建议"),
+]
+
+
+def _normalize_edit_type(raw_type: str, detail: str = "", reason: str = "") -> str:
+    """将 LLM 返回的建议类型归一化为中文枚举值。"""
+    if not raw_type or not raw_type.strip():
+        return "质量提醒"
+
+    key = raw_type.strip().lower().rstrip("：:")
+
+    # 1. 精确匹配
+    if key in _EDIT_TYPE_NORMALIZE_MAP:
+        return _EDIT_TYPE_NORMALIZE_MAP[key]
+
+    # 2. 模糊匹配（包含关系）
+    for en, zh in _EDIT_TYPE_NORMALIZE_MAP.items():
+        if en in key or key in en:
+            return zh
+
+    # 3. 通过 detail + reason 关键词判断
+    combined = f"{detail} {reason}".lower()
+    for hints, zh in _TYPE_KEYWORD_HINTS:
+        for h in hints:
+            if h in key or h in combined:
+                return zh
+
+    # 4. 兜底
+    return "质量提醒"
 
 
 async def edit_step(ctx: AgentContext) -> StepResult:
@@ -1027,12 +955,15 @@ async def edit_step(ctx: AgentContext) -> StepResult:
 【一致性检查】{json.dumps(ctx.consistency or {}, ensure_ascii=False)}
 
 请给出：
-1. suggestions: 编辑建议数组，每项包含 type（建议类型）、priority（优先级 high/medium/low）、detail（具体建议）、reason（原因）
+1. suggestions: 编辑建议数组，每项包含 type、priority、detail、reason
+   ⚠️ type 必须使用中文，只能从以下枚举中选择：
+      标题优化 / 摘要优化 / 事实核查 / 要素补充 / 结构建议 / 质量提醒 / 发布建议
+   priority 使用 high / medium / low
 2. overall_score: 综合评分 (0-100)
 3. ready_to_publish: 是否可以直接发布 (true/false)
 
 请严格返回 JSON 格式：
-{{"suggestions": [{{"type": "...", "priority": "medium", "detail": "...", "reason": "..."}}], "overall_score": 85, "ready_to_publish": true}}""",
+{{"suggestions": [{{"type": "标题优化", "priority": "medium", "detail": "具体建议", "reason": "修改理由"}}], "overall_score": 85, "ready_to_publish": true}}""",
             temperature=0.5,
             max_tokens=2048,
             provider=provider,
@@ -1041,6 +972,17 @@ async def edit_step(ctx: AgentContext) -> StepResult:
         elapsed_ms = int((time.time() - t0) * 1000)
 
         if data and not error:
+            # 归一化建议 type 为中文
+            suggestions = data.get("suggestions", [])
+            if isinstance(suggestions, list):
+                for s in suggestions:
+                    if isinstance(s, dict):
+                        s["type"] = _normalize_edit_type(
+                            str(s.get("type", "")),
+                            detail=str(s.get("detail", "")),
+                            reason=str(s.get("reason", "")),
+                        )
+            data["suggestions"] = suggestions
             ctx.edit_suggestions = data
             return StepResult(
                 step="edit_suggestions",
@@ -1055,16 +997,25 @@ async def edit_step(ctx: AgentContext) -> StepResult:
         logger.info("ℹ️ [edit_suggestions] %s 未配置/未启用，使用 mock", provider)
 
     elapsed_ms = int((time.time() - t0) * 1000)
-    await asyncio.sleep(0.1)
-    mock = dict(_MOCK_EDIT_SUGGESTIONS)
-    ctx.edit_suggestions = mock
+    edit_context = {
+        "title": ctx.title or "",
+        "summary": ctx.summary or "",
+        "summary_long": ctx.summary_long or "",
+        "keywords": ctx.keywords if ctx.keywords else [],
+        "topic": ctx.topic if ctx.topic else {},
+        "consistency": ctx.consistency if ctx.consistency else {},
+        "elements": ctx.news_elements if ctx.news_elements else {},
+        "text": ctx.cleaned_text or ctx.raw_text,
+    }
+    edit_fb = edit_suggestions_fallback(edit_context)
+    ctx.edit_suggestions = edit_fb
     return StepResult(
         step="edit_suggestions",
         status="completed",
         input=input_snapshot,
-        output=mock,
-        time_ms=100,
-        meta=StepMeta(provider="mock", model="fallback", latency_ms=100),
+        output={**edit_fb, "llm": False},
+        time_ms=elapsed_ms,
+        meta=StepMeta(provider="nlp", model="fallback_rule", latency_ms=elapsed_ms),
     )
 
 

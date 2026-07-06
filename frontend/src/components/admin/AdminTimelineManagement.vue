@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -874,15 +875,7 @@ onMounted(async () => {
       </el-table-column>
     </el-table>
 
-    <el-pagination
-      class="pager"
-      layout="total, prev, pager, next, sizes"
-      :total="visibleTimelineItems.length"
-      v-model:current-page="query.page"
-      v-model:page-size="query.page_size"
-      @current-change="loadList"
-      @size-change="loadList"
-    />
+    <PaginationBar :current-page="query.page" :total-pages="Math.ceil(visibleTimelineItems.length / query.page_size)" @change="(p: number) => { query.page = p; loadList(); }" />
 
     <!-- detail drawer -->
     <el-drawer v-model="detailVisible" title="Timeline 详情" size="640px">

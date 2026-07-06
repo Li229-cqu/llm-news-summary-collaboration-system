@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import {
   getAdminPostDetail,
   getAdminPostList,
@@ -251,17 +252,7 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
 
-      <div class="pagination-row">
-        <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @current-change="loadPosts"
-          @size-change="() => loadPosts(1)"
-        />
-      </div>
+      <PaginationBar :current-page="page" :total-pages="Math.ceil(total / pageSize)" @change="loadPosts" />
     </el-card>
 
     <el-drawer v-model="detailVisible" title="社区帖子详情" size="720px">

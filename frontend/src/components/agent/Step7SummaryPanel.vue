@@ -132,14 +132,25 @@ const riskSummary = computed(() => {
 
 <template>
   <div class="s7s" v-if="consistencyData">
-    <!-- ═══ 风险总览 ═══ -->
-    <div class="s7s__summary">
-      <div class="s7s__risk-row">
-        <span class="s7s__risk-label">综合质量</span>
-        <el-tag :type="riskTag(consistencyData.risk_level)" effect="dark" size="small">
+    <!-- ═══ Key metric stat cards ═══ -->
+    <div class="s7s__stat-row">
+      <div class="s7s__stat-cell">
+        <el-tag :type="riskTag(consistencyData.risk_level)" effect="dark" size="default">
           {{ riskText(consistencyData.risk_level) }}
         </el-tag>
-        <span class="s7s__risk-desc">{{ riskSummary }}</span>
+        <span class="s7s__stat-label">风险等级</span>
+      </div>
+      <div class="s7s__stat-cell">
+        <span class="s7s__stat-num">{{ (consistencyData.similarity_map || []).length }}</span>
+        <span class="s7s__stat-label">分析句子数</span>
+      </div>
+      <div class="s7s__stat-cell">
+        <span class="s7s__stat-num">{{ (consistencyData.similarity_map || []).filter((s: any) => s.type === 'hallucination').length }}</span>
+        <span class="s7s__stat-label">疑似幻觉</span>
+      </div>
+      <div class="s7s__stat-cell">
+        <span class="s7s__stat-num">{{ riskSummary }}</span>
+        <span class="s7s__stat-label">匹配概况</span>
       </div>
     </div>
 
@@ -193,42 +204,20 @@ const riskSummary = computed(() => {
 </template>
 
 <style scoped>
-.s7s {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+.s7s { display: flex; flex-direction: column; gap: 12px; }
 
-/* ── 风险总览 ── */
-.s7s__summary {
-  padding: 10px 14px;
-  background: var(--color-bg-hover);
-  border-radius: 8px;
-}
-.s7s__risk-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.s7s__risk-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-.s7s__risk-desc {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
+/* ── Stat card row ── */
+.s7s__stat-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.s7s__stat-cell { text-align: center; padding: 10px 6px; border-radius: 12px; background: var(--color-bg-hover); border: 1px solid var(--color-border); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.s7s__stat-num { font-size: 18px; font-weight: 800; color: var(--color-text-primary); word-break: break-word; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.s7s__stat-label { font-size: 13px; color: var(--color-text-secondary); }
 
 /* ── 分区标题 ── */
 .s7s__section-title {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: .03em;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
@@ -267,18 +256,18 @@ const riskSummary = computed(() => {
 }
 
 .s7s__severity-tag {
-  padding: 1px 8px;
+  padding: 2px 8px;
   border-radius: 3px;
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .s7s__type-tag {
-  padding: 1px 8px;
+  padding: 2px 8px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -291,14 +280,14 @@ const riskSummary = computed(() => {
 
 .s7s__issue-text {
   margin: 0 0 4px;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--color-text-primary);
 }
 
 .s7s__issue-reason {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-muted);
   font-style: italic;
 }
@@ -313,7 +302,7 @@ const riskSummary = computed(() => {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-text-secondary);
 }
 .s7s__check-dot {
@@ -334,7 +323,7 @@ const riskSummary = computed(() => {
 .s7s__empty {
   padding: 16px;
   text-align: center;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-text-muted);
   background: var(--color-bg-hover);
   border-radius: 8px;

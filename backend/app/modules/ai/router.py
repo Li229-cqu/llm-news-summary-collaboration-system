@@ -7,15 +7,12 @@ from fastapi import APIRouter, Depends, File, Header, UploadFile
 from app.common.response import ApiResponse, success_response
 from app.modules.ai.schema import (
     AIGenerateRecordDetail,
-    AIGenerateRequest,
-    AIGenerateResponse,
     AIRecordListResponse,
     DeleteAIRecordResult,
     FileUploadResponse,
 )
 from app.modules.ai.service import (
     delete_ai_record,
-    generate_title_summary,
     get_ai_record_detail,
     get_ai_records,
     handle_file_upload,
@@ -53,40 +50,12 @@ async def health_ai() -> ApiResponse[dict]:
     )
 
 
-@router.post("/generate", response_model=ApiResponse[AIGenerateResponse])
-async def generate_ai_content(
-    request: AIGenerateRequest,
-    current_user: Optional[UserInfo] = Depends(_get_optional_current_user),
-) -> ApiResponse[AIGenerateResponse]:
-    """转发标题摘要生成请求到 ai-service，并在后端保存生成记录。"""
-    return success_response(await generate_title_summary(request, current_user=current_user))
-
-
-@router.post("/generate/async")
-async def generate_ai_content_async(
-    request: AIGenerateRequest,
-    current_user: Optional[UserInfo] = Depends(_get_optional_current_user),
-):
-    """异步模式：创建任务并立即返回task_id，避免超时。"""
-    from app.modules.ai.service import _create_async_task, _get_async_task_result
-    
-    if not request.input_text.strip():
-        raise AppException(code=400, message="输入文本不能为空")
-    
-    if not 1 <= request.title_count <= 5:
-        raise AppException(code=400, message="标题数量必须在 1-5 范围内")
-    
-    task_id = await _create_async_task(request, current_user)
-    return success_response({"task_id": task_id})
-
-
-@router.get("/generate/async/{task_id}")
-async def get_async_task_result(task_id: str):
-    """查询异步任务结果。"""
-    from app.modules.ai.service import _get_async_task_result
-    
-    result = await _get_async_task_result(task_id)
-    return success_response(result)
+# ── 以下端点已移除（第一版直连 LLM 路径，已被 Agent 流水线取代） ──
+# POST /api/ai/generate      → POST /api/news-editor-agent/run-text
+# POST /api/ai/generate/async → POST /api/news-editor-agent/run-text
+# GET  /api/ai/generate/async/{task_id}  → SSE /api/news-editor-agent/task/{id}/stream
+#
+# 保留端点：历史记录查询/详情/删除、文件上传、健康检查
 
 
 @router.get("/records", response_model=ApiResponse[AIRecordListResponse])

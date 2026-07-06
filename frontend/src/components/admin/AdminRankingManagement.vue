@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import PaginationBar from '@/components/common/PaginationBar.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Link, Refresh, View, Hide } from '@element-plus/icons-vue'
 import {
@@ -161,7 +162,7 @@ onMounted(async () => {
               </template>
             </el-table-column>
           </el-table>
-          <el-pagination class="pager" layout="total, prev, pager, next, sizes" :total="newsData?.total || 0" v-model:current-page="newsQuery.page" v-model:page-size="newsQuery.page_size" @current-change="loadNewsRanking" @size-change="loadNewsRanking" />
+          <PaginationBar :current-page="newsQuery.page" :total-pages="Math.ceil((newsData?.total || 0) / newsQuery.page_size)" @change="(p: number) => { newsQuery.page = p; loadNewsRanking(); }" />
         </el-tab-pane>
 
         <el-tab-pane label="社区热议榜" name="community">
@@ -198,7 +199,7 @@ onMounted(async () => {
               </template>
             </el-table-column>
           </el-table>
-          <el-pagination class="pager" layout="total, prev, pager, next, sizes" :total="communityData?.total || 0" v-model:current-page="communityQuery.page" v-model:page-size="communityQuery.page_size" @current-change="loadCommunityRanking" @size-change="loadCommunityRanking" />
+          <PaginationBar :current-page="communityQuery.page" :total-pages="Math.ceil((communityData?.total || 0) / communityQuery.page_size)" @change="(p: number) => { communityQuery.page = p; loadCommunityRanking(); }" />
         </el-tab-pane>
       </el-tabs>
     </el-card>
