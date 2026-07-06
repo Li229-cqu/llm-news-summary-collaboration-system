@@ -53,6 +53,35 @@ def _dump_json(value: Any) -> Optional[str]:
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
+def _normalize_ai_source(value: Any, default: str = "unknown") -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"deepseek", "llm_deepseek", "summary_deepseek"}:
+        return "deepseek"
+    if raw in {"zhipu", "glm", "llm_zhipu", "glm-4", "glm4"}:
+        return "zhipu"
+    if raw in {"llm", "model", "ai", "openai"}:
+        return "llm"
+    if raw in {"fallback", "fallback_rule"}:
+        return "fallback"
+    if raw in {"nlp_rule", "rule", "local_rules", "local", "nlp", "algorithm", "extractive"}:
+        return "nlp_rule"
+    if raw in {"mock", "demo"}:
+        return raw
+    return default
+
+
+def _resolve_ai_source(*values: Any, provider: Optional[str] = None, fallback_used: bool = False) -> str:
+    for value in values:
+        normalized = _normalize_ai_source(value, default="")
+        if normalized:
+            return normalized
+    if fallback_used:
+        return "fallback"
+    return _normalize_ai_source(provider, default="unknown")
+
+
 # ═════════════════════════════════════════════════════════════
 # AgentService
 # ═════════════════════════════════════════════════════════════
@@ -544,8 +573,14 @@ class AgentService:
         # ── 判断 AI 来源：只看 Step 4 generate_title_summary ──
         step4 = next((r for r in collected if r.step == "generate_title_summary"), None)
         step4_provider = (step4.meta.provider or "").lower() if (step4 and step4.meta) else ""
-        real_providers = {"deepseek", "zhipu", "glm", "llm"}
-        actual_ai_source = "llm" if step4_provider in real_providers else "fallback"
+        actual_ai_source = _resolve_ai_source(
+            gen_output.get("generation_source"),
+            gen_output.get("source"),
+            gen_output.get("provider"),
+            step4_provider,
+            provider=step4_provider,
+            fallback_used=bool(gen_output.get("fallback_reason")),
+        )
 
         now = _now_text()
         user_id = task.get("user_id", 0) if task else 0

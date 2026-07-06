@@ -31,8 +31,10 @@ export interface NormalizedAIGenerateHistoryDetail extends AIGenerateRecordDetai
   standardResult: AIGenerateResponse
 }
 
-type ResultSource = 'llm' | 'mock' | 'fallback' | 'demo'
-type GenerationSource = 'llm' | 'mock' | 'fallback'
+export type RiskLevel = 'low' | 'medium' | 'high'
+export type QualityLevel = 'high' | 'medium' | 'low'
+type ResultSource = 'llm' | 'deepseek' | 'zhipu' | 'glm' | 'mock' | 'fallback' | 'demo' | 'nlp_rule' | 'unknown'
+type GenerationSource = ResultSource
 
 function isRecord(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -49,18 +51,71 @@ function toStringArray(value: unknown): string[] {
   return value.map(item => toStringValue(item).trim()).filter(Boolean)
 }
 
+export function normalizeRiskLevel(value: unknown, fallback: RiskLevel = 'medium'): RiskLevel {
+  const raw = toStringValue(value).trim().toLowerCase()
+  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw
+  if (raw === '低风险') return 'low'
+  if (raw === '中风险' || raw === '中等风险') return 'medium'
+  if (raw === '高风险') return 'high'
+  return fallback
+}
+
+export function riskLevelToQualityLevel(riskLevel: unknown): QualityLevel {
+  const normalized = normalizeRiskLevel(riskLevel)
+  if (normalized === 'low') return 'high'
+  if (normalized === 'high') return 'low'
+  return 'medium'
+}
+
+export function getQualityLabel(qualityLevel: unknown): string {
+  if (qualityLevel === 'high') return '高质量'
+  if (qualityLevel === 'low') return '低质量'
+  return '中质量'
+}
+
+export function getQualityTagType(qualityLevel: unknown): 'success' | 'warning' | 'danger' | 'info' {
+  if (qualityLevel === 'high') return 'success'
+  if (qualityLevel === 'low') return 'danger'
+  if (qualityLevel === 'medium') return 'warning'
+  return 'info'
+}
+
+export function getRiskLabel(riskLevel: unknown): string {
+  const normalized = normalizeRiskLevel(riskLevel)
+  if (normalized === 'low') return '低风险'
+  if (normalized === 'high') return '高风险'
+  return '中风险'
+}
+
+export function getQualityLabelFromRisk(riskLevel: unknown): string {
+  return getQualityLabel(riskLevelToQualityLevel(riskLevel))
+}
+
+export function getQualityTagTypeFromRisk(riskLevel: unknown): 'success' | 'warning' | 'danger' | 'info' {
+  return getQualityTagType(riskLevelToQualityLevel(riskLevel))
+}
+
+export function normalizeAISource(value: unknown, fallback: ResultSource = 'unknown'): ResultSource {
+  const raw = toStringValue(value).trim().toLowerCase()
+  if (!raw) return fallback
+  if (['deepseek', 'llm_deepseek', 'summary_deepseek'].includes(raw)) return 'deepseek'
+  if (['zhipu', 'glm', 'llm_zhipu', 'glm-4', 'glm4'].includes(raw)) return 'zhipu'
+  if (['llm', 'openai', 'model', 'ai'].includes(raw)) return 'llm'
+  if (raw === 'fallback' || raw === 'fallback_rule') return 'fallback'
+  if (['nlp_rule', 'rule', 'nlp', 'local_rules', 'local', 'algorithm', 'extractive'].includes(raw)) return 'nlp_rule'
+  if (raw === 'mock') return 'mock'
+  if (raw === 'demo') return 'demo'
+  return fallback
+}
+
 function pickResultSource(value: unknown): ResultSource | undefined {
-  if (value === 'llm' || value === 'mock' || value === 'fallback' || value === 'demo') {
-    return value
-  }
-  return undefined
+  const normalized = normalizeAISource(value)
+  return normalized === 'unknown' ? undefined : normalized
 }
 
 function pickGenerationSource(value: unknown): GenerationSource | undefined {
-  if (value === 'llm' || value === 'mock' || value === 'fallback') {
-    return value
-  }
-  return undefined
+  const normalized = normalizeAISource(value)
+  return normalized === 'unknown' ? undefined : normalized
 }
 
 function buildEmptyElements(): NewsElement {
@@ -68,7 +123,7 @@ function buildEmptyElements(): NewsElement {
 }
 
 function buildEmptyConsistency(): ConsistencyCheck {
-  return { score: 0, risk_level: 'low', issues: [], suggestions: [] }
+  return { score: 0, risk_level: 'medium', issues: [], suggestions: [] }
 }
 
 function hasConsistencyData(value: unknown): boolean {
@@ -152,7 +207,7 @@ function normalizeConsistency(value: unknown): ConsistencyCheck {
   if (isRecord(value)) {
     return {
       score: safeNumber(value.score, 0) ?? 0,
-      risk_level: value.risk_level === 'high' || value.risk_level === 'medium' ? value.risk_level : 'low',
+      risk_level: normalizeRiskLevel(value.risk_level),
       issues: toStringArray(value.issues),
       suggestions: toStringArray(value.suggestions),
     }
@@ -179,9 +234,9 @@ function hasRealStepSignal(steps: AgentStepSnapshot[] = []): boolean {
 }
 
 function normalizeFromDirectResult(result: Record<string, any>): AIGenerateResponse {
-  const source = pickResultSource(result.source) ?? 'mock'
+  const source = pickResultSource(result.source) ?? 'unknown'
   const generationSource = pickGenerationSource(result.generation_source)
-    ?? (source === 'fallback' ? 'fallback' : source === 'llm' ? 'llm' : 'mock')
+    ?? (source === 'unknown' ? 'unknown' : source)
 
   return {
     candidate_titles: toStringArray(result.candidate_titles),
@@ -200,7 +255,7 @@ function normalizeFromDirectResult(result: Record<string, any>): AIGenerateRespo
     evidence_chain: normalizeEvidenceChain(result.evidence_chain),
     evidence_chain_short: normalizeEvidenceChain(result.evidence_chain_short),
     evidence_chain_long: normalizeEvidenceChain(result.evidence_chain_long),
-    risk_level: result.risk_level === 'high' || result.risk_level === 'medium' ? result.risk_level : undefined,
+    risk_level: result.risk_level ? normalizeRiskLevel(result.risk_level) : undefined,
     risk_details: toStringValue(result.risk_details) || undefined,
     evidence_coverage: safeNumber(result.evidence_coverage, undefined),
   }
@@ -286,10 +341,10 @@ function normalizeFromAgentResult(source: unknown, steps: AgentStepSnapshot[]): 
         ? 'llm'
         : fallbackReason
           ? 'fallback'
-          : 'mock')
+          : 'unknown')
 
   const generationSource = pickGenerationSource(isRecord(source) ? source.generation_source : undefined)
-    ?? (sourceTag === 'fallback' ? 'fallback' : sourceTag === 'llm' ? 'llm' : 'mock')
+    ?? (sourceTag === 'unknown' ? 'unknown' : sourceTag)
 
   return {
     candidate_titles: candidateTitles,
@@ -308,7 +363,7 @@ function normalizeFromAgentResult(source: unknown, steps: AgentStepSnapshot[]): 
     provider,
     model,
     fallback_reason: fallbackReason,
-    risk_level: riskLevel,
+    risk_level: normalizeRiskLevel(riskLevel),
     risk_details: riskDetails,
     evidence_coverage: evidenceCoverage,
     evidence_chain_short: normalizeEvidenceChain(isRecord(source) ? source.evidence_chain_short : undefined),
@@ -349,7 +404,7 @@ function getHistoryDisplaySummary(result: AIGenerateResponse): string {
 }
 
 function resolveSource(result: AIGenerateResponse, fallbackSource?: string): string {
-  return result.generation_source || result.source || fallbackSource || ''
+  return normalizeAISource(fallbackSource || result.generation_source || result.source)
 }
 
 export function normalizeAIGenerateHistoryRecord(
@@ -357,7 +412,10 @@ export function normalizeAIGenerateHistoryRecord(
 ): NormalizedAIGenerateHistoryRecord {
   const standardResult = normalizeAIGenerateResult(record)
   // 来源优先用后端标准化后的 ai_source，API 数据比客户端推算更可靠
-  const displaySource = record.ai_source || resolveSource(standardResult, record.ai_source)
+  const displaySource = resolveSource(standardResult, record.ai_source)
+  const riskLevel = normalizeRiskLevel(record.risk_level ?? standardResult.risk_level ?? standardResult.consistency?.risk_level)
+  standardResult.risk_level = riskLevel
+  standardResult.consistency.risk_level = riskLevel
 
   return {
     id: record.id ?? '',
@@ -365,15 +423,15 @@ export function normalizeAIGenerateHistoryRecord(
     source_news_id: record.source_news_id ?? null,
     source_title: record.source_title ?? '',
     title_count: typeof record.title_count === 'number' ? record.title_count : 0,
-    risk_level: record.risk_level ?? standardResult.consistency?.risk_level ?? 'medium',
-    ai_source: record.ai_source,
+    risk_level: riskLevel,
+    ai_source: displaySource,
     created_at: record.created_at ?? '',
     candidate_titles: Array.isArray(record.candidate_titles) ? record.candidate_titles : standardResult.candidate_titles,
     summary_short: typeof record.summary_short === 'string' ? record.summary_short : standardResult.summary_short,
     displayTitle: getHistoryDisplayTitle(standardResult, record.source_title ?? ''),
     displaySummary: getHistoryDisplaySummary(standardResult),
     displaySource,
-    displaySourceTagType: getAIGenerateSourceTagType(displaySource),
+    displaySourceTagType: getAISourceTagType(displaySource),
     standardResult,
   }
 }
@@ -382,6 +440,12 @@ export function normalizeAIGenerateHistoryDetail(
   detail: AIGenerateRecordDetail | (Partial<AIGenerateRecordDetail> & Record<string, unknown>),
 ): NormalizedAIGenerateHistoryDetail {
   const standardResult = normalizeAIGenerateResult(detail.result ?? detail)
+  const source = normalizeAISource(detail.ai_source || standardResult.generation_source || standardResult.source)
+  const riskLevel = normalizeRiskLevel(detail.risk_level || standardResult.risk_level || standardResult.consistency?.risk_level)
+  standardResult.source = source
+  standardResult.generation_source = source
+  standardResult.risk_level = riskLevel
+  standardResult.consistency.risk_level = riskLevel
 
   return {
     id: detail.id ?? '',
@@ -392,8 +456,8 @@ export function normalizeAIGenerateHistoryDetail(
     params: detail.params ?? {},
     result: standardResult,
     created_at: detail.created_at ?? '',
-    ai_source: detail.ai_source || standardResult.source || 'fallback',
-    risk_level: detail.risk_level || standardResult.risk_level || standardResult.consistency?.risk_level || 'medium',
+    ai_source: source,
+    risk_level: riskLevel,
     standardResult,
   }
 }
@@ -411,28 +475,43 @@ export function formatProviderLabel(provider?: string): string {
   const value = provider?.trim()
   if (!value) return ''
   const lower = value.toLowerCase()
-  if (lower === 'mock' || lower === 'local') return 'NLP'
-  return value.replace(/mock/gi, 'NLP')
+  if (lower === 'deepseek') return 'DeepSeek'
+  if (lower === 'zhipu' || lower === 'glm') return '智谱'
+  if (lower === 'llm' || lower === 'ai' || lower === 'model') return 'AI'
+  if (lower === 'mock') return '演示'
+  if (lower === 'demo') return '演示'
+  if (lower === 'local' || lower === 'nlp' || lower === 'fallback_rule') return 'NLP 规则'
+  return value
 }
 
 export function getAIGenerateSourceLabel(source?: string, generationSource?: string): string {
-  const resolved = generationSource || source || ''
-  // "NLP 规则生成" 指系统在未调用真实大模型时，基于分句、关键词抽取、规则模板和文本特征完成的本地生成方式。
+  const resolved = normalizeAISource(source || generationSource) || 'unknown'
   switch (resolved) {
+    case 'deepseek':
+      return 'DeepSeek 生成'
+    case 'zhipu':
+    case 'glm':
+      return 'AI 生成'
     case 'llm':
-      return '真实 AI'
+      return 'AI 生成'
     case 'fallback':
-      return 'AI 回退至 NLP 规则生成'
-    case 'mock':
+      return '降级生成'
+    case 'nlp_rule':
       return 'NLP 规则生成'
+    case 'mock':
+    case 'demo':
+      return '演示生成'
     default:
       return '未知来源'
   }
 }
 
 export function getAIGenerateSourceTagType(source?: string, generationSource?: string): 'success' | 'warning' | 'info' {
-  const resolved = generationSource || source || 'mock'
+  const resolved = normalizeAISource(source || generationSource) || 'unknown'
   switch (resolved) {
+    case 'deepseek':
+    case 'zhipu':
+    case 'glm':
     case 'llm':
       return 'success'
     case 'fallback':
@@ -440,4 +519,33 @@ export function getAIGenerateSourceTagType(source?: string, generationSource?: s
     default:
       return 'info'
   }
+}
+
+export function getAISourceLabel(source?: string, generationSource?: string): string {
+  const resolved = normalizeAISource(source || generationSource)
+  switch (resolved) {
+    case 'deepseek':
+      return 'DeepSeek 生成'
+    case 'zhipu':
+    case 'glm':
+      return 'AI 生成'
+    case 'llm':
+      return 'AI 生成'
+    case 'nlp_rule':
+      return 'NLP 规则生成'
+    case 'fallback':
+      return '降级生成'
+    case 'mock':
+    case 'demo':
+      return '演示生成'
+    default:
+      return '未知来源'
+  }
+}
+
+export function getAISourceTagType(source?: string, generationSource?: string): 'success' | 'warning' | 'info' {
+  const resolved = normalizeAISource(source || generationSource)
+  if (resolved === 'llm' || resolved === 'deepseek' || resolved === 'zhipu' || resolved === 'glm') return 'success'
+  if (resolved === 'fallback') return 'warning'
+  return 'info'
 }

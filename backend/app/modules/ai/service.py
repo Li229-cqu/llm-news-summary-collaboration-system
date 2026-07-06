@@ -62,7 +62,7 @@ def _normalize_record_source(value: Any) -> str:
     return str(value or "manual") if str(value or "manual") in {"manual", "news"} else "manual"
 
 
-def _normalize_risk_level(value: Any) -> str:
+def _normalize_risk_level(value: Any, default: str = "medium") -> str:
     """统一风险等级为标准值，未知时默认 medium（不盲目乐观）。"""
     raw = str(value or "").strip().lower()
     if raw in {"low", "medium", "high"}:
@@ -71,33 +71,47 @@ def _normalize_risk_level(value: Any) -> str:
     cn_map = {"低风险": "low", "中风险": "medium", "中等风险": "medium", "高风险": "high"}
     if raw in cn_map:
         return cn_map[raw]
-    return "medium"
+    return default
 
 
-def _normalize_ai_source(value: Any) -> str:
-    """统一 ai_source 为标准枚举值。
-
-    标准值: llm / fallback / mock / demo
-    兼容旧值: nlp_rule / local_rules / fallback_rule → fallback
-              deepseek / zhipu / glm → llm
-    未知值: fallback（保守，不默认 mock 也不默认 llm）
-    """
+def _normalize_ai_source(value: Any, default: str = "unknown") -> str:
+    """统一 ai_source 为标准枚举值，保留可识别的真实 LLM provider。"""
     raw = str(value or "").strip().lower()
     if not raw:
-        return "fallback"
-    # real LLM providers → llm
-    if raw in {"llm", "deepseek", "zhipu", "glm"}:
+        return default
+    if raw in {"deepseek", "llm_deepseek", "summary_deepseek"}:
+        return "deepseek"
+    if raw in {"zhipu", "glm", "llm_zhipu", "glm-4", "glm4"}:
+        return "zhipu"
+    if raw in {"llm", "model", "ai", "openai"}:
         return "llm"
-    # fallback / local rules → fallback
-    if raw in {"fallback", "nlp_rule", "local_rules", "fallback_rule", "local", "nlp"}:
+    if raw in {"fallback", "fallback_rule"}:
         return "fallback"
-    # mock / demo → as-is
+    if raw in {"nlp_rule", "rule", "local_rules", "local", "nlp", "algorithm", "extractive"}:
+        return "nlp_rule"
     if raw == "mock":
         return "mock"
     if raw == "demo":
         return "demo"
-    # unknown → fallback (conservative)
-    return "fallback"
+    return default
+
+
+def _resolve_ai_source(
+    *values: Any,
+    llm_enabled: Optional[bool] = None,
+    provider: Optional[str] = None,
+    fallback_used: bool = False,
+    default: str = "unknown",
+) -> str:
+    for value in values:
+        normalized = _normalize_ai_source(value, default="")
+        if normalized:
+            return normalized
+    if fallback_used:
+        return "fallback"
+    if llm_enabled:
+        return _normalize_ai_source(provider, default="llm")
+    return default
 
 
 def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
@@ -126,7 +140,7 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
         row.get("check_result"),
         {
             "score": 0,
-            "risk_level": "low",
+            "risk_level": "medium",
             "issues": [],
             "suggestions": [],
         },
@@ -134,7 +148,7 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
     if not isinstance(consistency_raw, dict):
         consistency_raw = {
             "score": 0,
-            "risk_level": "low",
+            "risk_level": "medium",
             "issues": [],
             "suggestions": [],
         }
@@ -158,7 +172,8 @@ def _build_result_from_row(row: dict[str, Any]) -> AIGenerateResponse:
         source=_normalize_ai_source(row.get("ai_source")),
         generation_source=_normalize_ai_source(row.get("ai_source")),
         evidence_chain=EvidenceChain(**evidence_chain_raw) if evidence_chain_raw else None,
-        risk_level=_normalize_risk_level(row.get("risk_level") or consistency_raw.get("risk_level", "low")),
+        risk_level=_normalize_risk_level(consistency_raw.get("risk_level"), default="")
+        or _normalize_risk_level(row.get("risk_level"), default="medium"),
         risk_details=row.get("risk_details") or "",
         evidence_coverage=row.get("evidence_coverage") or 0.0,
     )
@@ -204,7 +219,7 @@ def _save_ai_record(
         "news_elements": _dump_json(result.elements.model_dump()),
         "risk_level": risk_level_value,
         "check_result": _dump_json(result.consistency.model_dump()),
-        "ai_source": result.source or "mock",
+        "ai_source": _resolve_ai_source(result.generation_source, result.source, result.provider),
         "response_ms": response_ms,
         "evidence_json": evidence_chain_json,
         "evidence_status": evidence_status,
@@ -283,7 +298,8 @@ def _save_ai_record(
                 "result": result.model_dump(),
                 "created_at": record_payload["created_at"],
                 "title_count": request.title_count,
-                "risk_level": result.consistency.risk_level,
+                "risk_level": result.risk_level or result.consistency.risk_level,
+                "ai_source": _resolve_ai_source(result.generation_source, result.source, result.provider),
             }
         )
 
@@ -341,11 +357,11 @@ def _query_ai_records_from_db(current_user: Optional[Any] = None) -> list[dict[s
     records: list[dict[str, Any]] = []
     for row in rows:
         # 优先从 check_result JSON 中解析 risk_level，比 DB 列更准确
-        db_risk = _normalize_risk_level(row.get("risk_level"))
+        db_risk = _normalize_risk_level(row.get("risk_level"), default="")
         check_json = _load_json(row.get("check_result"), None)
         check_risk = ""
         if isinstance(check_json, dict):
-            check_risk = _normalize_risk_level(check_json.get("risk_level", ""))
+            check_risk = _normalize_risk_level(check_json.get("risk_level", ""), default="")
         # check_result JSON 优先级高于 DB 列（DB 列可能是旧默认值）
         resolved_risk = check_risk or db_risk or "medium"
 
@@ -416,12 +432,15 @@ def _query_ai_record_detail_from_db(
     check_json = _load_json(row.get("check_result"), None)
     check_risk = ""
     if isinstance(check_json, dict):
-        check_risk = _normalize_risk_level(check_json.get("risk_level", ""))
-    db_risk = _normalize_risk_level(row.get("risk_level"))
+        check_risk = _normalize_risk_level(check_json.get("risk_level", ""), default="")
+    db_risk = _normalize_risk_level(row.get("risk_level"), default="")
     normalized_risk = check_risk or db_risk or "medium"
 
     result = _build_result_from_row(row)
     result.source = normalized_ai_source
+    result.generation_source = normalized_ai_source
+    result.risk_level = normalized_risk
+    result.consistency.risk_level = normalized_risk
     return {
         "id": row["id"],
         "source": _normalize_record_source(row.get("source")),

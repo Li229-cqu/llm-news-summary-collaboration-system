@@ -3,7 +3,14 @@ import { computed, ref } from 'vue'
 import { ElMessage, ElDialog } from 'element-plus'
 import { useAIDraftStore } from '@/stores/aiDraft'
 import type { AIGenerateResponse, EvidenceChain, SentenceEvidence, NewsElement, ConsistencyCheck } from '@/api/ai'
-import { formatProviderModel, getAIGenerateSourceLabel, getAIGenerateSourceTagType } from '@/utils/normalizeAIGenerateResult'
+import {
+  formatProviderModel,
+  getAIGenerateSourceLabel,
+  getAIGenerateSourceTagType,
+  getQualityLabelFromRisk,
+  getQualityTagTypeFromRisk,
+  normalizeRiskLevel,
+} from '@/utils/normalizeAIGenerateResult'
 import KeywordTags from './KeywordTags.vue'
 import NewsElements from './NewsElements.vue'
 import ConsistencyCheckPanel from './ConsistencyCheckPanel.vue'
@@ -20,13 +27,15 @@ const props = withDefaults(defineProps<Props>(), {
 const aiDraft = useAIDraftStore()
 
 const displayResult = computed(() => (props.overrideResult !== undefined ? props.overrideResult : aiDraft.result) || null)
-const resultSource = computed(() => displayResult.value?.generation_source || displayResult.value?.source || '')
 const resultProviderModel = computed(() => formatProviderModel(displayResult.value?.provider, displayResult.value?.model))
 
 const evidenceChainShort = computed<EvidenceChain | undefined>(() => displayResult.value?.evidence_chain_short)
 const evidenceChainLong = computed<EvidenceChain | undefined>(() => displayResult.value?.evidence_chain_long)
 const hasConsistency = computed(() => displayResult.value?.has_consistency === true)
-const riskLevel = computed(() => displayResult.value?.risk_level || (hasConsistency.value ? displayResult.value?.consistency?.risk_level : undefined))
+const riskLevel = computed(() => {
+  const raw = displayResult.value?.risk_level || (hasConsistency.value ? displayResult.value?.consistency?.risk_level : undefined)
+  return raw ? normalizeRiskLevel(raw) : undefined
+})
 const riskDetails = computed(() => (hasConsistency.value ? displayResult.value?.risk_details : undefined))
 const evidenceCoverage = computed(() => (hasConsistency.value ? displayResult.value?.evidence_coverage : undefined))
 
@@ -89,12 +98,7 @@ const showElements = computed(() => {
 const showConsistency = computed(() => hasConsistency.value)
 
 const getRiskLevelColor = (level: string) => {
-  switch (level) {
-    case 'high': return 'danger'
-    case 'medium': return 'warning'
-    case 'low': return 'success'
-    default: return 'info'
-  }
+  return getQualityTagTypeFromRisk(level)
 }
 
 const getRiskLevelText = (level: string) => {
@@ -165,7 +169,7 @@ const handleLongSummaryClick = (event: Event) => {
           <span v-if="resultProviderModel" class="source-meta">{{ resultProviderModel }}</span>
         </div>
         <div class="header-tags">
-          <el-tag v-if="hasResult()" :type="getAIGenerateSourceTagType(resultSource)" size="small">
+          <el-tag v-if="hasResult()" :type="getAIGenerateSourceTagType(displayResult?.generation_source, displayResult?.source)" size="small">
             {{ getAIGenerateSourceLabel(displayResult?.generation_source, displayResult?.source) }}
           </el-tag>
           <el-tag v-if="riskLevel" :type="getRiskLevelColor(riskLevel)" size="small">

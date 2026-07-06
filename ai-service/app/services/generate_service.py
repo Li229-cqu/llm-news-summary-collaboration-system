@@ -16,6 +16,23 @@ from app.services.evidence_service import evaluate_evidence, evaluate_evidence_m
 
 logger = logging.getLogger(__name__)
 
+AI_SOURCE_VALUES = {"mock", "llm", "fallback", "demo", "nlp_rule", "rule", "deepseek", "zhipu", "glm", "unknown"}
+
+
+def _normalize_generation_source(value: str | None, default: str = "unknown") -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"llm_deepseek", "summary_deepseek"}:
+        return "deepseek"
+    if raw in {"llm_zhipu", "glm-4", "glm4"}:
+        return "zhipu"
+    if raw in {"local", "local_rules", "nlp", "algorithm", "extractive"}:
+        return "nlp_rule"
+    if raw in AI_SOURCE_VALUES:
+        return raw
+    return default
+
 CLICKBAIT_WORDS = [
     "震撼", "炸裂", "万万没想到", "惊呆", "震惊", "吓尿", "跪了",
     "惨了", "绝了", "神了", "逆天", "厉害了", "毁三观", "吓傻",
@@ -428,8 +445,8 @@ def generate_mock_response(
         keywords=keywords,
         elements=elements,
         consistency=consistency,
-        source=source if source in {"mock", "llm", "fallback", "demo"} else "mock",
-        generation_source=generation_source if generation_source in {"mock", "llm", "fallback"} else "mock",
+        source=_normalize_generation_source(source, "mock"),
+        generation_source=_normalize_generation_source(generation_source, _normalize_generation_source(source, "mock")),
         provider=provider,
         model=model,
         fallback_reason=fallback_reason,
@@ -470,7 +487,13 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
 
     if not settings.summary_llm_enabled:
         logger.info("LLM 未启用，使用动态 mock 生成响应")
-        return generate_mock_response(request)
+        return generate_mock_response(
+            request,
+            source="nlp_rule",
+            generation_source="nlp_rule",
+            provider="local",
+            model="rule-based",
+        )
 
     if settings.summary_llm_enabled:
         logger.info(f"双AI架构已启用，准备调用 DeepSeek 生成摘要: model={settings.summary_llm_model}")
@@ -518,7 +541,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
 
             response = short_response if short_response else long_response
             response.source = "llm"
-            response.generation_source = "llm"
+            response.generation_source = _normalize_generation_source(settings.summary_llm_provider, "llm")
             response.provider = settings.summary_llm_provider
             response.model = settings.summary_llm_model
             response.fallback_reason = None
@@ -617,7 +640,7 @@ async def generate_title_summary(request: GenerateRequest) -> GenerateResponse:
                 summary_length=request.summary_length
             )
             response.source = "llm"
-            response.generation_source = "llm"
+            response.generation_source = _normalize_generation_source(settings.summary_llm_provider, "llm")
             response.provider = settings.summary_llm_provider
             response.model = settings.summary_llm_model
             response.fallback_reason = None

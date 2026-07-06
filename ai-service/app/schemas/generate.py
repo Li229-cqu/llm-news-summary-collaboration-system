@@ -32,6 +32,10 @@ class ConsistencyCheck(BaseModel):
     suggestions: list[str]
 
 
+AISource = Literal["mock", "llm", "fallback", "demo", "nlp_rule", "rule", "deepseek", "zhipu", "glm", "unknown"]
+GenerationSource = Literal["mock", "llm", "fallback", "demo", "nlp_rule", "rule", "deepseek", "zhipu", "glm", "unknown"]
+
+
 class GenerateResponse(BaseModel):
     candidate_titles: list[str]
     summary_short: str
@@ -40,8 +44,8 @@ class GenerateResponse(BaseModel):
     keywords: list[str]
     elements: NewsElement
     consistency: ConsistencyCheck
-    source: Literal["mock", "llm", "fallback", "demo"] = "mock"
-    generation_source: Optional[Literal["mock", "llm", "fallback"]] = None
+    source: AISource = "mock"
+    generation_source: Optional[GenerationSource] = None
     provider: Optional[str] = None
     model: Optional[str] = None
     fallback_reason: Optional[str] = None

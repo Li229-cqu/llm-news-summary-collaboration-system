@@ -9,8 +9,10 @@ import AIGenerateSidebar from './components/AIGenerateSidebar.vue'
 import type { AIGenerateRecordItem } from '@/api/ai'
 import {
   formatProviderModel,
-  getAIGenerateSourceLabel,
-  getAIGenerateSourceTagType,
+  getAISourceLabel,
+  getAISourceTagType,
+  getQualityLabelFromRisk,
+  getQualityTagTypeFromRisk,
   type NormalizedAIGenerateHistoryRecord,
 } from '@/utils/normalizeAIGenerateResult'
 
@@ -28,7 +30,6 @@ const {
   deleteRecord,
   openExportDialog,
   confirmExport,
-  getRiskLevelType,
   formatDate,
 } = useAIGenerateHistory()
 
@@ -70,11 +71,11 @@ function getPreviewSummary(record: NormalizedAIGenerateHistoryRecord): string {
 }
 
 function getSourceLabel(record: NormalizedAIGenerateHistoryRecord): string {
-  return getAIGenerateSourceLabel(record.displaySource, record.standardResult.generation_source)
+  return getAISourceLabel(record.displaySource, record.standardResult.generation_source)
 }
 
 function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
-  return getAIGenerateSourceTagType(record.displaySource, record.standardResult.generation_source)
+  return getAISourceTagType(record.displaySource, record.standardResult.generation_source)
 }
 </script>
 
@@ -123,7 +124,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
                 <div class="card-source-title">{{ record.source_title || '暂无来源标题' }}</div>
                 <div class="card-summary">{{ getPreviewSummary(record) }}</div>
                 <div class="card-meta">
-                  <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
+                  <el-tag :type="getQualityTagTypeFromRisk(record.risk_level)" size="small">
                     {{ record.risk_level === 'low' ? '高质量' : record.risk_level === 'medium' ? '中质量' : '低质量' }}
                   </el-tag>
                   <el-tag :type="getSourceTagType(record)" size="small">

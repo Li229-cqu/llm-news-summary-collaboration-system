@@ -58,6 +58,10 @@ class EvidenceChain(BaseModel):
     evidence_coverage: float = 0.0
 
 
+AISource = Literal["mock", "llm", "fallback", "demo", "nlp_rule", "deepseek", "zhipu", "glm", "unknown"]
+GenerationSource = Literal["mock", "llm", "fallback", "demo", "nlp_rule", "deepseek", "zhipu", "glm", "unknown"]
+
+
 class AIGenerateResponse(BaseModel):
     candidate_titles: List[str]
     summary_short: str
@@ -66,8 +70,8 @@ class AIGenerateResponse(BaseModel):
     keywords: List[str]
     elements: NewsElement
     consistency: ConsistencyCheck
-    source: Optional[Literal["mock", "llm", "fallback", "demo"]] = "mock"
-    generation_source: Optional[Literal["mock", "llm", "fallback"]] = None
+    source: Optional[AISource] = "unknown"
+    generation_source: Optional[GenerationSource] = None
     provider: Optional[str] = None
     model: Optional[str] = None
     fallback_reason: Optional[str] = None
@@ -86,7 +90,7 @@ class AIGenerateRecordItem(BaseModel):
     source_title: str
     title_count: int
     risk_level: Literal["low", "medium", "high"]
-    ai_source: Literal["mock", "llm", "fallback", "demo"] = "mock"
+    ai_source: AISource = "unknown"
     created_at: str
     candidate_titles: list[str] = []
     summary_short: str = ""
@@ -101,7 +105,7 @@ class AIGenerateRecordDetail(BaseModel):
     params: dict
     result: AIGenerateResponse
     created_at: str
-    ai_source: Literal["mock", "llm", "fallback", "demo"] = "fallback"
+    ai_source: AISource = "unknown"
     risk_level: Literal["low", "medium", "high"] = "medium"
 
 

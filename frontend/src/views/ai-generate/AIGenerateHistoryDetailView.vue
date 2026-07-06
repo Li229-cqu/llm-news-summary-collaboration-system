@@ -10,8 +10,10 @@ import AIResultPanel from '@/components/ai/AIResultPanel.vue'
 import type { AIGenerateRecordDetail } from '@/api/ai'
 import {
   formatProviderModel,
-  getAIGenerateSourceLabel,
-  getAIGenerateSourceTagType,
+  getAISourceLabel,
+  getAISourceTagType,
+  getQualityLabelFromRisk,
+  getQualityTagTypeFromRisk,
   normalizeAIGenerateHistoryDetail,
 } from '@/utils/normalizeAIGenerateResult'
 
@@ -27,7 +29,6 @@ const {
   deleteRecord,
   openExportDialog,
   confirmExport,
-  getRiskLevelType,
   formatDate,
 } = useAIGenerateHistory()
 
@@ -35,12 +36,9 @@ const detail = ref<AIGenerateRecordDetail | null>(null)
 const loading = ref(false)
 const notFound = ref(false)
 const detailRiskLevel = computed(() => {
-  const result = normalizedDetail.value?.standardResult
-  if (!result) return undefined
-  return result.has_consistency
-    ? result.consistency?.risk_level
-    : result.risk_level
+  return normalizedDetail.value?.risk_level
 })
+const detailQualityLabel = computed(() => getQualityLabelFromRisk(detailRiskLevel.value))
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -81,8 +79,8 @@ async function handleDelete() {
     source_news_id: detail.value.source_news_id,
     source_title: detail.value.source_title,
     title_count: detail.value.params?.title_count ?? 0,
-    risk_level: detailRiskLevel.value ?? 'low',
-    ai_source: detail.value.result?.generation_source || detail.value.result?.source,
+    risk_level: (detailRiskLevel.value as 'low' | 'medium' | 'high') ?? 'medium',
+    ai_source: normalizedDetail.value?.ai_source,
     created_at: detail.value.created_at,
   }
   const success = await deleteRecord(record)
@@ -99,18 +97,18 @@ function handleExport() {
     source_news_id: detail.value.source_news_id,
     source_title: detail.value.source_title,
     title_count: detail.value.params?.title_count ?? 0,
-    risk_level: detailRiskLevel.value ?? 'low',
-    ai_source: detail.value.result?.generation_source || detail.value.result?.source,
+    risk_level: (detailRiskLevel.value as 'low' | 'medium' | 'high') ?? 'medium',
+    ai_source: normalizedDetail.value?.ai_source,
     created_at: detail.value.created_at,
   })
 }
 
 function getSourceLabel() {
-  return getAIGenerateSourceLabel(normalizedDetail.value?.result?.generation_source, normalizedDetail.value?.result?.generation_source)
+  return getAISourceLabel(normalizedDetail.value?.ai_source, normalizedDetail.value?.standardResult.generation_source)
 }
 
 function getSourceTagType() {
-  return getAIGenerateSourceTagType(normalizedDetail.value?.result?.generation_source, normalizedDetail.value?.result?.generation_source)
+  return getAISourceTagType(normalizedDetail.value?.ai_source, normalizedDetail.value?.standardResult.generation_source)
 }
 </script>
 
@@ -155,7 +153,7 @@ function getSourceTagType() {
             <div class="info-header">
               <h2>{{ detail.source_title || '暂无标题' }}</h2>
               <div class="info-tags">
-                <el-tag v-if="detailRiskLevel" :type="getRiskLevelType(detailRiskLevel)" size="small">
+                <el-tag v-if="detailRiskLevel" :type="getQualityTagTypeFromRisk(detailRiskLevel)" size="small">
                   {{ detailRiskLevel === 'low' ? '高质量' : detailRiskLevel === 'medium' ? '中质量' : '低质量' }}
                 </el-tag>
                 <el-tag :type="getSourceTagType()" size="small">

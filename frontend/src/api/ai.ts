@@ -61,8 +61,8 @@ export interface AIGenerateResponse {
   elements: NewsElement
   consistency: ConsistencyCheck
   has_consistency?: boolean
-  source?: 'mock' | 'llm' | 'fallback' | 'demo'
-  generation_source?: 'llm' | 'mock' | 'fallback'
+  source?: 'mock' | 'llm' | 'deepseek' | 'zhipu' | 'glm' | 'fallback' | 'demo' | 'nlp_rule' | 'unknown' | string
+  generation_source?: 'llm' | 'deepseek' | 'zhipu' | 'glm' | 'mock' | 'fallback' | 'demo' | 'nlp_rule' | 'unknown' | string
   provider?: string
   model?: string
   fallback_reason?: string
@@ -84,7 +84,7 @@ export interface AIGenerateRecordItem {
   source_title: string
   title_count: number
   risk_level: 'low' | 'medium' | 'high'
-  ai_source?: 'mock' | 'llm' | 'fallback' | 'demo'
+  ai_source?: 'mock' | 'llm' | 'deepseek' | 'zhipu' | 'glm' | 'fallback' | 'demo' | 'nlp_rule' | 'unknown' | string
   created_at: string
   candidate_titles?: string[]
   summary_short?: string
@@ -100,7 +100,7 @@ export interface AIGenerateRecordDetail {
   result: AIGenerateResponse
   created_at: string
   title_count?: number
-  ai_source?: 'mock' | 'llm' | 'fallback' | 'demo'
+  ai_source?: 'mock' | 'llm' | 'deepseek' | 'zhipu' | 'glm' | 'fallback' | 'demo' | 'nlp_rule' | 'unknown' | string
   risk_level?: 'low' | 'medium' | 'high' | string
 }
 

@@ -51,6 +51,25 @@ from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_ai_source(value: Any, default: str = "unknown") -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"deepseek", "llm_deepseek", "summary_deepseek"}:
+        return "deepseek"
+    if raw in {"zhipu", "glm", "llm_zhipu", "glm-4", "glm4"}:
+        return "zhipu"
+    if raw in {"llm", "model", "ai", "openai"}:
+        return "llm"
+    if raw in {"fallback", "fallback_rule"}:
+        return "fallback"
+    if raw in {"nlp_rule", "rule", "local_rules", "local", "nlp", "algorithm", "extractive"}:
+        return "nlp_rule"
+    if raw in {"mock", "demo"}:
+        return raw
+    return default
+
 # ═══════════════════════════════════════════════════════════
 # 步骤元数据
 # ═══════════════════════════════════════════════════════════
@@ -297,7 +316,9 @@ async def extract_keywords_step(ctx: AgentContext) -> StepResult:
     t0 = time.time()
 
     # ── 真实 LLM 调用 ─────────────────────────────────
-    if llm_service.is_available(provider):
+    provider_available = llm_service.is_available(provider)
+
+    if provider_available:
         data, error = await llm_service.chat_json(
             system_prompt="你是一个专业的新闻关键词提取助手。从新闻文本中提取最重要的关键词，返回 JSON 格式。",
             user_message=f"""请从以下新闻文本中提取 5-10 个最重要的关键词，按重要性排序。
@@ -371,7 +392,9 @@ async def extract_elements_step(ctx: AgentContext) -> StepResult:
     error = None
 
     # ── 真实 LLM 调用（含 retry） ─────────────────────
-    if llm_service.is_available(provider):
+    provider_available = llm_service.is_available(provider)
+
+    if provider_available:
         for attempt in range(2):  # 最多 2 次尝试
             data, error = await llm_service.chat_json(
                 system_prompt=("你是一个专业的新闻分析助手。从新闻文本中提取六要素（5W1H），返回 JSON 格式。每个要素必须填写，如果原文未提及则填未知。"),
@@ -483,7 +506,9 @@ async def generate_step(ctx: AgentContext) -> StepResult:
     summary_length = params.get("summary_length", "both")
     model = params.get("model") or None
     provider = get_step_provider("generate_title_summary")
-    provider_model = model or llm_service._get_provider_config(provider)["model"]
+    provider_config = llm_service._get_provider_config(provider)
+    actual_provider = _normalize_ai_source(provider_config.get("provider") or provider, _normalize_ai_source(provider, "llm"))
+    provider_model = model or provider_config["model"]
 
     # ── 根据参数构建精确指令 ─────────────────────────────
 
@@ -527,8 +552,9 @@ async def generate_step(ctx: AgentContext) -> StepResult:
     }
 
     t0 = time.time()
+    provider_available = llm_service.is_available(provider)
 
-    if llm_service.is_available(provider):
+    if provider_available:
         kw_text = ", ".join(ctx.keywords[:5]) if ctx.keywords else "无"
         elements = ctx.news_elements or {}
         data, error = await llm_service.chat_json(
@@ -583,9 +609,13 @@ async def generate_step(ctx: AgentContext) -> StepResult:
                     "summary_short": summary,
                     "summary_long": data.get("summary_long", ""),
                     "llm": True,
+                    "source": "llm",
+                    "generation_source": actual_provider,
+                    "provider": actual_provider,
+                    "model": provider_model,
                 },
                 time_ms=elapsed_ms,
-                meta=StepMeta(provider=provider, model=provider_model, latency_ms=elapsed_ms),
+                meta=StepMeta(provider=actual_provider, model=provider_model, latency_ms=elapsed_ms),
             )
         logger.warning("⚠️ [generate] %s 失败，使用 mock: %s", provider, error)
     else:
@@ -598,6 +628,14 @@ async def generate_step(ctx: AgentContext) -> StepResult:
         keywords=ctx.keywords if ctx.keywords else None,
         elements=ctx.news_elements if ctx.news_elements else None,
     )
+    fallback_source = "fallback" if provider_available else "nlp_rule"
+    gen_fb.update({
+        "source": fallback_source,
+        "generation_source": fallback_source,
+        "provider": "nlp",
+        "model": "fallback_rule",
+        "fallback_reason": f"{actual_provider} LLM failed" if provider_available else f"{actual_provider} LLM disabled or not configured",
+    })
     titles = gen_fb.get("candidate_titles", [])
     ctx.title = titles[0] if titles else ""
     ctx.summary = gen_fb.get("summary_short", "")

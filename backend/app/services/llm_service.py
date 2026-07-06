@@ -108,6 +108,7 @@ class LLMService:
         defaults = get_provider_defaults(provider)  # type: ignore[arg-type]
         prefix = _PROVIDER_ENV_PREFIX.get(provider, "EVIDENCE_LLM")
         return {
+            "provider": os.getenv(f"{prefix}_PROVIDER", provider) or provider,
             "enabled": _env_bool(f"{prefix}_ENABLED", "false"),
             "api_key": os.getenv(f"{prefix}_API_KEY", "") or "",
             "base_url": os.getenv(
