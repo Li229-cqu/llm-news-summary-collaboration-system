@@ -101,6 +101,8 @@ class AIGenerateRecordDetail(BaseModel):
     params: dict
     result: AIGenerateResponse
     created_at: str
+    ai_source: Literal["mock", "llm", "fallback", "demo"] = "fallback"
+    risk_level: Literal["low", "medium", "high"] = "medium"
 
 
 class AIRecordListResponse(BaseModel):

@@ -392,6 +392,8 @@ export function normalizeAIGenerateHistoryDetail(
     params: detail.params ?? {},
     result: standardResult,
     created_at: detail.created_at ?? '',
+    ai_source: detail.ai_source || standardResult.source || 'fallback',
+    risk_level: detail.risk_level || standardResult.risk_level || standardResult.consistency?.risk_level || 'medium',
     standardResult,
   }
 }

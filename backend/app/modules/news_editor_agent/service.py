@@ -541,14 +541,11 @@ class AgentService:
         }
         total_ms = sum(r.time_ms for r in collected)
 
-        # ── 判断 AI 来源 ──
-        real_providers = {"deepseek", "zhipu", "glm"}
-        used_real_llm = any(
-            r.meta and r.meta.provider and r.meta.provider.lower() in real_providers
-            for r in collected
-        )
-        # 使用标准枚举值: llm / fallback
-        actual_ai_source = "llm" if used_real_llm else "fallback"
+        # ── 判断 AI 来源：只看 Step 4 generate_title_summary ──
+        step4 = next((r for r in collected if r.step == "generate_title_summary"), None)
+        step4_provider = (step4.meta.provider or "").lower() if (step4 and step4.meta) else ""
+        real_providers = {"deepseek", "zhipu", "glm", "llm"}
+        actual_ai_source = "llm" if step4_provider in real_providers else "fallback"
 
         now = _now_text()
         user_id = task.get("user_id", 0) if task else 0

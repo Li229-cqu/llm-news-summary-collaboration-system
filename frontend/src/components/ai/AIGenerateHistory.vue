@@ -216,10 +216,10 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
             <h1 class="ghd__hero-title">{{ detail.source_title || 'AI 生成结果' }}</h1>
             <div class="ghd__hero-badges">
               <el-tag
-                :type="detail.risk_level === 'high' ? 'danger' : detail.risk_level === 'medium' ? 'warning' : 'success'"
+                :type="detail.standardResult.risk_level === 'high' ? 'danger' : detail.standardResult.risk_level === 'medium' ? 'warning' : 'success'"
                 size="small" effect="dark" round
               >
-                {{ detail.risk_level === 'low' ? '高质量' : detail.risk_level === 'medium' ? '中质量' : '低质量' }}
+                {{ detail.standardResult.risk_level === 'low' ? '高质量' : detail.standardResult.risk_level === 'medium' ? '中质量' : '低质量' }}
               </el-tag>
             </div>
           </div>

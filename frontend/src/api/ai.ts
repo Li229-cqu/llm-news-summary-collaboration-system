@@ -100,6 +100,7 @@ export interface AIGenerateRecordDetail {
   result: AIGenerateResponse
   created_at: string
   title_count?: number
+  ai_source?: 'mock' | 'llm' | 'fallback' | 'demo'
   risk_level?: 'low' | 'medium' | 'high' | string
 }
 

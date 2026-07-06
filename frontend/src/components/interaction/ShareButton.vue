@@ -27,21 +27,40 @@ function sanitizeFilename(name: string): string {
   return safe.slice(0, 40) || `news-share-${Date.now()}`
 }
 
+function resolveVar(value: string): string {
+  // Read the actual computed value from the live document, where CSS variables are defined
+  const testEl = document.createElement('div')
+  testEl.style.setProperty('background', value)
+  document.body.appendChild(testEl)
+  const computed = getComputedStyle(testEl).backgroundImage || getComputedStyle(testEl).background
+  document.body.removeChild(testEl)
+  // If the computed value still contains var(), return a safe fallback
+  if (!computed || computed === 'none' || computed.includes('var(')) return ''
+  return computed
+}
+
 function sanitizeClonedStyles(root: HTMLElement, clonedWindow: Window) {
+  // Read resolved values from the live document once
+  const liveStyle = getComputedStyle(document.documentElement)
+  const cardBg = liveStyle.getPropertyValue('--color-bg-card').trim() || '#ffffff'
+  const hoverBg = liveStyle.getPropertyValue('--color-bg-hover').trim() || '#f8fafc'
+  const borderColor = liveStyle.getPropertyValue('--color-border').trim() || '#e2e8f0'
+  const textColor = liveStyle.getPropertyValue('--color-text-primary').trim() || '#334155'
+
   const elements: HTMLElement[] = [root, ...Array.from(root.querySelectorAll('*')) as HTMLElement[]]
   elements.forEach((el) => {
     const style = clonedWindow.getComputedStyle(el)
     const bgImage = style.backgroundImage || ''
     const bg = style.background || ''
     const boxShadow = style.boxShadow || ''
-    const borderColor = style.borderColor || ''
+    const brdColor = style.borderColor || ''
     const color = style.color || ''
 
     const hasUnsupportedColor =
       bgImage.includes('color(') || bgImage.includes('color-mix(') ||
       bg.includes('color(') || bg.includes('color-mix(') ||
       boxShadow.includes('color(') || boxShadow.includes('color-mix(') ||
-      borderColor.includes('color(') || borderColor.includes('color-mix(') ||
+      brdColor.includes('color(') || brdColor.includes('color-mix(') ||
       color.includes('color(') || color.includes('color-mix(')
 
     const hasGradient =
@@ -49,20 +68,22 @@ function sanitizeClonedStyles(root: HTMLElement, clonedWindow: Window) {
       bgImage.includes('conic-gradient')
 
     const hasVar = bgImage.includes('var(') || bg.includes('var(') ||
-      boxShadow.includes('var(') || borderColor.includes('var(')
+      boxShadow.includes('var(') || brdColor.includes('var(') || color.includes('var(')
 
     if (hasUnsupportedColor || hasVar) {
       el.style.backgroundImage = 'none'
-      if (!el.style.backgroundColor || el.style.backgroundColor === 'transparent') {
-        el.style.backgroundColor = 'var(--color-bg-card)'
+      const currentBg = style.backgroundColor
+      if (!currentBg || currentBg === 'transparent' || currentBg === 'rgba(0, 0, 0, 0)') {
+        el.style.backgroundColor = cardBg
       }
       el.style.boxShadow = 'none'
-      el.style.borderColor = 'var(--color-border)'
-      el.style.color = 'var(--color-text-primary)'
+      el.style.borderColor = borderColor
+      el.style.color = textColor
     } else if (hasGradient) {
       el.style.backgroundImage = 'none'
-      if (!el.style.backgroundColor || el.style.backgroundColor === 'transparent') {
-        el.style.backgroundColor = 'var(--color-bg-hover)'
+      const currentBg = style.backgroundColor
+      if (!currentBg || currentBg === 'transparent' || currentBg === 'rgba(0, 0, 0, 0)') {
+        el.style.backgroundColor = hoverBg
       }
     }
   })
@@ -88,8 +109,11 @@ async function handleScreenshot() {
 
   loading.value = true
   try {
+    const liveStyle = getComputedStyle(document.documentElement)
+    const resolvedBg = liveStyle.getPropertyValue('--color-bg-card').trim() || '#ffffff'
+
     const canvas = await html2canvas(target, {
-      backgroundColor: 'var(--color-bg-card)',
+      backgroundColor: resolvedBg,
       useCORS: true,
       scale: window.devicePixelRatio || 2,
       logging: false,

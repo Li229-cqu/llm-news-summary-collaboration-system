@@ -63,7 +63,15 @@ def _normalize_record_source(value: Any) -> str:
 
 
 def _normalize_risk_level(value: Any) -> str:
-    return str(value or "low") if str(value or "low") in {"low", "medium", "high"} else "low"
+    """统一风险等级为标准值，未知时默认 medium（不盲目乐观）。"""
+    raw = str(value or "").strip().lower()
+    if raw in {"low", "medium", "high"}:
+        return raw
+    # 中文标签映射
+    cn_map = {"低风险": "low", "中风险": "medium", "中等风险": "medium", "高风险": "high"}
+    if raw in cn_map:
+        return cn_map[raw]
+    return "medium"
 
 
 def _normalize_ai_source(value: Any) -> str:
@@ -403,8 +411,17 @@ def _query_ai_record_detail_from_db(
     if not row:
         return None
 
+    # ── 统一提取 risk_level 和 ai_source ──
+    normalized_ai_source = _normalize_ai_source(row.get("ai_source"))
+    check_json = _load_json(row.get("check_result"), None)
+    check_risk = ""
+    if isinstance(check_json, dict):
+        check_risk = _normalize_risk_level(check_json.get("risk_level", ""))
+    db_risk = _normalize_risk_level(row.get("risk_level"))
+    normalized_risk = check_risk or db_risk or "medium"
+
     result = _build_result_from_row(row)
-    result.source = _normalize_ai_source(row.get("ai_source"))
+    result.source = normalized_ai_source
     return {
         "id": row["id"],
         "source": _normalize_record_source(row.get("source")),
@@ -420,6 +437,8 @@ def _query_ai_record_detail_from_db(
         },
         "result": result,
         "created_at": _now_text() if row.get("created_at") is None else str(row["created_at"]),
+        "ai_source": normalized_ai_source,
+        "risk_level": normalized_risk,
     }
 
 
@@ -511,6 +530,13 @@ def get_ai_record_detail(
     if not record:
         raise AppException(code=404, message="历史记录不存在")
 
+    mock_result_raw = record.get("result", {})
+    mock_result = AIGenerateResponse(**mock_result_raw) if isinstance(mock_result_raw, dict) else AIGenerateResponse()
+    mock_ai_source = _normalize_ai_source(record.get("ai_source") or mock_result_raw.get("source"))
+    mock_risk = _normalize_risk_level(
+        record.get("risk_level") or mock_result_raw.get("risk_level")
+    ) or "medium"
+
     return AIGenerateRecordDetail(
         id=record["id"],
         source=_normalize_record_source(record.get("source")),
@@ -518,8 +544,10 @@ def get_ai_record_detail(
         source_title=record["source_title"],
         input_text=record["input_text"],
         params=record["params"],
-        result=AIGenerateResponse(**record["result"]),
+        result=mock_result,
         created_at=record["created_at"],
+        ai_source=mock_ai_source,
+        risk_level=mock_risk,
     )
 
 
