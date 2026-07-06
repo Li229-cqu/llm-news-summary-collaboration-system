@@ -6,7 +6,10 @@ import logging
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
 
 from app.common.exceptions import AppException
 from app.common.utils import format_datetime, paginate
@@ -126,6 +129,16 @@ from app.modules.admin.schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+AI_SERVICE_ENV_PATH = Path(__file__).resolve().parents[4] / "ai-service" / ".env"
+load_dotenv(AI_SERVICE_ENV_PATH)
+
+SENSITIVE_CONFIG_KEY_PARTS = ('api_key', 'secret_key', 'token')
+
+
+def _is_sensitive_config_key(config_key: str) -> bool:
+    key = (config_key or '').lower()
+    return any(part in key for part in SENSITIVE_CONFIG_KEY_PARTS)
 
 STATUS_LABELS = {
     0: '已下架',
@@ -2585,13 +2598,14 @@ def get_system_config() -> Dict[str, Any]:
     rows = execute_query('SELECT * FROM system_config ORDER BY id')
     items = []
     for r in rows:
+        is_sensitive = _is_sensitive_config_key(str(r.get('config_key') or ''))
         items.append(SystemConfigItem(
             id=r['id'],
             config_key=r['config_key'],
-            config_value=r.get('config_value'),
+            config_value=None if is_sensitive else r.get('config_value'),
             config_type=r.get('config_type', 'string'),
             description=r.get('description', ''),
-            editable=bool(r.get('editable', 1)),
+            editable=False if is_sensitive else bool(r.get('editable', 1)),
             created_at=format_datetime(r.get('created_at')) or None,
             updated_at=format_datetime(r.get('updated_at')) or None,
         ).model_dump())
@@ -2605,6 +2619,8 @@ def update_system_config(request: SystemConfigUpdateRequest, current_user: Any |
         key = item.get('config_key')
         value = item.get('config_value')
         if not key:
+            continue
+        if _is_sensitive_config_key(str(key)):
             continue
         existing = execute_one(
             'SELECT id, editable FROM system_config WHERE config_key = %s',
@@ -2657,11 +2673,16 @@ def get_ai_config() -> Dict[str, Any]:
         else:
             cfg[k] = v or ''
 
-    api_key = cfg.get('api_key', '')
+    summary_key = os.getenv('SUMMARY_LLM_API_KEY', '').strip()
+    evidence_key = os.getenv('EVIDENCE_LLM_API_KEY', '').strip()
+    api_key_configured = any(
+        key and key != 'YOUR_API_KEY'
+        for key in (summary_key, evidence_key)
+    )
     return AIConfigResponse(
         service_url=str(cfg.get('service_url', 'http://127.0.0.1:8001')),
         model_name=str(cfg.get('model_name', 'glm-4-flash')),
-        api_key_configured=bool(api_key and api_key.strip()),
+        api_key_configured=api_key_configured,
         timeout=int(cfg.get('timeout', 60)),
         max_input_length=int(cfg.get('max_input_length', 8000)),
         enable_real_llm=bool(cfg.get('enable_real_llm', False)),
@@ -2701,9 +2722,6 @@ def update_ai_config(request: AIConfigUpdateRequest, current_user: Any | None = 
             if isinstance(val, bool):
                 val = 'true' if val else 'false'
             updates[db_key] = str(val)
-
-    if 'api_key' in data and data['api_key'] is not None and data['api_key'] != '':
-        updates['ai.api_key'] = data['api_key']
 
     count = 0
     for k, v in updates.items():

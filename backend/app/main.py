@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.common.exceptions import AppException, register_exception_handlers
 from app.common.response import success_response
 from app.core.config import settings
-from app.db.database import check_db_connection
+from app.db.database import check_db_connection, clear_sensitive_system_config_values
 
 logger = logging.getLogger(__name__)
 _db_connected: bool = False
@@ -71,6 +71,9 @@ async def startup_check() -> None:
     global _db_connected
     _db_connected = check_db_connection()
     if _db_connected:
+        cleared = clear_sensitive_system_config_values()
+        if cleared:
+            logger.warning("Cleared %s sensitive system_config value(s)", cleared)
         logger.info("数据库连接正常，系统使用真实数据库运行。")
     else:
         logger.warning(

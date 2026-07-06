@@ -34,7 +34,6 @@ const aiConfigTesting = ref(false)
 const aiConfigForm = reactive({
   service_url: '',
   model_name: '',
-  api_key: '',
   timeout: 60,
   max_input_length: 8000,
   enable_real_llm: false,
@@ -95,7 +94,6 @@ async function loadAIConfig() {
     aiConfig.value = cfg
     aiConfigForm.service_url = cfg.service_url
     aiConfigForm.model_name = cfg.model_name
-    aiConfigForm.api_key = ''
     aiConfigForm.timeout = cfg.timeout
     aiConfigForm.max_input_length = cfg.max_input_length
     aiConfigForm.enable_real_llm = cfg.enable_real_llm
@@ -122,7 +120,6 @@ async function saveAIConfig() {
     const payload: AIConfigUpdateRequest = {
       service_url: aiConfigForm.service_url,
       model_name: aiConfigForm.model_name,
-      api_key: aiConfigForm.api_key || undefined,
       timeout: aiConfigForm.timeout,
       max_input_length: aiConfigForm.max_input_length,
       enable_real_llm: aiConfigForm.enable_real_llm,
@@ -161,7 +158,6 @@ async function resetAIConfigDefaults() {
   Object.assign(aiConfigForm, {
     service_url: 'http://127.0.0.1:8001',
     model_name: 'glm-4-flash',
-    api_key: '',
     timeout: 60,
     max_input_length: 8000,
     enable_real_llm: false,
@@ -318,8 +314,7 @@ onMounted(() => {
               <el-form-item label="AI 服务地址"><el-input v-model="aiConfigForm.service_url" placeholder="http://127.0.0.1:8001" /></el-form-item>
               <el-form-item label="模型名称"><el-input v-model="aiConfigForm.model_name" placeholder="glm-4-flash" /></el-form-item>
               <el-form-item label="API Key">
-                <el-input v-model="aiConfigForm.api_key" type="password" show-password placeholder="留空则不修改" />
-                <span v-if="aiConfig?.api_key_configured" class="hint-text">已配置</span>
+                <el-tag :type="aiConfig?.api_key_configured ? 'success' : 'info'">{{ aiConfig?.api_key_configured ? '已配置于 ai-service/.env' : '未配置' }}</el-tag>
               </el-form-item>
               <el-form-item label="超时时间(秒)"><el-input-number v-model="aiConfigForm.timeout" :min="5" :max="600" /></el-form-item>
               <el-form-item label="最大输入长度"><el-input-number v-model="aiConfigForm.max_input_length" :min="100" :max="100000" :step="100" /></el-form-item>

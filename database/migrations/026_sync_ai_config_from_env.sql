@@ -1,5 +1,5 @@
--- M10: Sync AI configuration from .env file to database
--- Run this script after updating .env to sync AI config to database
+-- M10: Sync non-sensitive AI configuration defaults to database.
+-- API keys must stay in ai-service/.env and are not copied to system_config.
 
 -- Update AI service URL
 UPDATE `system_config` SET `config_value` = 'http://127.0.0.1:8001' WHERE `config_key` = 'ai.service_url';
@@ -7,8 +7,11 @@ UPDATE `system_config` SET `config_value` = 'http://127.0.0.1:8001' WHERE `confi
 -- Update model name
 UPDATE `system_config` SET `config_value` = 'glm-4-flash' WHERE `config_key` = 'ai.model_name';
 
--- Update API Key (copy from ai-service/.env EVIDENCE_LLM_API_KEY)
-UPDATE `system_config` SET `config_value` = '1568a5f785a0424b92e89829d9301cc4.HED3mela1mK9KDeO' WHERE `config_key` = 'ai.api_key';
+-- Clear historical API key values if this legacy key exists.
+DELETE FROM `system_config`
+WHERE REPLACE(REPLACE(REPLACE(LOWER(`config_key`), '_', ''), '-', ''), ' ', '') LIKE '%apikey%'
+   OR REPLACE(REPLACE(REPLACE(LOWER(`config_key`), '_', ''), '-', ''), ' ', '') LIKE '%secretkey%'
+   OR LOWER(`config_key`) LIKE '%token%';
 
 -- Update timeout (copy from ai-service/.env LLM_TIMEOUT)
 UPDATE `system_config` SET `config_value` = '45' WHERE `config_key` = 'ai.timeout';

@@ -23,6 +23,10 @@ def mask_api_key(api_key: str) -> str:
     return f"{api_key[:6]}{'*' * (len(api_key) - 10)}{api_key[-4:]}"
 
 
+def is_configured_api_key(api_key: str) -> bool:
+    return bool(api_key and api_key.strip() and api_key.strip() != "YOUR_API_KEY")
+
+
 def build_zhipu_extra_body() -> dict:
     extra_body = {}
 
@@ -38,7 +42,7 @@ async def call_llm_with_config(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> str:
-    if not llm_config.api_key or llm_config.api_key.strip() == "":
+    if not is_configured_api_key(llm_config.api_key):
         raise ValueError(
             f"未配置 {llm_config.provider} API Key，请检查 ai-service/.env 配置"
         )
@@ -102,7 +106,7 @@ async def call_llm_with_config_stream(
     max_tokens: int | None = None,
 ):
     """流式调用 LLM，逐 token yield。"""
-    if not llm_config.api_key or llm_config.api_key.strip() == "":
+    if not is_configured_api_key(llm_config.api_key):
         raise ValueError(
             f"未配置 {llm_config.provider} API Key，请检查 ai-service/.env 配置"
         )
@@ -190,7 +194,7 @@ async def call_llm(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> str:
-    if not settings.summary_llm_api_key or settings.summary_llm_api_key.strip() == "":
+    if not is_configured_api_key(settings.summary_llm_api_key):
         raise ValueError(
             "未配置生成类 AI API Key，请检查 ai-service/.env 中的 SUMMARY_LLM_API_KEY"
         )

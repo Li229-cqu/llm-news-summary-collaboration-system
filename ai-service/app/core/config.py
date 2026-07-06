@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-import json
 from pathlib import Path
-from typing import Dict, Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -52,8 +50,8 @@ class Settings(BaseModel):
     evidence_llm_provider: str = os.getenv("EVIDENCE_LLM_PROVIDER", "zhipu")
     evidence_llm_api_key: str = os.getenv("EVIDENCE_LLM_API_KEY", "")
     evidence_llm_base_url: str = os.getenv("EVIDENCE_LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
-    evidence_llm_model: str = os.getenv("EVIDENCE_LLM_MODEL", "glm-4-flash")
-    evidence_llm_timeout: int = int(os.getenv("EVIDENCE_LLM_TIMEOUT", "60"))
+    evidence_llm_model: str = os.getenv("EVIDENCE_LLM_MODEL", "GLM-5.2")
+    evidence_llm_timeout: int = int(os.getenv("EVIDENCE_LLM_TIMEOUT", "45"))
     evidence_llm_temperature: float = float(os.getenv("EVIDENCE_LLM_TEMPERATURE", "0.1"))
     evidence_llm_max_tokens: int = int(os.getenv("EVIDENCE_LLM_MAX_TOKENS", "4096"))
 
@@ -122,9 +120,6 @@ def apply_backend_config(settings: Settings, backend_config: Dict[str, Any]) -> 
         settings.summary_llm_timeout = backend_config['timeout']
         settings.evidence_llm_timeout = backend_config['timeout']
 
-    if backend_config.get('api_key'):
-        settings.summary_llm_api_key = backend_config['api_key']
-
     if backend_config.get('model_name'):
         settings.summary_llm_model = backend_config['model_name']
         settings.evidence_llm_model = backend_config['model_name']
@@ -136,6 +131,30 @@ def apply_backend_config(settings: Settings, backend_config: Dict[str, Any]) -> 
     return settings
 
 
+def reload_settings_from_env(settings: Settings) -> Settings:
+    """Reload AI configuration from ai-service/.env only."""
+    load_dotenv(BASE_DIR / ".env", override=True)
+
+    settings.summary_llm_enabled = os.getenv("SUMMARY_LLM_ENABLED", "false").lower() == "true"
+    settings.summary_llm_provider = os.getenv("SUMMARY_LLM_PROVIDER", "deepseek")
+    settings.summary_llm_api_key = os.getenv("SUMMARY_LLM_API_KEY", "")
+    settings.summary_llm_base_url = os.getenv("SUMMARY_LLM_BASE_URL", "https://api.deepseek.com/v1")
+    settings.summary_llm_model = os.getenv("SUMMARY_LLM_MODEL", "deepseek-chat")
+    settings.summary_llm_timeout = int(os.getenv("SUMMARY_LLM_TIMEOUT", "45"))
+    settings.summary_llm_temperature = float(os.getenv("SUMMARY_LLM_TEMPERATURE", "0.3"))
+    settings.summary_llm_max_tokens = int(os.getenv("SUMMARY_LLM_MAX_TOKENS", "2048"))
+
+    settings.evidence_llm_enabled = os.getenv("EVIDENCE_LLM_ENABLED", "false").lower() == "true"
+    settings.evidence_llm_provider = os.getenv("EVIDENCE_LLM_PROVIDER", "zhipu")
+    settings.evidence_llm_api_key = os.getenv("EVIDENCE_LLM_API_KEY", "")
+    settings.evidence_llm_base_url = os.getenv("EVIDENCE_LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
+    settings.evidence_llm_model = os.getenv("EVIDENCE_LLM_MODEL", "GLM-5.2")
+    settings.evidence_llm_timeout = int(os.getenv("EVIDENCE_LLM_TIMEOUT", "45"))
+    settings.evidence_llm_temperature = float(os.getenv("EVIDENCE_LLM_TEMPERATURE", "0.1"))
+    settings.evidence_llm_max_tokens = int(os.getenv("EVIDENCE_LLM_MAX_TOKENS", "4096"))
+    settings.llm_thinking_type = os.getenv("LLM_THINKING_TYPE", "disabled")
+    logger.info("AI config reloaded from ai-service/.env")
+    return settings
+
+
 settings = Settings()
-backend_config = load_config_from_backend(settings.backend_url)
-settings = apply_backend_config(settings, backend_config)

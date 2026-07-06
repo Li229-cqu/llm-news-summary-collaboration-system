@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.common.response import success_response
-from app.core.config import settings, load_config_from_backend, apply_backend_config
+from app.core.config import reload_settings_from_env, settings
 
 router = APIRouter(prefix=settings.api_prefix, tags=["系统"])
 
@@ -25,8 +25,7 @@ async def health_check():
 @router.post("/config/reload")
 async def reload_config():
     """重新从后端加载 AI 配置，支持运行时动态更新。"""
-    backend_config = load_config_from_backend(settings.backend_url)
-    apply_backend_config(settings, backend_config)
+    reload_settings_from_env(settings)
     return success_response(
         {
             "message": "配置已重新加载",

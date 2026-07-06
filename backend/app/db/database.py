@@ -148,3 +148,18 @@ def check_db_connection() -> bool:
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+def clear_sensitive_system_config_values() -> int:
+    """Remove sensitive rows from system_config without touching business tables."""
+    return execute_update(
+        """
+        DELETE FROM system_config
+        WHERE (
+            REPLACE(REPLACE(REPLACE(LOWER(config_key), '_', ''), '-', ''), ' ', '') LIKE %s
+            OR REPLACE(REPLACE(REPLACE(LOWER(config_key), '_', ''), '-', ''), ' ', '') LIKE %s
+            OR LOWER(config_key) LIKE %s
+        )
+        """,
+        ["%apikey%", "%secretkey%", "%token%"],
+    )

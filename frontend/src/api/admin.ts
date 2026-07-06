@@ -510,7 +510,6 @@ export interface AIConfigResponse {
 export interface AIConfigUpdateRequest {
   service_url?: string
   model_name?: string
-  api_key?: string
   timeout?: number
   max_input_length?: number
   enable_real_llm?: boolean

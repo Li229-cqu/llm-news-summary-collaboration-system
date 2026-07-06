@@ -714,7 +714,6 @@ class AIConfigResponse(BaseModel):
 class AIConfigUpdateRequest(BaseModel):
     service_url: Optional[str] = None
     model_name: Optional[str] = None
-    api_key: Optional[str] = None
     timeout: Optional[int] = None
     max_input_length: Optional[int] = None
     enable_real_llm: Optional[bool] = None
