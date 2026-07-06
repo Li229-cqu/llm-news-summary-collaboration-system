@@ -136,9 +136,19 @@ const currentError = computed(() => getError())
 const selectedVoiceName = ref(currentSelectedVoice.value?.name || '')
 
 const filteredVoices = computed(() => {
-  return currentVoices.value.filter(v => 
+  const list = currentVoices.value.filter(v =>
     v.lang.startsWith('zh') || v.lang.startsWith('zh-CN') || v.lang.startsWith('en')
   )
+  // 将默认选中音色（晓晓）排到第一位
+  const defaultName = currentSelectedVoice.value?.name
+  if (defaultName) {
+    const idx = list.findIndex(v => v.name === defaultName)
+    if (idx > 0) {
+      const [item] = list.splice(idx, 1)
+      list.unshift(item)
+    }
+  }
+  return list
 })
 
 function getVoiceLabel(voice: SpeechSynthesisVoice): string {
@@ -152,7 +162,8 @@ function getVoiceLabel(voice: SpeechSynthesisVoice): string {
     'en-GB': '英文(英)',
   }
   const langLabel = langMap[voice.lang] || voice.lang
-  const defaultLabel = voice.default ? '(默认)' : ''
+  const isDefault = currentSelectedVoice.value?.name === voice.name
+  const defaultLabel = isDefault ? '(默认)' : ''
   return `${voice.name} ${langLabel} ${defaultLabel}`.trim()
 }
 

@@ -59,10 +59,11 @@ export function useSpeech(segments: () => SpeechSegment[]) {
     )
 
     if (zhVoices.length > 0) {
-      // 优先使用 XIAOXIAO 作为默认音色（听新闻场景最自然的微软中文语音）
-      const xiaoxiao = zhVoices.find(v =>
-        v.name.toLowerCase().includes('xiaoxiao')
-      )
+      // 优先使用 Microsoft 晓晓 Online (Natural) 作为默认音色
+      const xiaoxiao = zhVoices.find(v => {
+        const name = v.name.toLowerCase()
+        return name.includes('xiaoxiao') || v.name.includes('晓晓')
+      })
       if (xiaoxiao) return xiaoxiao
 
       return zhVoices.find(v => v.default) || zhVoices[0]
