@@ -148,6 +148,7 @@ function formatTime(timeStr: string) {
   flex-direction: column;
   height: 100%;
   min-height: 480px;
+  background: var(--color-bg-card);
 }
 
 /* ── Empty State ── */
@@ -166,7 +167,7 @@ function formatTime(timeStr: string) {
 
 .empty-icon {
   font-size: 56px;
-  color: #dc2626;
+  color: var(--color-primary);
   margin-bottom: 16px;
 }
 
@@ -193,6 +194,7 @@ function formatTime(timeStr: string) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: var(--color-bg-card);
 }
 
 .loading-area {
@@ -218,6 +220,16 @@ function formatTime(timeStr: string) {
   flex-shrink: 0;
 }
 
+.avatar-col :deep(.el-avatar) {
+  background: var(--color-bg-hover);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+}
+
+.user-avatar-col :deep(.el-avatar) {
+  background: var(--color-primary-soft);
+}
+
 .message-bubble {
   display: flex;
   flex-direction: column;
@@ -238,13 +250,14 @@ function formatTime(timeStr: string) {
   overflow-wrap: break-word;
 }
 .message-row.user .message-content {
-  background: #dc2626;
+  background: var(--color-primary);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
 .message-row.assistant .message-content {
-  background: #f0f4f9;
+  background: var(--color-bg-hover);
   color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
   border-bottom-left-radius: 4px;
 }
 
@@ -259,7 +272,8 @@ function formatTime(timeStr: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #f0f4f9;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   border-bottom-left-radius: 4px;
 }
@@ -285,7 +299,8 @@ function formatTime(timeStr: string) {
   display: flex;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid #e3edf9;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-card);
   align-items: flex-end;
 }
 
@@ -296,5 +311,51 @@ function formatTime(timeStr: string) {
 .send-btn {
   height: 44px;
   min-width: 80px;
+}
+
+:global(:root.dark) .ai-chat-panel {
+  background: var(--color-bg-card);
+}
+
+:global(:root.dark) .message-area {
+  background: var(--color-bg-card);
+}
+
+:global(:root.dark) .message-row.assistant .message-content,
+:global(:root.dark) .thinking-bubble {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+:global(:root.dark) .message-row.user .message-content {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.2);
+}
+
+:global(:root.dark) .message-time {
+  color: var(--color-text-muted);
+}
+
+:global(:root.dark) .thinking-text,
+:global(:root.dark) .thinking-icon {
+  color: var(--color-text-secondary);
+}
+
+:global(:root.dark) .input-area {
+  background: var(--color-bg-card);
+  border-top-color: var(--color-border);
+}
+
+:global(:root.dark) .input-area :deep(.el-textarea__inner) {
+  background: var(--control-bg);
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+}
+
+:global(:root.dark) .input-area :deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
 }
 </style>

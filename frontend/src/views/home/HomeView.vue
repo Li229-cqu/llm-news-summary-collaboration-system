@@ -156,6 +156,7 @@ import { useUserStore } from '@/stores/user'
 import { useHomeFeedStore } from '@/stores/homeFeed'
 import NewsList from '@/components/news/NewsList.vue'
 import NewsHotList from '@/components/news/NewsHotList.vue'
+import { displayCategoryName } from '@/utils/displayText'
 
 const router = useRouter()
 const route = useRoute()
@@ -263,7 +264,7 @@ const normalNews = computed(() => remainingNews.value.slice(2))
 const currentCategoryName = computed(() => {
   if (!activeCategoryId.value || searchKeyword.value) return ''
   const cat = categories.value.find((c) => String(c.id) === activeCategoryId.value)
-  return cat?.name ?? ''
+  return displayCategoryName(cat?.name)
 })
 
 /** 顶部热搜榜标题 */

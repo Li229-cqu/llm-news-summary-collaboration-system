@@ -18,10 +18,19 @@ import {
   getAdminAnalyticsReviewSummary,
   getAdminAnalyticsTrends,
 } from '@/api/admin'
+import { useThemeStore } from '@/stores/theme'
+import {
+  createCategoryAxis,
+  createChartLegend,
+  createChartTooltip,
+  createValueAxis,
+  getChartThemeColors,
+} from '@/utils/chartTheme'
 
 echarts.use([CanvasRenderer, LineChart, BarChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
 const emit = defineEmits<{ navigate: [tab: string] }>()
+const themeStore = useThemeStore()
 
 // ── Time range ──
 type RangeKey = '7d' | '30d' | '90d' | 'custom'
@@ -143,12 +152,14 @@ function renderContentTrend() {
   if (!contentChart || !trends.value) return
   const data = trends.value.content_trend
   if (!data.length) { contentChart.clear(); return }
+  const theme = getChartThemeColors()
   contentChart.setOption({
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['新闻', '帖子', '评论'], top: 0 },
+    backgroundColor: theme.background,
+    tooltip: createChartTooltip('axis'),
+    legend: createChartLegend({ data: ['新闻', '帖子', '评论'], top: 0 }),
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
-    xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
-    yAxis: { type: 'value', minInterval: 1 },
+    xAxis: createCategoryAxis(data.map(d => d.date.slice(5)), { axisLabel: { rotate: 30, fontSize: 10 } }),
+    yAxis: createValueAxis({ minInterval: 1 }),
     series: [
       { name: '新闻', type: 'line', data: data.map(d => d.news_count), smooth: true, symbol: 'none' },
       { name: '帖子', type: 'line', data: data.map(d => d.post_count), smooth: true, symbol: 'none' },
@@ -161,12 +172,14 @@ function renderAiTrend() {
   if (!aiChart || !trends.value) return
   const data = trends.value.ai_trend
   if (!data.length) { aiChart.clear(); return }
+  const theme = getChartThemeColors()
   aiChart.setOption({
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['AI 调用', '低质量'], top: 0 },
+    backgroundColor: theme.background,
+    tooltip: createChartTooltip('axis'),
+    legend: createChartLegend({ data: ['AI 调用', '低质量'], top: 0 }),
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
-    xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
-    yAxis: { type: 'value', minInterval: 1 },
+    xAxis: createCategoryAxis(data.map(d => d.date.slice(5)), { axisLabel: { rotate: 30, fontSize: 10 } }),
+    yAxis: createValueAxis({ minInterval: 1 }),
     series: [
       { name: 'AI 调用', type: 'bar', data: data.map(d => d.ai_count), barMaxWidth: 12 },
       { name: '低质量', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
@@ -178,19 +191,20 @@ function renderRiskChart() {
   if (!riskChart || !aiRisk.value) return
   const items = aiRisk.value.items
   if (!items.length) { riskChart.clear(); return }
+  const theme = getChartThemeColors()
   riskChart.setOption({
-    tooltip: {
-      trigger: 'item',
+    backgroundColor: theme.background,
+    tooltip: createChartTooltip('item', {
       formatter: (p: { name: string; value: number; percent: number }) =>
         p.name + ': ' + p.value + ' (' + p.percent + '%)',
-    },
+    }),
     legend: { show: false },
     series: [{
       type: 'pie',
       radius: ['45%', '75%'],
       center: ['50%', '50%'],
-      label: { show: false },
-      emphasis: { label: { show: true } },
+      label: { show: false, color: theme.axisText },
+      emphasis: { label: { show: true, color: theme.tooltipText } },
       data: items.map(i => ({
         name: riskLevelCn(i.risk_level),
         value: i.count,
@@ -278,13 +292,14 @@ const summaryCards = computed(() => {
   const o = overview.value
   const totalPosts = Number(o?.total_posts ?? 0)
   const totalComments = Number(o?.total_comments ?? 0)
+  const iconBg = (light: string, dark: string) => themeStore.theme === 'dark' ? dark : light
   return [
-    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃用户数量：' + (o?.active_users ?? '-'), icon: UserFilled, bg: '#fef2f2', color: '#dc2626' },
-    { key: 'content', title: '内容总量', value: o?.total_news ?? '-', hint: '新闻内容', icon: Files, bg: '#f0fdf4', color: '#16a34a' },
-    { key: 'community', title: '社区互动', value: o ? totalPosts + totalComments : '-', hint: `帖子 ${o?.total_posts ?? '-'} / 评论 ${o?.total_comments ?? '-'}`, icon: Message, bg: '#fefce8', color: '#ca8a04' },
-    { key: 'ai', title: 'AI 生成', value: o?.ai_generate_count ?? '-', hint: '生成记录 / 调用次数', icon: TrendCharts, bg: '#f5f3ff', color: '#7c3aed' },
-    { key: 'timeline', title: 'Timeline', value: o?.timeline_count ?? '-', hint: '已生成事件线', icon: DataBoard, bg: '#ecfeff', color: '#0891b2' },
-    { key: 'pending', title: '待处理', value: o?.pending_count ?? '-', hint: '新闻 / 帖子 / 评论待审', icon: Warning, bg: '#fff7ed', color: '#ea580c' },
+    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃用户数量：' + (o?.active_users ?? '-'), icon: UserFilled, bg: iconBg('#fef2f2', 'rgba(248, 113, 113, 0.14)'), color: themeStore.theme === 'dark' ? '#fca5a5' : '#dc2626' },
+    { key: 'content', title: '内容总量', value: o?.total_news ?? '-', hint: '新闻内容', icon: Files, bg: iconBg('#f0fdf4', 'rgba(34, 197, 94, 0.14)'), color: '#16a34a' },
+    { key: 'community', title: '社区互动', value: o ? totalPosts + totalComments : '-', hint: `帖子 ${o?.total_posts ?? '-'} / 评论 ${o?.total_comments ?? '-'}`, icon: Message, bg: iconBg('#fefce8', 'rgba(234, 179, 8, 0.14)'), color: '#ca8a04' },
+    { key: 'ai', title: 'AI 生成', value: o?.ai_generate_count ?? '-', hint: '生成记录 / 调用次数', icon: TrendCharts, bg: iconBg('#f5f3ff', 'rgba(139, 92, 246, 0.16)'), color: '#8b5cf6' },
+    { key: 'timeline', title: 'Timeline', value: o?.timeline_count ?? '-', hint: '已生成事件线', icon: DataBoard, bg: iconBg('#ecfeff', 'rgba(8, 145, 178, 0.16)'), color: '#0891b2' },
+    { key: 'pending', title: '待处理', value: o?.pending_count ?? '-', hint: '新闻 / 帖子 / 评论待审', icon: Warning, bg: iconBg('#fff7ed', 'rgba(234, 88, 12, 0.16)'), color: '#ea580c' },
   ]
 })
 
@@ -302,6 +317,14 @@ onMounted(async () => {
 watch([trends, aiRisk], () => {
   nextTick(() => {
     initCharts()
+    renderContentTrend()
+    renderAiTrend()
+    renderRiskChart()
+  })
+})
+
+watch(() => themeStore.theme, () => {
+  nextTick(() => {
     renderContentTrend()
     renderAiTrend()
     renderRiskChart()

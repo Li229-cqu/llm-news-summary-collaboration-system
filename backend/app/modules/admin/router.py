@@ -27,11 +27,13 @@ from app.modules.admin.schema import (
     AdminCommentDetail,
     AdminCommentActionResult,
     AdminCommentOptions,
+    AdminCommunityHotRankingResponse,
     AdminHotTopicActionResult,
     AdminHotTopicDetail,
     AdminHotTopicListResponse,
     AdminHotTopicOptions,
     AdminHotTopicRankRequest,
+    AdminNewsHotRankingResponse,
     AdminTopicActionResult,
     AdminTopicBindNewsRequest,
     AdminTopicDetail,
@@ -116,6 +118,8 @@ from app.modules.admin.service import (
     get_admin_comment_detail,
     review_admin_comment,
     get_admin_comment_options,
+    get_admin_community_hot_ranking,
+    get_admin_news_hot_ranking,
     bind_admin_topic_news,
     create_admin_topic,
     get_admin_hot_topic_detail,
@@ -768,6 +772,28 @@ async def ai_call_record_list(
 
 
 # ── M7: Hot Topics ──────────────────────────────────────────────
+
+
+@router.get('/rankings/news-hot', response_model=ApiResponse[AdminNewsHotRankingResponse])
+async def admin_news_hot_ranking(
+    keyword: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    _: UserInfo = Depends(require_editor_or_admin),
+) -> ApiResponse[AdminNewsHotRankingResponse]:
+    data = get_admin_news_hot_ranking(keyword=keyword, page=page, page_size=page_size)
+    return success_response(data)
+
+
+@router.get('/rankings/community-hot', response_model=ApiResponse[AdminCommunityHotRankingResponse])
+async def admin_community_hot_ranking(
+    keyword: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    _: UserInfo = Depends(require_editor_or_admin),
+) -> ApiResponse[AdminCommunityHotRankingResponse]:
+    data = get_admin_community_hot_ranking(keyword=keyword, page=page, page_size=page_size)
+    return success_response(data)
 
 
 @router.get('/hot-topics/options', response_model=ApiResponse[AdminHotTopicOptions])

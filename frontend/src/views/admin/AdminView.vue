@@ -14,14 +14,14 @@ import AdminPendingCenter from '@/components/admin/AdminPendingCenter.vue'
 import AdminNewsManagement from '@/components/admin/AdminNewsManagement.vue'
 import AdminPostManagement from '@/components/admin/AdminPostManagement.vue'
 import AdminCommentReview from '@/components/admin/AdminCommentReview.vue'
-import AdminHotTopicManagement from '@/components/admin/AdminHotTopicManagement.vue'
+import AdminRankingManagement from '@/components/admin/AdminRankingManagement.vue'
 import AdminTimelineManagement from '@/components/admin/AdminTimelineManagement.vue'
 import AdminUserManagement from '@/components/admin/AdminUserManagement.vue'
 import AdminOpsManagement from '@/components/admin/AdminOpsManagement.vue'
 import AdminAnalyticsDashboard from '@/components/admin/AdminAnalyticsDashboard.vue'
 import { useUserStore } from '@/stores/user'
 
-type AdminSection = 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'hotTopics' | 'timelines' | 'users' | 'ops'
+type AdminSection = 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'rankings' | 'timelines' | 'users' | 'ops'
 
 const userStore = useUserStore()
 
@@ -35,7 +35,7 @@ function normalizeAvatarUrl(url?: string | null): string {
 const activeTab = ref<AdminSection>('analytics')
 const pendingCenterKey = ref(0)
 const analyticsKey = ref(0)
-const contentOpsChildren: AdminSection[] = ['news', 'hotTopics', 'posts', 'comments']
+const contentOpsChildren: AdminSection[] = ['news', 'rankings', 'posts', 'comments']
 
 const topLevelSections = computed(() => [
   { key: 'analytics', label: '数据看板', icon: DataBoard },
@@ -47,7 +47,7 @@ const topLevelSections = computed(() => [
 
 const contentOpsSections = computed(() => [
   { key: 'news', label: '新闻管理', icon: Files },
-  { key: 'hotTopics', label: '热搜运营', icon: TrendCharts },
+  { key: 'rankings', label: '榜单运营', icon: TrendCharts },
   { key: 'posts', label: '社区帖子管理', icon: Message },
   { key: 'comments', label: '评论管理', icon: Files },
 ] as const)
@@ -135,7 +135,7 @@ async function handleTabChange(tabKey: string) {
           <AdminNewsManagement v-if="activeTab === 'news'" @changed="loadDashboard" />
           <AdminPostManagement v-if="activeTab === 'posts'" @changed="loadDashboard" />
           <AdminCommentReview v-if="activeTab === 'comments'" @changed="loadDashboard" />
-          <AdminHotTopicManagement v-if="activeTab === 'hotTopics'" @changed="loadDashboard" />
+          <AdminRankingManagement v-if="activeTab === 'rankings'" @changed="loadDashboard" @navigate="(tab: string) => loadSection(tab as AdminSection)" />
           <AdminTimelineManagement v-if="activeTab === 'timelines'" @changed="loadDashboard" />
           <AdminUserManagement v-if="activeTab === 'users'" @changed="loadDashboard" />
           <AdminOpsManagement v-if="activeTab === 'ops'" />

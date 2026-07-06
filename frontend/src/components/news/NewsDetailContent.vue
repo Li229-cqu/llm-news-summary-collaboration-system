@@ -7,7 +7,7 @@
 
     <!-- 分类 + 话题 + 标签 -->
     <div v-if="hasMeta" class="news-detail-content__meta">
-      <el-tag v-if="news.category_name" size="small" effect="plain">{{ news.category_name }}</el-tag>
+      <el-tag v-if="news.category_name" size="small" effect="plain">{{ displayCategoryName(news.category_name) }}</el-tag>
       <el-tag v-if="news.topic_name" size="small" type="success" effect="light">{{ news.topic_name }}</el-tag>
       <el-tag v-for="tag in displayTags" :key="tag" size="small" type="info" effect="light">{{ tag }}</el-tag>
     </div>
@@ -34,6 +34,7 @@
 import { computed, ref, watch } from 'vue'
 import NewsAudioPlayer from './NewsAudioPlayer.vue'
 import type { SpeechSegment } from '@/composables/useSpeech'
+import { displayCategoryName } from '@/utils/displayText'
 
 export interface NewsDetailContentItem {
   title: string
@@ -87,7 +88,8 @@ const displayTags = computed(() => {
   if (!props.news.tags?.length) return []
   const categoryName = props.news.category_name
   const topicName = props.news.topic_name
-  return props.news.tags.filter(t => t !== categoryName && t !== topicName && t.length >= 2)
+  const displayName = displayCategoryName(categoryName)
+  return props.news.tags.filter(t => t !== categoryName && t !== displayName && t !== topicName && t.length >= 2)
 })
 
 const hasMeta = computed(() =>

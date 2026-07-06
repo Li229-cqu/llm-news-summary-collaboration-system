@@ -16,6 +16,14 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components'
 import { getObservability, type ObservabilityResponse } from '@/api/agentAnalysis'
+import { useThemeStore } from '@/stores/theme'
+import {
+  createCategoryAxis,
+  createChartLegend,
+  createChartTooltip,
+  createValueAxis,
+  getChartThemeColors,
+} from '@/utils/chartTheme'
 
 echarts.use([CanvasRenderer, BarChart, LineChart, PieChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -23,6 +31,7 @@ const loading = ref(false)
 const error = ref('')
 const days = ref(7)
 const data = ref<ObservabilityResponse | null>(null)
+const themeStore = useThemeStore()
 
 // ── Chart refs ──
 const tokenChartRef = ref<HTMLDivElement>()
@@ -64,20 +73,18 @@ async function loadData() {
 // ── Chart rendering ──
 function renderCharts() {
   if (!data.value) return
+  const theme = getChartThemeColors()
 
   // 1. Token 柱状图
   if (tokenChartRef.value) {
     if (!tokenChart) tokenChart = echarts.init(tokenChartRef.value)
     const labels = data.value.token_stats.map(s => s.step_label)
     tokenChart.setOption({
-      tooltip: { trigger: 'axis' },
+      backgroundColor: theme.background,
+      tooltip: createChartTooltip('axis'),
       grid: { left: 20, right: 20, top: 10, bottom: 30 },
-      xAxis: {
-        type: 'category',
-        data: labels,
-        axisLabel: { rotate: 30, fontSize: 10 },
-      },
-      yAxis: { type: 'value', name: 'tokens' },
+      xAxis: createCategoryAxis(labels, { axisLabel: { rotate: 30, fontSize: 10 } }),
+      yAxis: createValueAxis({ name: 'tokens' }),
       series: [{
         type: 'bar',
         data: data.value.token_stats.map(s => s.total_tokens),
@@ -101,20 +108,16 @@ function renderCharts() {
     const maxVal = Math.max(...values, 1)
     const colors = values.map(v => v < 100 ? '#22c55e' : v < 500 ? '#f59e0b' : '#ef4444')
     latencyChart.setOption({
-      tooltip: {
-        trigger: 'axis',
+      backgroundColor: theme.background,
+      tooltip: createChartTooltip('axis', {
         formatter: (p: any) => {
           const item = p[0]
           return `${item.name}<br/>平均: ${formatMs(item.value)}<br/>范围: ${formatMs(data.value!.latency_stats[item.dataIndex].min_ms)} ~ ${formatMs(data.value!.latency_stats[item.dataIndex].max_ms)}`
         },
-      },
+      }),
       grid: { left: 100, right: 40, top: 10, bottom: 20 },
-      xAxis: { type: 'value', name: 'ms', axisLabel: { fontSize: 10 } },
-      yAxis: {
-        type: 'category',
-        data: labels.reverse(),
-        axisLabel: { fontSize: 11 },
-      },
+      xAxis: createValueAxis({ name: 'ms', axisLabel: { fontSize: 10 } }),
+      yAxis: createCategoryAxis(labels.reverse(), { axisLabel: { fontSize: 11 } }),
       series: [{
         type: 'bar',
         data: values.reverse().map((v, i) => ({
@@ -137,18 +140,19 @@ function renderCharts() {
       value: s.count,
     }))
     providerChart.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { bottom: 0, textStyle: { fontSize: 11 } },
+      backgroundColor: theme.background,
+      tooltip: createChartTooltip('item', { formatter: '{b}: {c} ({d}%)' }),
+      legend: createChartLegend({ bottom: 0 }),
       series: [{
         type: 'pie',
         radius: ['45%', '75%'],
         center: ['50%', '48%'],
         data: pieData,
-        label: { show: false },
+        label: { show: false, color: theme.axisText },
         emphasis: {
-          label: { show: true, fontSize: 14, fontWeight: 'bold' },
+          label: { show: true, fontSize: 14, fontWeight: 'bold', color: theme.tooltipText },
         },
-        itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+        itemStyle: { borderRadius: 4, borderColor: theme.axisLine, borderWidth: 2 },
       }],
     }, true)
   }
@@ -158,23 +162,15 @@ function renderCharts() {
     if (!trendChart) trendChart = echarts.init(trendChartRef.value)
     const dates = data.value.trend_stats.map(t => t.date.slice(5)) // MM-DD
     trendChart.setOption({
-      tooltip: { trigger: 'axis' },
-      legend: {
+      backgroundColor: theme.background,
+      tooltip: createChartTooltip('axis'),
+      legend: createChartLegend({
         data: ['成功', '失败', '总计'],
         bottom: 0,
-        textStyle: { fontSize: 11 },
-      },
+      }),
       grid: { left: 20, right: 20, top: 20, bottom: 30 },
-      xAxis: {
-        type: 'category',
-        data: dates,
-        axisLabel: { fontSize: 10 },
-      },
-      yAxis: {
-        type: 'value',
-        minInterval: 1,
-        axisLabel: { fontSize: 10 },
-      },
+      xAxis: createCategoryAxis(dates, { axisLabel: { fontSize: 10 } }),
+      yAxis: createValueAxis({ minInterval: 1, axisLabel: { fontSize: 10 } }),
       series: [
         {
           name: '成功',
@@ -220,6 +216,7 @@ function handleResize() {
 }
 
 onMounted(() => { loadData(); window.addEventListener('resize', handleResize) })
+watch(() => themeStore.theme, () => nextTick(renderCharts))
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   tokenChart?.dispose()

@@ -43,16 +43,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
 import { getReadingHeatmap, type ReadingHeatmapResponse } from '@/api/profile'
+import { useThemeStore } from '@/stores/theme'
+import { createCategoryAxis, createChartTooltip, getChartThemeColors } from '@/utils/chartTheme'
 
 const loading = ref(false)
 const data = ref<ReadingHeatmapResponse | null>(null)
 const timeRange = ref<7 | 30>(30)
 const chartRef = ref<HTMLElement | null>(null)
+const themeStore = useThemeStore()
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
@@ -79,40 +82,38 @@ function renderChart() {
 
   const { x_axis, y_axis, cells } = data.value
   const maxVal = data.value.summary.max_value || 1
+  const theme = getChartThemeColors()
 
   const heatData = cells.map(cell => [x_axis.indexOf(cell.x), y_axis.indexOf(cell.y), cell.value])
 
   const option: any = {
-    tooltip: {
+    backgroundColor: theme.background,
+    tooltip: createChartTooltip('item', {
       position: 'top',
       formatter: (params: any) => {
         const [xi, yi, val] = params.data
         return `${x_axis[xi]}<br/>${y_axis[yi]}: <strong>${val}</strong> 篇`
       },
-    },
+    }),
     grid: {
       left: '120px',
       right: '40px',
       top: '20px',
       bottom: '60px',
     },
-    xAxis: {
-      type: 'category',
-      data: x_axis,
+    xAxis: createCategoryAxis(x_axis, {
       splitArea: { show: true },
       axisLabel: {
         fontSize: 11,
         rotate: 30,
       },
-    },
-    yAxis: {
-      type: 'category',
-      data: y_axis,
+    }),
+    yAxis: createCategoryAxis(y_axis, {
       splitArea: { show: true },
       axisLabel: {
         fontSize: 12,
       },
-    },
+    }),
     visualMap: {
       min: 0,
       max: maxVal,
@@ -126,6 +127,7 @@ function renderChart() {
       text: ['高', '低'],
       textStyle: {
         fontSize: 11,
+        color: theme.axisText,
       },
     },
     series: [
@@ -136,6 +138,7 @@ function renderChart() {
         label: {
           show: heatData.length < 50,
           fontSize: 10,
+          color: theme.tooltipText,
         },
         emphasis: {
           itemStyle: {
@@ -193,6 +196,8 @@ onMounted(async () => {
   loadData()
   window.addEventListener('resize', () => chartInstance?.resize())
 })
+
+watch(() => themeStore.theme, () => nextTick(renderChart))
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', () => chartInstance?.resize())

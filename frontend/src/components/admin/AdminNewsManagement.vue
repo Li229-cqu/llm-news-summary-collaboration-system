@@ -89,7 +89,11 @@ function parseTags(text: string) {
 }
 
 async function loadOptions() {
-  options.value = await getAdminNewsOptions()
+  try {
+    options.value = await getAdminNewsOptions()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '新闻选项加载失败')
+  }
 }
 
 async function loadNews(targetPage = page.value) {
@@ -248,11 +252,7 @@ function availableActions(row: AdminNewsItem) {
 }
 
 onMounted(async () => {
-  try {
-    await loadOptions()
-  } finally {
-    await loadNews(1)
-  }
+  await Promise.allSettled([loadOptions(), loadNews(1)])
 })
 </script>
 

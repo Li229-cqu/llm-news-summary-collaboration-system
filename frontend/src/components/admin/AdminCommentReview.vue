@@ -122,7 +122,11 @@ function buildQuery(targetPage = page.value) {
 }
 
 async function loadOptions() {
-  options.value = await getAdminCommentOptions()
+  try {
+    options.value = await getAdminCommentOptions()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '评论选项加载失败')
+  }
 }
 
 async function loadComments(targetPage = page.value) {
@@ -215,11 +219,7 @@ function availableActions(row: AdminCommentItem) {
 }
 
 onMounted(async () => {
-  try {
-    await loadOptions()
-  } finally {
-    await loadComments(1)
-  }
+  await Promise.allSettled([loadOptions(), loadComments(1)])
 })
 </script>
 

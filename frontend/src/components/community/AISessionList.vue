@@ -105,7 +105,7 @@ function formatTime(timeStr: string | null | undefined) {
 .ai-session-list {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e3edf9;
+  border-right: 1px solid var(--color-border);
   background: var(--color-bg-hover);
   transition: width 0.25s ease;
   width: 280px;
@@ -120,7 +120,7 @@ function formatTime(timeStr: string | null | undefined) {
   align-items: center;
   justify-content: space-between;
   padding: 12px;
-  border-bottom: 1px solid #e3edf9;
+  border-bottom: 1px solid var(--color-border);
   gap: 8px;
 }
 
@@ -138,7 +138,7 @@ function formatTime(timeStr: string | null | undefined) {
 .header-title {
   font-size: 15px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
@@ -169,13 +169,15 @@ function formatTime(timeStr: string | null | undefined) {
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
 }
 .session-item:hover {
-  background: #fef2f2;
+  background: var(--color-primary-soft);
 }
 .session-item.active {
-  background: #fee2e2;
+  background: var(--color-primary-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
 }
 
 .session-item-top {
@@ -188,7 +190,7 @@ function formatTime(timeStr: string | null | undefined) {
   flex: 1;
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -216,5 +218,37 @@ function formatTime(timeStr: string | null | undefined) {
   font-size: 11px;
   color: var(--color-text-muted);
   margin-top: 2px;
+}
+
+:global(:root.dark) .ai-session-list {
+  background: var(--color-bg-card);
+  border-right-color: var(--color-border);
+}
+
+:global(:root.dark) .session-list-header {
+  background: var(--color-bg-card);
+  border-bottom-color: var(--color-border);
+}
+
+:global(:root.dark) .session-list-body {
+  background: var(--color-bg-card);
+}
+
+:global(:root.dark) .session-item:hover {
+  background: var(--control-hover-bg);
+}
+
+:global(:root.dark) .session-item.active {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-elevated));
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+}
+
+:global(:root.dark) .collapse-btn {
+  --el-button-hover-bg-color: var(--control-hover-bg);
+  --el-button-hover-text-color: var(--color-primary);
+}
+
+:global(:root.dark) .delete-btn {
+  --el-button-hover-bg-color: rgba(248, 113, 113, 0.12);
 }
 </style>

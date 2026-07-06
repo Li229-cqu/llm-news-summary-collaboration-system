@@ -79,7 +79,12 @@ function isOwnRow(row: UserItem) {
 
 // ── load ────────────────────────────────────────────────────────
 async function loadOptions() {
-  userOptions.value = await getAdminUserOptions()
+  try {
+    userOptions.value = await getAdminUserOptions()
+  } catch (error) {
+    userOptions.value = null
+    ElMessage.error(error instanceof Error ? error.message : '用户选项加载失败')
+  }
 }
 
 async function loadList() {
@@ -179,7 +184,7 @@ async function confirmToggleStatus(row: UserItem) {
 
 // ── mount ───────────────────────────────────────────────────────
 onMounted(async () => {
-  await Promise.all([loadOptions(), loadList()])
+  await Promise.allSettled([loadOptions(), loadList()])
 })
 </script>
 

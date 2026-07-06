@@ -19,7 +19,7 @@
     <div class="news-card__content">
       <!-- 顶部分类+来源（首页精简模式下隐藏） -->
       <div v-if="!compactHome" class="news-card__topline">
-        <el-tag v-if="news.category_name" size="small" effect="plain">{{ news.category_name }}</el-tag>
+        <el-tag v-if="news.category_name" size="small" effect="plain">{{ displayCategoryName(news.category_name) }}</el-tag>
         <span class="news-card__source">{{ news.source }}</span>
       </div>
 
@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { displayCategoryName } from '@/utils/displayText'
 
 export interface NewsCardItem {
   id: number
@@ -99,7 +100,10 @@ const cleanTags = computed(() => {
   // 排除 category_code
   COMMON_CATEGORY_CODES.forEach(c => exclude.add(c))
   // 排除 category_name
-  if (props.news.category_name) exclude.add(props.news.category_name)
+  if (props.news.category_name) {
+    exclude.add(props.news.category_name)
+    exclude.add(displayCategoryName(props.news.category_name))
+  }
   // 排除 source
   if (props.news.source) exclude.add(props.news.source)
   // 排除 topic_name

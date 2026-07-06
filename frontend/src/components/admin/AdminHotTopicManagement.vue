@@ -35,7 +35,14 @@ const hotSummaryCards = computed(() => [
   { key: 'hidden', label: '已隐藏', value: hotData.value?.summary.hidden_count ?? 0 },
 ])
 
-async function loadHotOptions() { hotOptions.value = await getAdminHotTopicOptions() }
+async function loadHotOptions() {
+  try {
+    hotOptions.value = await getAdminHotTopicOptions()
+  } catch (error) {
+    hotOptions.value = null
+    ElMessage.error(error instanceof Error ? error.message : '热搜选项加载失败')
+  }
+}
 async function loadHotList() {
   loadingHot.value = true
   try {
@@ -79,8 +86,7 @@ async function confirmHotAction(row: AdminHotTopicItem, action: 'hide' | 'restor
 }
 
 onMounted(async () => {
-  await loadHotOptions()
-  await loadHotList()
+  await Promise.allSettled([loadHotOptions(), loadHotList()])
 })
 </script>
 

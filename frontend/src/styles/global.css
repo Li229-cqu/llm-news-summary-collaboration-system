@@ -170,3 +170,136 @@ a {
 .el-date-table td.current:not(.disabled) .el-date-table-cell__text {
   background-color: var(--color-primary);
 }
+
+/* ========================================
+   Dark mode Element Plus consistency
+   ======================================== */
+:root.dark .el-card {
+  --el-card-bg-color: var(--color-bg-card);
+  --el-card-border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-table {
+  --el-table-bg-color: var(--color-bg-card);
+  --el-table-tr-bg-color: var(--color-bg-card);
+  --el-table-header-bg-color: var(--color-bg-hover);
+  --el-table-header-text-color: var(--color-text-primary);
+  --el-table-text-color: var(--color-text-secondary);
+  --el-table-row-hover-bg-color: var(--table-hover-bg);
+  --el-table-current-row-bg-color: var(--table-current-bg);
+  --el-table-border-color: var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+}
+
+:root.dark .el-table th.el-table__cell {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-table tr,
+:root.dark .el-table td.el-table__cell {
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  border-bottom-color: var(--color-border);
+}
+
+:root.dark .el-table__body tr:hover > td.el-table__cell,
+:root.dark .el-table__body tr.current-row > td.el-table__cell {
+  background: var(--table-hover-bg) !important;
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-input__wrapper,
+:root.dark .el-select__wrapper,
+:root.dark .el-textarea__inner {
+  background: var(--control-bg);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+}
+
+:root.dark .el-input__inner,
+:root.dark .el-select__placeholder,
+:root.dark .el-textarea__inner {
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-input__inner::placeholder,
+:root.dark .el-textarea__inner::placeholder {
+  color: var(--color-text-muted);
+}
+
+:root.dark .el-button:not(.el-button--primary):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--control-bg);
+  --el-button-border-color: var(--color-border);
+  --el-button-text-color: var(--color-text-secondary);
+  --el-button-hover-bg-color: var(--control-hover-bg);
+  --el-button-hover-border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  --el-button-hover-text-color: var(--color-primary);
+  --el-button-active-bg-color: var(--color-primary-soft);
+  --el-button-active-border-color: var(--color-primary);
+  --el-button-active-text-color: var(--color-primary);
+}
+
+:root.dark .el-button.is-text,
+:root.dark .el-button.is-link {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  --el-button-text-color: var(--color-text-secondary);
+  --el-button-hover-bg-color: var(--control-hover-bg);
+  --el-button-hover-border-color: transparent;
+  --el-button-hover-text-color: var(--color-primary);
+  --el-button-active-bg-color: var(--color-primary-soft);
+  --el-button-active-text-color: var(--color-primary);
+}
+
+:root.dark .el-tag {
+  --el-tag-bg-color: color-mix(in srgb, var(--color-bg-hover) 78%, var(--el-tag-text-color, var(--color-text-secondary)));
+  --el-tag-border-color: var(--color-border);
+}
+
+:root.dark .el-pagination button,
+:root.dark .el-pager li {
+  background: var(--control-bg);
+  color: var(--color-text-secondary);
+}
+
+:root.dark .el-pagination button:hover,
+:root.dark .el-pager li:hover {
+  background: var(--control-hover-bg);
+  color: var(--color-primary);
+}
+
+:root.dark .el-pager li.is-active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+:root.dark .el-popper,
+:root.dark .el-popover,
+:root.dark .el-select__popper,
+:root.dark .el-dropdown__popper,
+:root.dark .el-picker__popper {
+  --el-bg-color-overlay: var(--color-bg-elevated);
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-select-dropdown__item {
+  color: var(--color-text-secondary);
+}
+
+:root.dark .el-select-dropdown__item:hover,
+:root.dark .el-select-dropdown__item.hover {
+  background: var(--control-hover-bg);
+  color: var(--color-text-primary);
+}
+
+:root.dark .el-dialog,
+:root.dark .el-drawer {
+  --el-dialog-bg-color: var(--color-bg-card);
+  --el-drawer-bg-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+}

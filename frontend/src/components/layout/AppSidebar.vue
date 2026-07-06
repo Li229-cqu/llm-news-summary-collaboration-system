@@ -9,6 +9,7 @@ import {
   type SubscriptionCategory,
 } from '@/api/profile'
 import { useUserStore } from '@/stores/user'
+import { displayCategoryName } from '@/utils/displayText'
 
 interface SidebarCategory {
   id: string
@@ -45,7 +46,7 @@ function normalizeCategory(category: NewsCategory): SidebarCategory {
 
   return {
     id: String(category.id),
-    name: category.name,
+    name: displayCategoryName(category.name),
     code: category.code,
   }
 }
@@ -70,7 +71,7 @@ async function loadCategories() {
       { id: '4', name: '财经', code: 'finance' },
       { id: '5', name: '科技', code: 'technology' },
       { id: '6', name: '体育', code: 'sports' },
-      { id: '7', name: '娱乐', code: 'entertainment' },
+      { id: '7', name: '文娱', code: 'entertainment' },
       { id: '8', name: '国际', code: 'world' },
     ]
   } finally {
@@ -225,7 +226,7 @@ onMounted(loadCategories)
                 :key="category.id"
                 :label="category.id"
               >
-                {{ category.name }}
+                {{ displayCategoryName(category.name) }}
               </el-checkbox>
             </el-checkbox-group>
             <div class="app-sidebar__subscription-footer">

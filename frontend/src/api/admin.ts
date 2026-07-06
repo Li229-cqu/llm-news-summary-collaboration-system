@@ -97,24 +97,6 @@ export interface AdminUserStatusRequest {
   status: number
 }
 
-export interface PendingPostItem {
-  id: number
-  title: string
-  content?: string
-  username?: string
-  author?: string
-  user_id?: number
-  topic_id?: number | null
-  view_count?: number
-  like_count?: number
-  comment_count?: number
-  favorite_count?: number
-  heat_score?: number
-  status?: number
-  create_time?: string | null
-  update_time?: string | null
-}
-
 export type AdminPendingItemType = 'all' | 'news' | 'post' | 'comment'
 export type AdminReviewAction = 'approve' | 'reject' | 'fold' | 'delete' | 'restore'
 
@@ -466,164 +448,19 @@ export interface AdminCommentActionResult {
 
 // ── M10: System Config types ───────────────────────────────────────
 
-export interface SystemConfigItem {
-  id: number
-  config_key: string
-  config_value: string | null
-  config_type: string
-  description: string
-  editable: boolean
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface SystemConfigListResponse {
-  items: SystemConfigItem[]
-  total: number
-}
-
-export interface SystemConfigUpdateRequest {
-  items: Array<{ config_key: string; config_value: string }>
-}
+ 
 
 // ── M10: AI Config types ────────────────────────────────────────────
 
-export interface AIConfigResponse {
-  service_url: string
-  model_name: string
-  api_key_configured: boolean
-  timeout: number
-  max_input_length: number
-  enable_real_llm: boolean
-  enable_fallback: boolean
-  enable_cache: boolean
-  cache_supported: boolean
-  risk_threshold_low: number
-  risk_threshold_medium: number
-  sensitive_words: string[]
-  risk_rules: Array<Record<string, unknown>>
-  fallback_strategy: Record<string, unknown>
-  service_status: string
-  last_check_time?: string | null
-}
-
-export interface AIConfigUpdateRequest {
-  service_url?: string
-  model_name?: string
-  timeout?: number
-  max_input_length?: number
-  enable_real_llm?: boolean
-  enable_fallback?: boolean
-  risk_threshold_low?: number
-  risk_threshold_medium?: number
-  sensitive_words?: string
-  risk_rules?: string
-  fallback_strategy?: string
-}
-
-export interface AIConfigTestResult {
-  status: string
-  latency_ms: number
-  message: string
-}
+ 
 
 // ── M10: Prompt Template types ──────────────────────────────────────
 
-export interface PromptTemplateItem {
-  id: number
-  name: string
-  function_type: string
-  prompt_content: string
-  version: string
-  status: number
-  is_default: number
-  remark: string
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface PromptTemplateListResponse {
-  items: PromptTemplateItem[]
-  total: number
-  page: number
-  page_size: number
-}
-
-export interface PromptTemplatePayload {
-  name: string
-  function_type: string
-  prompt_content: string
-  version?: string
-  status?: number
-  is_default?: number
-  remark?: string
-}
-
-export interface PromptTemplateStatusRequest {
-  status: number
-}
-
-export interface PromptTemplateOptions {
-  function_types: Array<{ label: string; value: string }>
-}
-
-export interface PromptTemplateQueryParams {
-  function_type?: string
-  status?: number | null
-  keyword?: string
-  page?: number
-  page_size?: number
-}
+ 
 
 // ── M10: AI Call Records types ──────────────────────────────────────
 
-export interface AdminAICallRecordItem {
-  id: number
-  user_id?: number | null
-  username: string
-  function_type: string
-  input_length: number
-  status: number
-  status_label: string
-  risk_level: string
-  is_fallback: boolean
-  error_message: string
-  created_at?: string | null
-}
-
-export interface AdminAICallRecordSummary {
-  total_count: number
-  today_count: number
-  fallback_count: number
-}
-
-export interface AdminAICallRecordListResponse {
-  items: AdminAICallRecordItem[]
-  total: number
-  page: number
-  page_size: number
-  summary: AdminAICallRecordSummary
-  fallback_supported: boolean
-}
-
-export interface AdminAICallRecordQueryParams {
-  function_type?: string
-  status?: number | null
-  risk_level?: string
-  is_fallback?: boolean | null
-  user_id?: number | null
-  start_time?: string
-  end_time?: string
-  page?: number
-  page_size?: number
-}
-
-export interface PaginationResponse<T> {
-  list: T[]
-  total: number
-  page: number
-  page_size: number
-}
+ 
 
 export async function getDashboard(): Promise<AdminDashboard> {
   return request.get('/api/admin/dashboard')
@@ -657,15 +494,6 @@ export async function reviewPendingItem(
   payload: AdminReviewActionRequest,
 ): Promise<AdminReviewActionResult> {
   return request.post(`/api/admin/pending-items/${itemType}/${itemId}/review`, payload)
-}
-
-export async function getPendingPosts(
-  page: number = 1,
-  pageSize: number = 10
-): Promise<PaginationResponse<PendingPostItem>> {
-  return request.get('/api/admin/pending-posts', {
-    params: { page, page_size: pageSize },
-  })
 }
 
 export async function getAdminUserOptions(): Promise<AdminUserOptions> {
@@ -703,85 +531,6 @@ export async function changeUserStatus(
 ): Promise<AdminUserActionResult> {
   return request.post(`/api/admin/users/${userId}/status`, payload)
 }
-
-export async function getSystemConfig(): Promise<SystemConfigListResponse> {
-  return request.get('/api/admin/system-config')
-}
-
-export async function updateSystemConfig(payload: SystemConfigUpdateRequest): Promise<{ updated: number; message: string }> {
-  return request.put('/api/admin/system-config', payload)
-}
-
-// ── M10: AI Config API ──────────────────────────────────────────────
-
-export async function getAIConfig(): Promise<AIConfigResponse> {
-  return request.get('/api/admin/ai-config')
-}
-
-export async function updateAIConfig(payload: AIConfigUpdateRequest): Promise<{ updated: number; message: string }> {
-  return request.put('/api/admin/ai-config', payload)
-}
-
-export async function testAIConnection(): Promise<AIConfigTestResult> {
-  return request.post('/api/admin/ai-config/test')
-}
-
-// ── M10: Prompt Template API ────────────────────────────────────────
-
-export async function getPromptTemplateOptions(): Promise<PromptTemplateOptions> {
-  return request.get('/api/admin/prompt-templates/options')
-}
-
-export async function getPromptTemplates(params: PromptTemplateQueryParams = {}): Promise<PromptTemplateListResponse> {
-  return request.get('/api/admin/prompt-templates', {
-    params: {
-      function_type: params.function_type || undefined,
-      status: params.status ?? undefined,
-      keyword: params.keyword || undefined,
-      page: params.page ?? 1,
-      page_size: params.page_size ?? 10,
-    },
-  })
-}
-
-export async function getPromptTemplateDetail(templateId: number): Promise<PromptTemplateItem> {
-  return request.get(`/api/admin/prompt-templates/${templateId}`)
-}
-
-export async function createPromptTemplate(payload: PromptTemplatePayload): Promise<PromptTemplateItem> {
-  return request.post('/api/admin/prompt-templates', payload)
-}
-
-export async function updatePromptTemplate(templateId: number, payload: PromptTemplatePayload): Promise<PromptTemplateItem> {
-  return request.put(`/api/admin/prompt-templates/${templateId}`, payload)
-}
-
-export async function updatePromptTemplateStatus(templateId: number, payload: PromptTemplateStatusRequest): Promise<{ template_id: number; action: string; updated: boolean; message: string }> {
-  return request.post(`/api/admin/prompt-templates/${templateId}/status`, payload)
-}
-
-export async function setPromptTemplateDefault(templateId: number): Promise<{ template_id: number; action: string; updated: boolean; message: string }> {
-  return request.post(`/api/admin/prompt-templates/${templateId}/default`)
-}
-
-// ── M10: AI Call Records API ────────────────────────────────────────
-
-export async function getAICallRecords(params: AdminAICallRecordQueryParams = {}): Promise<AdminAICallRecordListResponse> {
-  return request.get('/api/admin/ai-call-records', {
-    params: {
-      function_type: params.function_type || undefined,
-      status: params.status ?? undefined,
-      risk_level: params.risk_level || undefined,
-      is_fallback: params.is_fallback ?? undefined,
-      user_id: params.user_id ?? undefined,
-      start_time: params.start_time || undefined,
-      end_time: params.end_time || undefined,
-      page: params.page ?? 1,
-      page_size: params.page_size ?? 10,
-    },
-  })
-}
-
 
 export async function getAdminNewsOptions(): Promise<AdminNewsOptions> {
   return request.get('/api/admin/news/options')
@@ -909,6 +658,86 @@ export async function reviewAdminComment(
   return request.post(`/api/admin/comments/${commentType}/${commentId}/review`, payload)
 }
 
+export interface AdminRankingSummary {
+  news_hot_count: number
+  community_hot_count: number
+  today_news_count: number
+  today_post_count: number
+}
+
+export interface AdminNewsHotRankingItem {
+  rank: number
+  id: number
+  title: string
+  category_name: string
+  source: string
+  view_count: number
+  like_count: number
+  favorite_count: number
+  comment_count: number
+  heat_score: number
+  publish_time?: string | null
+  status: number
+  status_label: string
+}
+
+export interface AdminNewsHotRankingResponse {
+  items: AdminNewsHotRankingItem[]
+  total: number
+  page: number
+  page_size: number
+  summary: AdminRankingSummary
+}
+
+export interface AdminCommunityHotRankingItem {
+  rank: number
+  id: number
+  title: string
+  author_name: string
+  view_count: number
+  like_count: number
+  favorite_count: number
+  comment_count: number
+  heat_score: number
+  created_at?: string | null
+  status: number
+  status_label: string
+}
+
+export interface AdminCommunityHotRankingResponse {
+  items: AdminCommunityHotRankingItem[]
+  total: number
+  page: number
+  page_size: number
+  summary: AdminRankingSummary
+}
+
+export interface AdminRankingQueryParams {
+  keyword?: string
+  page?: number
+  page_size?: number
+}
+
+export async function getAdminNewsHotRanking(params: AdminRankingQueryParams = {}): Promise<AdminNewsHotRankingResponse> {
+  return request.get('/api/admin/rankings/news-hot', {
+    params: {
+      keyword: params.keyword || undefined,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 10,
+    },
+  })
+}
+
+export async function getAdminCommunityHotRanking(params: AdminRankingQueryParams = {}): Promise<AdminCommunityHotRankingResponse> {
+  return request.get('/api/admin/rankings/community-hot', {
+    params: {
+      keyword: params.keyword || undefined,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 10,
+    },
+  })
+}
+
 export interface AdminHotTopicSupport {
   pin_supported: boolean
   hide_supported: boolean
@@ -968,7 +797,6 @@ export interface AdminHotTopicQueryParams {
   hot_type?: string
   target_type?: string
   status?: number | null
-  is_pinned?: boolean | null
   is_hidden?: boolean | null
   start_time?: string
   end_time?: string
@@ -1088,7 +916,6 @@ export async function getAdminHotTopicList(params: AdminHotTopicQueryParams = {}
       hot_type: params.hot_type || undefined,
       target_type: params.target_type || undefined,
       status: params.status ?? undefined,
-      is_pinned: params.is_pinned ?? undefined,
       is_hidden: params.is_hidden ?? undefined,
       start_time: params.start_time || undefined,
       end_time: params.end_time || undefined,

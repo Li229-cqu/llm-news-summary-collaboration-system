@@ -55,7 +55,11 @@ function statusTagType(status: number) {
 }
 
 async function loadOptions() {
-  options.value = await getAdminPostOptions()
+  try {
+    options.value = await getAdminPostOptions()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '帖子选项加载失败')
+  }
 }
 
 async function loadPosts(targetPage = page.value) {
@@ -152,11 +156,7 @@ function availableActions(row: AdminPostItem) {
 }
 
 onMounted(async () => {
-  try {
-    await loadOptions()
-  } finally {
-    await loadPosts(1)
-  }
+  await Promise.allSettled([loadOptions(), loadPosts(1)])
 })
 </script>
 

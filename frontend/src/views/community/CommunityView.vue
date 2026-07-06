@@ -363,7 +363,7 @@ async function pinNewPostToTop(postId: string | number) {
 .feed-tab.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 999px; background: var(--color-primary); }
 .feed-tab:hover { color: var(--color-primary); }
 .posts-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 16px; }
-.ai-tab-container { display: flex; height: 100%; min-height: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.ai-tab-container { display: flex; height: 100%; min-height: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-bg-card); }
 .loading-container { display: flex; justify-content: center; padding: 40px; }
 .empty-state { padding: 40px; }
 .pagination { margin-top: 16px; display: flex; justify-content: center; flex-shrink: 0; }
@@ -375,5 +375,6 @@ async function pinNewPostToTop(postId: string | number) {
 :root.dark .feed-tab { color: var(--color-text-secondary); }
 :root.dark .feed-tab.active { color: var(--color-primary); }
 :root.dark .ai-tab-container { border-color: var(--color-border); }
+:root.dark .ai-tab-container { background: var(--color-bg-card); }
 :root.dark .app-card { border-color: var(--color-border); }
 </style>

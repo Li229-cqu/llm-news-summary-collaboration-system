@@ -70,7 +70,7 @@ function handleClick(item: HotSearchItem) {
   height: 100%;
 }
 .app-card {
-  border: 1px solid rgba(238, 210, 210, 0.86);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(130, 34, 34, 0.08);
   background: var(--color-bg-card);
@@ -137,7 +137,7 @@ function handleClick(item: HotSearchItem) {
   place-items: center;
   border-radius: 6px;
   background: var(--color-primary-soft);
-  color: #dc2626;
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -214,5 +214,14 @@ function handleClick(item: HotSearchItem) {
   font-size: 13px;
   color: var(--color-text-secondary);
   line-height: 1.6;
+}
+
+:global(:root.dark) .hot-search-item:hover {
+  background: var(--control-hover-bg);
+}
+
+:global(:root.dark) .rank {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 </style>

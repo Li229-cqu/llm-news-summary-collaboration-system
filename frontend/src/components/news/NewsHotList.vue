@@ -26,7 +26,7 @@
         <div class="news-hot-list__content">
           <div class="news-hot-list__item-title">{{ item.title }}</div>
           <div class="news-hot-list__meta">
-            <span>{{ item.category_name }}</span>
+            <span>{{ displayCategoryName(item.category_name) }}</span>
             <span>阅读 {{ item.view_count }}</span>
             <span>评论 {{ item.comment_count }}</span>
           </div>
@@ -39,6 +39,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { displayCategoryName } from '@/utils/displayText'
 
 export interface HotNewsItem {
   id: number

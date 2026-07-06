@@ -34,6 +34,60 @@ class AdminDashboard(BaseModel):
     pending_total: int = 0
 
 
+class AdminRankingSummary(BaseModel):
+    news_hot_count: int = 0
+    community_hot_count: int = 0
+    today_news_count: int = 0
+    today_post_count: int = 0
+
+
+class AdminNewsHotRankingItem(BaseModel):
+    rank: int
+    id: int
+    title: str = ''
+    category_name: str = ''
+    source: str = ''
+    view_count: int = 0
+    like_count: int = 0
+    favorite_count: int = 0
+    comment_count: int = 0
+    heat_score: int = 0
+    publish_time: Optional[str] = None
+    status: int = 1
+    status_label: str = ''
+
+
+class AdminNewsHotRankingResponse(BaseModel):
+    items: list[AdminNewsHotRankingItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 10
+    summary: AdminRankingSummary = Field(default_factory=AdminRankingSummary)
+
+
+class AdminCommunityHotRankingItem(BaseModel):
+    rank: int
+    id: int
+    title: str = ''
+    author_name: str = ''
+    view_count: int = 0
+    like_count: int = 0
+    favorite_count: int = 0
+    comment_count: int = 0
+    heat_score: int = 0
+    created_at: Optional[str] = None
+    status: int = 1
+    status_label: str = ''
+
+
+class AdminCommunityHotRankingResponse(BaseModel):
+    items: list[AdminCommunityHotRankingItem] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 10
+    summary: AdminRankingSummary = Field(default_factory=AdminRankingSummary)
+
+
 class UserItem(BaseModel):
     id: int
     username: str

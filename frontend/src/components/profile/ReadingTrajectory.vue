@@ -186,8 +186,11 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import type { ECharts, EChartsOption } from 'echarts'
 import { getReadingTrajectory, type ReadingTrajectoryResponse, type ReadingTrajectoryNode, type ReadingTrajectoryEdge } from '@/api/profile'
+import { useThemeStore } from '@/stores/theme'
+import { getChartThemeColors } from '@/utils/chartTheme'
 
 const router = useRouter()
+const themeStore = useThemeStore()
 
 const loading = ref(false)
 const error = ref('')
@@ -334,6 +337,7 @@ function renderChart() {
       return
     }
   }
+  const theme = getChartThemeColors()
 
   const edges = filteredEdges.value
 
@@ -368,10 +372,10 @@ function renderChart() {
   const option: any = {
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(50, 50, 50, 0.9)',
-      borderColor: '#333',
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.axisLine,
       textStyle: {
-        color: '#fff',
+        color: theme.tooltipText,
       },
       formatter: (params: any) => {
         if (params.dataType === 'node') {
@@ -419,10 +423,11 @@ function renderChart() {
         label: {
           position: 'right',
           fontSize: 11,
-          color: '#333333',
+          color: theme.axisText,
         },
         edgeLabel: {
           fontSize: 11,
+          color: theme.axisText,
         },
       },
     ],
@@ -563,6 +568,8 @@ watch(
     scheduleRenderChart()
   },
 )
+
+watch(() => themeStore.theme, () => nextTick(renderChart))
 
 onMounted(async () => {
   await nextTick()

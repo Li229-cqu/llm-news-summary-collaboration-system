@@ -21,10 +21,6 @@
 
       <div class="timeline-panel__metrics">
         <div class="timeline-panel__metric">
-          <span>热度</span>
-          <strong>{{ heatScore }}</strong>
-        </div>
-        <div class="timeline-panel__metric">
           <span>节点数</span>
           <strong>{{ timelineData.timeline.length }}</strong>
         </div>
@@ -97,7 +93,6 @@ const overviewText = computed(() => {
   const firstNode = props.timelineData.timeline[0]
   return firstNode?.event_summary || '该话题下的事件脉络会按时间顺序展示关键节点。'
 })
-const heatScore = computed(() => props.timelineData.timeline.length * 10 || 0)
 </script>
 
 <style scoped>

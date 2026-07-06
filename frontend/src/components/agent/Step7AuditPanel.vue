@@ -297,7 +297,7 @@ function simStats(simMap: any[]) {
   align-items: baseline;
   gap: 6px;
   font-size: 13px;
-  color: #555;
+  color: var(--color-text-secondary);
   padding: 6px 10px;
   background: var(--color-bg-hover);
   border-radius: 6px;
@@ -384,7 +384,7 @@ function simStats(simMap: any[]) {
 }
 .s7a__sim-item:hover {
   border-left-color: #6366f1;
-  background: #f5f3ff;
+  background: var(--color-primary-soft);
 }
 
 .s7a__sim-head {
@@ -431,7 +431,7 @@ function simStats(simMap: any[]) {
 .s7a__sim-ai-text {
   margin: 0;
   font-size: 13px;
-  color: #444;
+  color: var(--color-text-primary);
   line-height: 1.5;
 }
 
@@ -480,7 +480,7 @@ function simStats(simMap: any[]) {
 
 .s7a__hover-text {
   margin: 4px 0;
-  color: #444;
+  color: var(--color-text-primary);
 }
 
 .s7a__hover-text--dim {
@@ -493,7 +493,7 @@ function simStats(simMap: any[]) {
   margin: 0;
   padding-left: 18px;
   font-size: 13px;
-  color: #555;
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
@@ -505,7 +505,7 @@ function simStats(simMap: any[]) {
 }
 .s7a__issue-row {
   font-size: 13px;
-  color: #555;
+  color: var(--color-text-secondary);
   display: flex;
   gap: 8px;
   align-items: baseline;

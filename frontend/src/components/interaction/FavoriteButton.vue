@@ -61,6 +61,27 @@ function handleToggle() {
   box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
+:global(:root.dark) .interaction-button {
+  --el-button-bg-color: var(--control-bg);
+  --el-button-border-color: var(--color-border);
+  --el-button-text-color: var(--color-text-secondary);
+  --el-button-hover-bg-color: var(--control-hover-bg);
+  --el-button-hover-border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  --el-button-hover-text-color: var(--color-primary);
+  --el-button-active-bg-color: var(--color-primary-soft);
+  --el-button-active-border-color: var(--color-primary);
+  --el-button-active-text-color: var(--color-primary);
+}
+
+:global(:root.dark) .interaction-button.is-active {
+  --el-button-bg-color: var(--color-primary);
+  --el-button-border-color: var(--color-primary);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: var(--color-primary);
+  --el-button-hover-border-color: var(--color-primary);
+  --el-button-hover-text-color: #fff;
+}
+
 @media (max-width: 640px) {
   .interaction-button {
     width: 100%;

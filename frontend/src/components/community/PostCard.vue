@@ -182,7 +182,7 @@ function truncateContent(content: string, maxLength: number) {
 .post-card {
   cursor: pointer;
   transition: all 0.3s;
-  border: 1px solid #e3edf9;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   box-shadow: 0 6px 18px rgba(34, 78, 130, 0.06);
 }
@@ -211,7 +211,7 @@ function truncateContent(content: string, maxLength: number) {
 
 .post-time {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-muted);
 }
 
 .post-title {
@@ -223,7 +223,7 @@ function truncateContent(content: string, maxLength: number) {
 }
 
 .post-content {
-  color: #53657c;
+  color: var(--color-text-secondary);
   font-size: 14px;
   margin-bottom: 12px;
   line-height: 1.6;
@@ -281,12 +281,12 @@ function truncateContent(content: string, maxLength: number) {
   background: var(--color-primary-soft);
   border-radius: 8px;
   font-size: 13px;
-  color: #dc2626;
+  color: var(--color-primary);
   cursor: pointer;
   transition: background 0.2s;
 }
 .post-related-news:hover {
-  background: #fee2e2;
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-bg-card));
 }
 
 .post-actions {
@@ -306,20 +306,20 @@ function truncateContent(content: string, maxLength: number) {
 }
 
 .post-action-btn:hover {
-  color: #dc2626;
+  color: var(--color-primary);
 }
 
 .post-action-btn .action-count {
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .post-action-btn.action-active {
-  color: #dc2626;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-active .action-count {
-  color: #dc2626;
+  color: var(--color-primary);
 }
 
 .post-action-btn.action-favorited {
@@ -328,5 +328,14 @@ function truncateContent(content: string, maxLength: number) {
 
 .post-action-btn.action-favorited .action-count {
   color: #f59e0b;
+}
+
+:global(:root.dark) .post-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+:global(:root.dark) .post-action-btn {
+  --el-button-hover-bg-color: var(--control-hover-bg);
+  --el-button-active-bg-color: var(--color-primary-soft);
 }
 </style>

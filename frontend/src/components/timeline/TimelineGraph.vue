@@ -41,6 +41,8 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
 import type { TimelineNode, TimelineRelationship, TimelinePhase } from '@/api/timeline'
+import { useThemeStore } from '@/stores/theme'
+import { getChartThemeColors } from '@/utils/chartTheme'
 
 const props = defineProps<{
   nodes: TimelineNode[]
@@ -49,6 +51,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const themeStore = useThemeStore()
 
 const graphRef = ref<HTMLElement | null>(null)
 const showLabels = ref(true)
@@ -97,6 +100,7 @@ function getNodeSymbolSize(importance: number | undefined): number {
 
 function renderGraph() {
   if (!graphRef.value || !hasData.value) return
+  const theme = getChartThemeColors()
 
   const el = graphRef.value
   const width = el.clientWidth
@@ -133,7 +137,7 @@ function renderGraph() {
       show: showLabels.value,
       position: 'bottom' as const,
       fontSize: 11,
-      color: '#333',
+      color: theme.axisText,
       formatter: (p: any) => {
         const name = p.name || ''
         return name.length > 8 ? name.slice(0, 8) + '...' : name
@@ -161,15 +165,16 @@ function renderGraph() {
       show: showLabels.value,
       formatter: relationTypeMap[rel.type || 'follows'] || rel.type,
       fontSize: 10,
+      color: theme.axisText,
     },
   }))
 
   const option: any = {
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(50, 50, 50, 0.92)',
-      borderColor: '#444',
-      textStyle: { color: '#fff' },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.axisLine,
+      textStyle: { color: theme.tooltipText },
       formatter: (params: any) => {
         if (params.dataType === 'node') {
           const d = params.data
@@ -177,9 +182,9 @@ function renderGraph() {
           html += `<div>类型: ${eventLabelMap[d.eventType] || d.eventType}</div>`
           html += `<div>时间: ${d.eventTime}</div>`
           if (d.eventSummary) {
-            html += `<div style="max-width:220px;margin-top:4px;font-size:12px;color:#ccc;">${d.eventSummary.length > 80 ? d.eventSummary.slice(0, 80) + '...' : d.eventSummary}</div>`
+            html += `<div style="max-width:220px;margin-top:4px;font-size:12px;color:${theme.axisText};">${d.eventSummary.length > 80 ? d.eventSummary.slice(0, 80) + '...' : d.eventSummary}</div>`
           }
-          html += `<div style="margin-top:4px;font-size:11px;color:#aaa;">点击查看原文 →</div>`
+          html += `<div style="margin-top:4px;font-size:11px;color:${theme.axisText};">点击查看原文 →</div>`
           return html
         }
         if (params.dataType === 'edge') {
@@ -268,6 +273,8 @@ watch(
   },
   { deep: true },
 )
+
+watch(() => themeStore.theme, () => nextTick(renderGraph))
 
 onMounted(async () => {
   await nextTick()

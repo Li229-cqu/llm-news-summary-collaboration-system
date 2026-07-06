@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -27,7 +27,6 @@ import {
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const router = useRouter()
-const HIDDEN_TOPIC_NAMES = new Set(['低空经济与无人机产业', '新能源汽车与智能交通'])
 
 // ── 自动生成事件脉络 ────────────────────────────────────────────
 const autoClusterForm = reactive({
@@ -349,7 +348,7 @@ const jsonText = ref('')
 const summaryCards = computed(() => {
   const s = timelineData.value?.summary
   return [
-    { key: 'topic_count', label: '全部主题', value: visibleTimelineItems.value.length > 0 ? visibleTimelineItems.value.length : (s?.topic_count ?? '--') },
+    { key: 'topic_count', label: '全部主题', value: timelineData.value?.items ? timelineData.value.items.length : (s?.topic_count ?? '--') },
     { key: 'generated', label: '已生成 Timeline', value: s?.generated_count ?? '--' },
     { key: 'not_generated', label: '未生成 Timeline', value: s?.not_generated_count ?? '--' },
     { key: 'failed', label: '生成失败', value: s?.failed_count ?? '--' },
@@ -358,12 +357,9 @@ const summaryCards = computed(() => {
   ]
 })
 
-function isHiddenTopicName(topicName: string): boolean {
-  return HIDDEN_TOPIC_NAMES.has(topicName.trim())
-}
 
 const visibleTimelineItems = computed(() => {
-  return (timelineData.value?.items || []).filter(item => !isHiddenTopicName(item.topic_name))
+  return timelineData.value?.items || []
 })
 
 const statusTagType = (status: string) => {
@@ -382,7 +378,12 @@ const cacheTagType = (status: string) => {
 
 // ── load ────────────────────────────────────────────────────────
 async function loadOptions() {
-  timelineOptions.value = await getAdminTimelineOptions()
+  try {
+    timelineOptions.value = await getAdminTimelineOptions()
+  } catch (error) {
+    timelineOptions.value = null
+    ElMessage.error(error instanceof Error ? error.message : 'Timeline 选项加载失败')
+  }
 }
 
 async function loadList() {
@@ -488,7 +489,7 @@ function openJson(row: AdminTimelineItem) {
 
 // ── mount ───────────────────────────────────────────────────────
 onMounted(async () => {
-  await Promise.all([loadOptions(), loadList()])
+  await Promise.allSettled([loadOptions(), loadList()])
 })
 </script>
 
@@ -1063,3 +1064,4 @@ onMounted(async () => {
   .auto-topic-card__actions { justify-content:flex-start }
 }
 </style>
+

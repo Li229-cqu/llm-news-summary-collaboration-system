@@ -80,7 +80,6 @@
 
               <div class="timeline-topic-card__meta">
                 <span class="timeline-topic-card__meta-pill">{{ topic.news_count }} 篇新闻</span>
-                <span class="timeline-topic-card__meta-pill">热度 {{ topic.heat_score }}</span>
               </div>
 
               <div v-if="topic.keyword_list?.length" class="timeline-topic-card__keywords">

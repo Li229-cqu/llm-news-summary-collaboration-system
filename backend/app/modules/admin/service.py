@@ -23,10 +23,14 @@ from app.modules.admin.schema import (
     PendingSummary,
     ReviewActionRequest,
     ReviewActionResult,
+    AdminCommunityHotRankingItem,
+    AdminCommunityHotRankingResponse,
     AdminNewsItem,
     AdminNewsListResponse,
     AdminNewsSummary,
     AdminNewsDetail,
+    AdminNewsHotRankingItem,
+    AdminNewsHotRankingResponse,
     AdminNewsUpdateRequest,
     AdminNewsTopicRequest,
     AdminNewsActionResult,
@@ -125,6 +129,7 @@ from app.modules.admin.schema import (
     AdminAiRiskItem,
     AdminReviewPending,
     AdminReviewProcessed,
+    AdminRankingSummary,
     AdminContentOverviewItem,
 )
 
@@ -941,6 +946,104 @@ def _news_status_label(value: Any) -> str:
     return NEWS_STATUS_LABELS.get(_normalize_status(value), 'Unknown')
 
 
+def _admin_ranking_summary(news_limit: int = 10, community_limit: int = 10) -> Dict[str, Any]:
+    return AdminRankingSummary(
+        news_hot_count=max(news_limit, 0),
+        community_hot_count=max(community_limit, 0),
+        today_news_count=_safe_count('SELECT COUNT(*) AS total FROM news WHERE DATE(created_at) = CURDATE()'),
+        today_post_count=_safe_count('SELECT COUNT(*) AS total FROM community_post WHERE DATE(created_at) = CURDATE()'),
+    ).model_dump()
+
+
+def get_admin_news_hot_ranking(
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 10,
+) -> Dict[str, Any]:
+    normalized_page = max(page, 1)
+    normalized_page_size = max(page_size, 1)
+    offset = (normalized_page - 1) * normalized_page_size
+    conditions = ['n.status = 1']
+    params: list[Any] = []
+    if keyword:
+        conditions.append('n.title LIKE %s')
+        params.append(f'%{keyword}%')
+    where_sql = 'WHERE ' + ' AND '.join(conditions)
+    count_row = execute_one(
+        f"""
+        SELECT COUNT(*) AS total
+        FROM news n
+        LEFT JOIN news_category nc ON nc.id = n.category_id
+        {where_sql}
+        """,
+        params,
+    )
+    total = int((count_row or {}).get('total') or 0)
+    rows = execute_query(
+        f"""
+        SELECT
+            n.id,
+            n.title,
+            COALESCE(nc.name, '') AS category_name,
+            COALESCE(n.source, '') AS source,
+            COALESCE(n.view_count, 0) AS view_count,
+            COALESCE(n.like_count, 0) AS like_count,
+            COALESCE(n.favorite_count, 0) AS favorite_count,
+            COALESCE(n.comment_count, 0) AS comment_count,
+            (
+                COALESCE(n.view_count, 0)
+                + COALESCE(n.like_count, 0) * 5
+                + COALESCE(n.favorite_count, 0) * 4
+                + COALESCE(n.comment_count, 0) * 6
+            ) AS heat_score,
+            n.publish_time,
+            n.status
+        FROM news n
+        LEFT JOIN news_category nc ON nc.id = n.category_id
+        {where_sql}
+        ORDER BY
+            CASE
+                WHEN n.publish_time >= NOW() - INTERVAL 2 DAY THEN 0
+                WHEN n.publish_time >= NOW() - INTERVAL 7 DAY THEN 1
+                ELSE 2
+            END ASC,
+            heat_score DESC,
+            n.view_count DESC,
+            n.like_count DESC,
+            n.favorite_count DESC,
+            n.comment_count DESC,
+            n.publish_time DESC,
+            n.id DESC
+        LIMIT %s OFFSET %s
+        """,
+        [*params, normalized_page_size, offset],
+    )
+    items = [
+        AdminNewsHotRankingItem(
+            rank=offset + index,
+            id=int(row.get('id') or 0),
+            title=str(row.get('title') or ''),
+            category_name=str(row.get('category_name') or ''),
+            source=str(row.get('source') or ''),
+            view_count=int(row.get('view_count') or 0),
+            like_count=int(row.get('like_count') or 0),
+            favorite_count=int(row.get('favorite_count') or 0),
+            comment_count=int(row.get('comment_count') or 0),
+            heat_score=int(row.get('heat_score') or 0),
+            publish_time=format_datetime(row.get('publish_time')) or None,
+            status=_normalize_status(row.get('status')),
+            status_label=_news_status_label(row.get('status')),
+        ) for index, row in enumerate(rows, start=1)
+    ]
+    return AdminNewsHotRankingResponse(
+        items=items,
+        total=total,
+        page=normalized_page,
+        page_size=normalized_page_size,
+        summary=AdminRankingSummary.model_validate(_admin_ranking_summary(news_limit=total)),
+    ).model_dump()
+
+
 def _build_admin_news_item(row: Dict[str, Any], feature_column: str | None = None) -> Dict[str, Any]:
     feature_value = row.get('is_featured') if feature_column else None
     item = AdminNewsItem(
@@ -1253,6 +1356,81 @@ def _post_feature_column() -> str | None:
 
 def _post_status_label(value: Any) -> str:
     return POST_STATUS_LABELS.get(_normalize_status(value), 'Unknown')
+
+
+def get_admin_community_hot_ranking(
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 10,
+) -> Dict[str, Any]:
+    normalized_page = max(page, 1)
+    normalized_page_size = max(page_size, 1)
+    offset = (normalized_page - 1) * normalized_page_size
+    conditions = ['p.status = 1']
+    params: list[Any] = []
+    if keyword:
+        conditions.append('p.title LIKE %s')
+        params.append(f'%{keyword}%')
+    where_sql = 'WHERE ' + ' AND '.join(conditions)
+    count_row = execute_one(
+        f"""
+        SELECT COUNT(*) AS total
+        FROM community_post p
+        LEFT JOIN user u ON u.id = p.user_id
+        {where_sql}
+        """,
+        params,
+    )
+    total = int((count_row or {}).get('total') or 0)
+    rows = execute_query(
+        f"""
+        SELECT
+            p.id,
+            p.title,
+            COALESCE(u.nickname, u.username, CONCAT('user_', p.user_id), '') AS author_name,
+            COALESCE(p.view_count, 0) AS view_count,
+            COALESCE(p.like_count, 0) AS like_count,
+            COALESCE(p.favorite_count, 0) AS favorite_count,
+            COALESCE(p.comment_count, 0) AS comment_count,
+            (
+                COALESCE(p.like_count, 0) * 4
+                + COALESCE(p.favorite_count, 0) * 5
+                + COALESCE(p.comment_count, 0) * 6
+                + COALESCE(p.view_count, 0) * 3
+            ) AS heat_score,
+            p.created_at,
+            p.status
+        FROM community_post p
+        LEFT JOIN user u ON u.id = p.user_id
+        {where_sql}
+        ORDER BY heat_score DESC, p.created_at DESC
+        LIMIT %s OFFSET %s
+        """,
+        [*params, normalized_page_size, offset],
+    )
+    items = [
+        AdminCommunityHotRankingItem(
+            rank=offset + index,
+            id=int(row.get('id') or 0),
+            title=str(row.get('title') or ''),
+            author_name=str(row.get('author_name') or ''),
+            view_count=int(row.get('view_count') or 0),
+            like_count=int(row.get('like_count') or 0),
+            favorite_count=int(row.get('favorite_count') or 0),
+            comment_count=int(row.get('comment_count') or 0),
+            heat_score=int(row.get('heat_score') or 0),
+            created_at=format_datetime(row.get('created_at')) or None,
+            status=_normalize_status(row.get('status')),
+            status_label=_post_status_label(row.get('status')),
+        ) for index, row in enumerate(rows, start=1)
+    ]
+    return AdminCommunityHotRankingResponse(
+        items=items,
+        total=total,
+        page=normalized_page,
+        page_size=normalized_page_size,
+        summary=AdminRankingSummary.model_validate(_admin_ranking_summary(community_limit=total)),
+    ).model_dump()
 
 
 def _build_admin_post_item(row: Dict[str, Any], feature_column: str | None = None) -> Dict[str, Any]:
