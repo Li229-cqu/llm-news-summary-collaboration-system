@@ -10,11 +10,11 @@
       mode="horizontal"
       router
       :ellipsis="false"
-      :default-active="$route.path"
+      :default-active="activeMenuPath"
     >
-      <el-menu-item index="/home">首页</el-menu-item>
-      <el-menu-item index="/ai/title-summary">AI 智能编辑</el-menu-item>
-      <el-menu-item index="/community">社区</el-menu-item>
+      <el-menu-item index="/home">新闻首页</el-menu-item>
+      <el-menu-item index="/ai-generate">智审生成</el-menu-item>
+      <el-menu-item index="/community">社区广场</el-menu-item>
       <el-menu-item index="/profile">个人中心</el-menu-item>
       <el-menu-item v-if="userStore.isEditorOrAdmin" index="/admin">管理后台</el-menu-item>
     </el-menu>
@@ -80,6 +80,17 @@ const userStore = useUserStore()
 const searchStorageKey = 'home_global_search_keyword'
 const searchKeyword = ref('')
 const isHomePage = computed(() => route.name === 'home')
+const activeMenuPath = computed(() => {
+  const path = route.path
+
+  if (path === '/home' || path.startsWith('/news/')) return '/home'
+  if (path.startsWith('/ai-generate') || path.startsWith('/ai/')) return '/ai-generate'
+  if (path.startsWith('/community')) return '/community'
+  if (path.startsWith('/profile')) return '/profile'
+  if (path.startsWith('/admin')) return '/admin'
+
+  return path
+})
 
 onMounted(() => {
   const routeKeyword = typeof route.query.keyword === 'string' ? route.query.keyword.trim() : ''

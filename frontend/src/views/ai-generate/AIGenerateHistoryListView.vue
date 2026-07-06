@@ -124,7 +124,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
                 <div class="card-summary">{{ getPreviewSummary(record) }}</div>
                 <div class="card-meta">
                   <el-tag :type="getRiskLevelType(record.risk_level)" size="small">
-                    {{ record.risk_level === 'high' ? '高质量' : record.risk_level === 'medium' ? '中质量' : '低质量' }}
+                    {{ record.risk_level === 'low' ? '高质量' : record.risk_level === 'medium' ? '中质量' : '低质量' }}
                   </el-tag>
                   <el-tag :type="getSourceTagType(record)" size="small">
                     {{ getSourceLabel(record) }}

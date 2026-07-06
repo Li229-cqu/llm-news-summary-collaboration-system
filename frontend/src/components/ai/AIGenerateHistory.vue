@@ -180,7 +180,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
             <div class="gh__card-head">
               <span class="gh__card-src">{{ getPreviewTitle(record) }}</span>
               <el-tag :type="record.risk_level === 'high' ? 'danger' : record.risk_level === 'medium' ? 'warning' : 'success'" size="small" effect="light">
-                {{ record.risk_level === 'high' ? '高质量' : record.risk_level === 'medium' ? '中质量' : '低质量' }}
+                {{ record.risk_level === 'low' ? '高质量' : record.risk_level === 'medium' ? '中质量' : '低质量' }}
               </el-tag>
               <el-tag :type="getSourceTagType(record)" size="small" effect="light">
                 {{ getSourceLabel(record) }}
@@ -219,7 +219,7 @@ function getSourceTagType(record: NormalizedAIGenerateHistoryRecord) {
                 :type="detail.risk_level === 'high' ? 'danger' : detail.risk_level === 'medium' ? 'warning' : 'success'"
                 size="small" effect="dark" round
               >
-                {{ detail.risk_level === 'high' ? '高质量' : detail.risk_level === 'medium' ? '中质量' : '低质量' }}
+                {{ detail.risk_level === 'low' ? '高质量' : detail.risk_level === 'medium' ? '中质量' : '低质量' }}
               </el-tag>
             </div>
           </div>

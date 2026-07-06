@@ -156,7 +156,7 @@ function getSourceTagType() {
               <h2>{{ detail.source_title || '暂无标题' }}</h2>
               <div class="info-tags">
                 <el-tag v-if="detailRiskLevel" :type="getRiskLevelType(detailRiskLevel)" size="small">
-                  {{ detailRiskLevel === 'low' ? '低质量' : detailRiskLevel === 'medium' ? '中质量' : '高质量' }}
+                  {{ detailRiskLevel === 'low' ? '高质量' : detailRiskLevel === 'medium' ? '中质量' : '低质量' }}
                 </el-tag>
                 <el-tag :type="getSourceTagType()" size="small">
                   {{ getSourceLabel() }}

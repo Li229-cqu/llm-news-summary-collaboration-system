@@ -101,9 +101,9 @@ const getRiskLevelColor = (level: string) => {
 
 const getRiskLevelText = (level: string) => {
   switch (level) {
-    case 'high': return '高质量'
+    case 'high': return '低质量'
     case 'medium': return '中质量'
-    case 'low': return '低质量'
+    case 'low': return '高质量'
     default: return '未知'
   }
 }

@@ -1586,7 +1586,7 @@ onActivated(async () => {
                       :type="item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'"
                       size="small"
                     >
-                      {{ item.risk_level === 'high' ? '高质量' : item.risk_level === 'medium' ? '中质量' : '低质量' }}
+                      {{ item.risk_level === 'low' ? '高质量' : item.risk_level === 'medium' ? '中质量' : '低质量' }}
                     </el-tag>
                     <el-button type="primary" text :icon="ZoomIn" size="small" @click="openAIRecordDetail(item)">
                       查看详情
@@ -1719,7 +1719,7 @@ onActivated(async () => {
             size="small"
             :type="currentAIRecord.risk_level === 'high' ? 'danger' : currentAIRecord.risk_level === 'medium' ? 'warning' : 'success'"
           >
-            {{ currentAIRecord.risk_level === 'high' ? '高质量' : currentAIRecord.risk_level === 'medium' ? '中质量' : '低质量' }}
+            {{ currentAIRecord.risk_level === 'low' ? '高质量' : currentAIRecord.risk_level === 'medium' ? '中质量' : '低质量' }}
           </el-tag>
         </div>
 

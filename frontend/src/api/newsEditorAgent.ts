@@ -172,7 +172,7 @@ export const MOCK_STEP_OUTPUTS: Record<string, Record<string, any>> = {
   },
   check_consistency: {
     risk_level: 'low',
-    risk_label: '低质量',
+    risk_label: '低风险',
     title_summary_match: 0.94,
     fact_check_results: [
       { claim: '销量224.7万辆', verdict: '与原文一致' },

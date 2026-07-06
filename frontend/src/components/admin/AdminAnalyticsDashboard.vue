@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, View, TrendCharts, UserFilled, Files, Message, Document, DataBoard, Warning } from '@element-plus/icons-vue'
+import { Refresh, View, TrendCharts, UserFilled, Files, Message, DataBoard, Warning } from '@element-plus/icons-vue'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
@@ -10,14 +10,12 @@ import {
   type AdminAnalyticsAiRiskResponse,
   type AdminAnalyticsOverview,
   type AdminAnalyticsReviewSummaryResponse,
-  type AdminAnalyticsTopContentResponse,
   type AdminAnalyticsTrendsResponse,
   type AdminContentOverviewItem,
   getAdminAnalyticsAiRisk,
   getAdminAnalyticsContentOverview,
   getAdminAnalyticsOverview,
   getAdminAnalyticsReviewSummary,
-  getAdminAnalyticsTopContent,
   getAdminAnalyticsTrends,
 } from '@/api/admin'
 
@@ -45,7 +43,7 @@ const rangeEnd = computed(() => {
 
 // ── Chinese label maps ──
 function riskLevelCn(r: string) {
-  const map: Record<string, string> = { low: '低质量', medium: '中质量', high: '高质量', unknown: '未知' }
+  const map: Record<string, string> = { low: '高质量', medium: '中质量', high: '低质量', unknown: '未知' }
   return map[r] || r || '未知'
 }
 function statusCnLabel(s: string | number) {
@@ -62,7 +60,6 @@ const colorMap: Record<string, string> = { low: '#67c23a', medium: '#e6a23c', hi
 // ── Loading states ──
 const overviewLoading = ref(false)
 const trendsLoading = ref(false)
-const topLoading = ref(false)
 const riskLoading = ref(false)
 const reviewLoading = ref(false)
 const overviewTabLoading = ref(false)
@@ -70,7 +67,6 @@ const overviewTabLoading = ref(false)
 // ── Data ──
 const overview = ref<AdminAnalyticsOverview | null>(null)
 const trends = ref<AdminAnalyticsTrendsResponse | null>(null)
-const topContent = ref<AdminAnalyticsTopContentResponse | null>(null)
 const aiRisk = ref<AdminAnalyticsAiRiskResponse | null>(null)
 const reviewSummary = ref<AdminAnalyticsReviewSummaryResponse | null>(null)
 const contentItems = ref<AdminContentOverviewItem[]>([])
@@ -125,6 +121,11 @@ const riskStats = computed(() => {
   }
 })
 
+const lowQualityHigh = computed(() => {
+  const high = riskStats.value?.levels.find(item => item.level === 'high')
+  return Boolean(high && high.pct >= 30)
+})
+
 // ── Chart renderers ──
 function initCharts() {
   if (contentChartRef.value && !contentChart) contentChart = echarts.init(contentChartRef.value)
@@ -162,14 +163,13 @@ function renderAiTrend() {
   if (!data.length) { aiChart.clear(); return }
   aiChart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['AI 调用', '降级', '高质量'], top: 0 },
+    legend: { data: ['AI 调用', '低质量'], top: 0 },
     grid: { left: 40, right: 16, top: 36, bottom: 24 },
     xAxis: { type: 'category', data: data.map(d => d.date.slice(5)), axisLabel: { rotate: 30, fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
       { name: 'AI 调用', type: 'bar', data: data.map(d => d.ai_count), barMaxWidth: 12 },
-      { name: '降级', type: 'line', data: data.map(d => d.fallback_count), smooth: true, symbol: 'none' },
-      { name: '高质量', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
+      { name: '低质量', type: 'line', data: data.map(d => d.high_risk_count), smooth: true, symbol: 'none' },
     ],
   }, true)
 }
@@ -219,15 +219,6 @@ async function loadTrends() {
   } finally { trendsLoading.value = false }
 }
 
-async function loadTop() {
-  topLoading.value = true
-  try {
-    topContent.value = await getAdminAnalyticsTopContent({ start_time: rangeStart.value, end_time: rangeEnd.value, limit: 10 })
-  } catch (e) {
-    ElMessage.error('加载热门内容失败，请检查后端服务是否启动')
-  } finally { topLoading.value = false }
-}
-
 async function loadRisk() {
   riskLoading.value = true
   try {
@@ -268,7 +259,7 @@ async function loadContentOverview(reset = false) {
 
 async function loadAll() {
   rangeLoading.value = true
-  await Promise.all([loadOverview(), loadTrends(), loadTop(), loadRisk(), loadReview(), loadContentOverview(true)])
+  await Promise.all([loadOverview(), loadTrends(), loadRisk(), loadReview(), loadContentOverview(true)])
   rangeLoading.value = false
 }
 
@@ -285,14 +276,15 @@ function jumpTo(tab: string) {
 // ── Summary cards ──
 const summaryCards = computed(() => {
   const o = overview.value
+  const totalPosts = Number(o?.total_posts ?? 0)
+  const totalComments = Number(o?.total_comments ?? 0)
   return [
-    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃: ' + (o?.active_users ?? '-'), icon: UserFilled, bg: '#fef2f2', color: '#dc2626' },
-    { key: 'news', title: '新闻总数', value: o?.total_news ?? '-', hint: '文章总量', icon: Files, bg: '#f0fdf4', color: '#16a34a' },
-    { key: 'posts', title: '帖子总数', value: o?.total_posts ?? '-', hint: '社区帖子', icon: Message, bg: '#fefce8', color: '#ca8a04' },
-    { key: 'comments', title: '评论总数', value: o?.total_comments ?? '-', hint: '新闻+帖子评论', icon: Document, bg: '#fdf2f8', color: '#db2777' },
-    { key: 'ai', title: 'AI 生成', value: o?.ai_generate_count ?? '-', hint: '调用次数', icon: TrendCharts, bg: '#f5f3ff', color: '#7c3aed' },
-    { key: 'timeline', title: '时间线', value: o?.timeline_count ?? '-', hint: '已生成', icon: DataBoard, bg: '#ecfeff', color: '#0891b2' },
-    { key: 'pending', title: '待处理', value: o?.pending_count ?? '-', hint: '需审核', icon: Warning, bg: '#fff7ed', color: '#ea580c' },
+    { key: 'users', title: '用户总数', value: o?.total_users ?? '-', hint: '活跃用户数量：' + (o?.active_users ?? '-'), icon: UserFilled, bg: '#fef2f2', color: '#dc2626' },
+    { key: 'content', title: '内容总量', value: o?.total_news ?? '-', hint: '新闻内容', icon: Files, bg: '#f0fdf4', color: '#16a34a' },
+    { key: 'community', title: '社区互动', value: o ? totalPosts + totalComments : '-', hint: `帖子 ${o?.total_posts ?? '-'} / 评论 ${o?.total_comments ?? '-'}`, icon: Message, bg: '#fefce8', color: '#ca8a04' },
+    { key: 'ai', title: 'AI 生成', value: o?.ai_generate_count ?? '-', hint: '生成记录 / 调用次数', icon: TrendCharts, bg: '#f5f3ff', color: '#7c3aed' },
+    { key: 'timeline', title: 'Timeline', value: o?.timeline_count ?? '-', hint: '已生成事件线', icon: DataBoard, bg: '#ecfeff', color: '#0891b2' },
+    { key: 'pending', title: '待处理', value: o?.pending_count ?? '-', hint: '新闻 / 帖子 / 评论待审', icon: Warning, bg: '#fff7ed', color: '#ea580c' },
   ]
 })
 
@@ -333,7 +325,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
     <el-card class="analytics-header" shadow="never">
       <div>
         <h2>数据看板</h2>
-        <p>查看系统运营数据、AI 生成情况、社区互动趋势与内容总览复核。</p>
+        <p>汇总系统运营、内容审核、AI 生成质量与服务状态，辅助管理员快速判断当前平台运行情况。</p>
       </div>
       <div class="header-actions">
         <el-radio-group v-model="rangeKey" size="default" @change="handleRangeChange">
@@ -374,12 +366,22 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
     <!-- Trend charts row -->
     <div class="charts-row">
       <el-card class="chart-card" shadow="never">
-        <h3>内容增长趋势</h3>
+        <div class="card-header">
+          <div>
+            <h3>内容增长趋势</h3>
+            <p class="card-subtitle">按时间统计新闻、帖子与评论新增量</p>
+          </div>
+        </div>
         <div v-if="trends?.content_trend?.length" ref="contentChartRef" class="chart-box" />
         <el-empty v-else description="暂无内容趋势数据" />
       </el-card>
       <el-card class="chart-card" shadow="never">
-        <h3>AI 使用趋势</h3>
+        <div class="card-header">
+          <div>
+            <h3>AI 使用趋势</h3>
+            <p class="card-subtitle">按时间统计 AI 调用与生成质量变化</p>
+          </div>
+        </div>
         <div v-if="trends?.ai_trend?.length" ref="aiChartRef" class="chart-box" />
         <el-empty v-else description="暂无 AI 趋势数据" />
       </el-card>
@@ -391,7 +393,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       <el-card class="content-card" shadow="never" v-loading="reviewLoading">
         <div class="card-header">
           <div>
-            <h3>审核处理概况</h3>
+            <h3>待审核与今日处理</h3>
             <p class="card-subtitle">待审核内容与今日处理结果</p>
           </div>
         </div>
@@ -467,6 +469,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
                 </span>
                 <span v-if="processedActions.length === 0" class="action-legend-item">暂无处理记录</span>
               </div>
+              <el-button class="review-entry" type="primary" plain size="small" @click="jumpTo('pending')">进入待审核中心</el-button>
             </div>
           </div>
         </template>
@@ -477,7 +480,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       <el-card class="content-card" shadow="never" v-loading="riskLoading">
         <div class="card-header">
           <div>
-            <h3>AI 生成质量分布</h3>
+            <h3>AI 生成质量监控</h3>
             <p class="card-subtitle">AI 生成记录质量等级统计</p>
           </div>
         </div>
@@ -498,8 +501,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
                   </span>
                   <span class="risk-stat-value">{{ lvl.count }}</span>
                 </div>
-                <div v-if="riskStats.levels.some(l => l.level === 'high')" class="risk-high-alert">
-                  <el-tag type="danger" effect="plain" size="small">存在高质量异常记录，建议及时复核</el-tag>
+                <div v-if="lowQualityHigh" class="risk-high-alert">
+                  <el-tag type="warning" effect="plain" size="small">低质量生成占比较高，建议检查生成规则或模型调用参数。</el-tag>
                 </div>
               </div>
             </div>
@@ -528,50 +531,12 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       </el-card>
     </div>
 
-    <!-- Row 2: Hot News + Hot Posts -->
-    <div class="content-row">
-      <el-card class="content-card" shadow="never">
-        <div class="card-header">
-          <h3>热门新闻 Top10（按浏览量）</h3>
-        </div>
-        <el-table :data="topContent?.top_news || []" v-loading="topLoading" empty-text="暂无数据" size="small">
-          <el-table-column label="#" width="48"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
-          <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="source" label="来源" width="100" show-overflow-tooltip />
-          <el-table-column prop="view_count" label="浏览" width="70" align="right" />
-          <el-table-column prop="comment_count" label="评论" width="70" align="right" />
-          <el-table-column label="操作" width="70" fixed="right">
-            <template #default>
-              <el-button text type="primary" size="small" :icon="View" @click="jumpTo('news')">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-card class="content-card" shadow="never">
-        <div class="card-header">
-          <h3>热门帖子 Top10（按热度）</h3>
-        </div>
-        <el-table :data="topContent?.top_posts || []" v-loading="topLoading" empty-text="暂无数据" size="small">
-          <el-table-column label="#" width="48"><template #default="{ row }">{{ row.rank }}</template></el-table-column>
-          <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="author_name" label="作者" width="100" show-overflow-tooltip />
-          <el-table-column prop="heat_score" label="热度" width="70" align="right" />
-          <el-table-column label="操作" width="70" fixed="right">
-            <template #default>
-              <el-button text type="primary" size="small" :icon="View" @click="jumpTo('posts')">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-    </div>
-
     <!-- Content overview table -->
     <el-card class="overview-card" shadow="never">
       <div class="overview-header">
         <div>
           <h3>内容总览复核</h3>
-          <p>统一查看所有内容类型。点击"查看"跳转到对应管理模块。</p>
+          <p>统一查看最近内容，点击“查看”跳转到对应管理模块。</p>
         </div>
       </div>
       <div class="overview-filter">
@@ -654,7 +619,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 .summary-card { border-radius: 16px; }
@@ -673,7 +638,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   border-radius: 18px;
 }
 .chart-card h3 {
-  margin: 0 0 10px;
+  margin: 0;
 }
 .chart-box { width: 100%; height: 280px; }
 
@@ -764,6 +729,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   padding: 12px 14px;
   border: 1px solid var(--el-border-color-lighter);
   margin-top: auto;
+}
+.review-entry {
+  margin-top: 10px;
 }
 .review-today {
   font-size: 13px;

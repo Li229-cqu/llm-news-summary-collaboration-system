@@ -10,9 +10,9 @@ const props = defineProps<Props>()
 
 const riskLevelText = computed(() => {
   const map: Record<string, string> = {
-    low: '低质量',
+    low: '高质量',
     medium: '中质量',
-    high: '高质量',
+    high: '低质量',
   }
   return map[props.consistency.risk_level] || '未知'
 })

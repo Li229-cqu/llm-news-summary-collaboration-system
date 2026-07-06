@@ -75,9 +75,9 @@ export function useAIGenerateHistory() {
   }
 
   function formatRiskLabel(level: string) {
-    if (level === 'low') return '低质量'
+    if (level === 'low') return '高质量'
     if (level === 'medium') return '中质量'
-    if (level === 'high') return '高质量'
+    if (level === 'high') return '低质量'
     return '未知'
   }
 

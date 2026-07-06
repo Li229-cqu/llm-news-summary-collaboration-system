@@ -56,9 +56,9 @@ function riskTag(level: string): 'success' | 'warning' | 'danger' | 'info' {
 
 function riskText(level: string): string {
   switch (level) {
-    case 'low': return '低质量'
+    case 'low': return '高质量'
     case 'medium': return '中质量'
-    case 'high': return '高质量'
+    case 'high': return '低质量'
     default: return level || '未知'
   }
 }

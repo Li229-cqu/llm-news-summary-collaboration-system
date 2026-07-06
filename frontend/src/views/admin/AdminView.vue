@@ -4,10 +4,7 @@ import { ElMessage } from 'element-plus'
 import {
   DataBoard,
   Files,
-  Grid,
   Message,
-  Monitor,
-  Setting,
   TrendCharts,
   User,
   UserFilled,
@@ -20,14 +17,11 @@ import AdminCommentReview from '@/components/admin/AdminCommentReview.vue'
 import AdminHotTopicManagement from '@/components/admin/AdminHotTopicManagement.vue'
 import AdminTimelineManagement from '@/components/admin/AdminTimelineManagement.vue'
 import AdminUserManagement from '@/components/admin/AdminUserManagement.vue'
-import AdminAIConfigManagement from '@/components/admin/AdminAIConfigManagement.vue'
-import AdminSystemConfigManagement from '@/components/admin/AdminSystemConfigManagement.vue'
 import AdminOpsManagement from '@/components/admin/AdminOpsManagement.vue'
 import AdminAnalyticsDashboard from '@/components/admin/AdminAnalyticsDashboard.vue'
-import AdminWorkbench from '@/components/admin/AdminWorkbench.vue'
 import { useUserStore } from '@/stores/user'
 
-type AdminSection = 'dashboard' | 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'hotTopics' | 'timelines' | 'users' | 'aiConfig' | 'config' | 'ops'
+type AdminSection = 'analytics' | 'pending' | 'news' | 'posts' | 'comments' | 'hotTopics' | 'timelines' | 'users' | 'ops'
 
 const userStore = useUserStore()
 
@@ -38,39 +32,44 @@ function normalizeAvatarUrl(url?: string | null): string {
   return base.replace(/\/+$/, '') + '/' + url.replace(/^\/+/, '')
 }
 
-const activeTab = ref<AdminSection>(userStore.isAdmin ? 'analytics' : 'pending')
+const activeTab = ref<AdminSection>('analytics')
 const pendingCenterKey = ref(0)
-const workbenchKey = ref(0)
+const analyticsKey = ref(0)
+const contentOpsChildren: AdminSection[] = ['news', 'hotTopics', 'posts', 'comments']
 
-const sidebarSections = computed(() => {
-  const all = [
-    { key: 'analytics', label: '数据看板', icon: DataBoard },
-    { key: 'dashboard', label: '工作台', icon: Grid },
-    { key: 'pending', label: '待审核中心', icon: Warning },
-    { key: 'news', label: '新闻管理', icon: Files },
-    { key: 'hotTopics', label: '热搜运营', icon: TrendCharts },
-    { key: 'posts', label: '社区帖子管理', icon: Message },
-    { key: 'comments', label: '评论管理', icon: Files },
-    { key: 'timelines', label: 'Timeline 管理', icon: TrendCharts },
-    { key: 'users', label: '用户与权限', icon: UserFilled },
-    { key: 'aiConfig', label: 'AI 配置与记录', icon: Monitor },
-    { key: 'config', label: '系统配置', icon: Setting },
-    { key: 'ops', label: '系统运维', icon: DataBoard },
-  ] as const
+const topLevelSections = computed(() => [
+  { key: 'analytics', label: '数据看板', icon: DataBoard },
+  { key: 'pending', label: '待审核中心', icon: Warning },
+  { key: 'timelines', label: 'Timeline 管理', icon: TrendCharts },
+  { key: 'users', label: '用户与权限', icon: UserFilled },
+  { key: 'ops', label: '系统运维', icon: DataBoard },
+] as const)
 
-  if (!userStore.isAdmin) {
-    return all.filter(item => ['pending', 'news', 'hotTopics', 'posts', 'comments', 'timelines'].includes(item.key))
-  }
+const contentOpsSections = computed(() => [
+  { key: 'news', label: '新闻管理', icon: Files },
+  { key: 'hotTopics', label: '热搜运营', icon: TrendCharts },
+  { key: 'posts', label: '社区帖子管理', icon: Message },
+  { key: 'comments', label: '评论管理', icon: Files },
+] as const)
 
-  return all
-})
+const visibleTopLevelSections = computed(() => (
+  userStore.isAdmin
+    ? topLevelSections.value
+    : topLevelSections.value.filter(item => ['analytics', 'pending', 'timelines'].includes(item.key))
+))
+
+const menuOpeneds = computed(() => (
+  contentOpsChildren.includes(activeTab.value) ? ['contentOps'] : []
+))
+
+const menuRenderKey = computed(() => `${activeTab.value}:${menuOpeneds.value.join(',')}`)
 
 function loadDashboard() {
-  workbenchKey.value += 1
+  analyticsKey.value += 1
 }
 
 async function loadSection(section: AdminSection) {
-  const adminOnly: AdminSection[] = ['dashboard', 'analytics', 'users', 'aiConfig', 'config', 'ops']
+  const adminOnly: AdminSection[] = ['users', 'ops']
   if (!userStore.isAdmin && adminOnly.includes(section)) {
     ElMessage.warning('当前账号无权访问该后台模块')
     activeTab.value = 'pending'
@@ -106,8 +105,22 @@ async function handleTabChange(tabKey: string) {
               </el-tag>
             </div>
             <div class="sidebar-nav">
-              <el-menu class="admin-menu" :default-active="activeTab" @select="handleTabChange">
-                <el-menu-item v-for="item in sidebarSections" :key="item.key" :index="item.key">
+              <el-menu :key="menuRenderKey" class="admin-menu" :default-active="activeTab" :default-openeds="menuOpeneds" @select="handleTabChange">
+                <el-menu-item v-for="item in visibleTopLevelSections.slice(0, 3)" :key="item.key" :index="item.key">
+                  <component :is="item.icon" :size="18" class="menu-icon" />
+                  <span>{{ item.label }}</span>
+                </el-menu-item>
+                <el-sub-menu index="contentOps">
+                  <template #title>
+                    <Files :size="18" class="menu-icon" />
+                    <span>内容运营</span>
+                  </template>
+                  <el-menu-item v-for="item in contentOpsSections" :key="item.key" :index="item.key">
+                    <component :is="item.icon" :size="18" class="menu-icon" />
+                    <span>{{ item.label }}</span>
+                  </el-menu-item>
+                </el-sub-menu>
+                <el-menu-item v-for="item in visibleTopLevelSections.slice(3)" :key="item.key" :index="item.key">
                   <component :is="item.icon" :size="18" class="menu-icon" />
                   <span>{{ item.label }}</span>
                 </el-menu-item>
@@ -117,8 +130,7 @@ async function handleTabChange(tabKey: string) {
         </aside>
 
         <section class="admin-main">
-          <AdminWorkbench v-if="activeTab === 'dashboard'" :key="workbenchKey" @navigate="(tab: string) => loadSection(tab as AdminSection)" />
-          <AdminAnalyticsDashboard v-if="activeTab === 'analytics'" @navigate="(tab: string) => loadSection(tab as AdminSection)" />
+          <AdminAnalyticsDashboard v-if="activeTab === 'analytics'" :key="analyticsKey" @navigate="(tab: string) => loadSection(tab as AdminSection)" />
           <AdminPendingCenter v-if="activeTab === 'pending'" :key="pendingCenterKey" @changed="loadDashboard" />
           <AdminNewsManagement v-if="activeTab === 'news'" @changed="loadDashboard" />
           <AdminPostManagement v-if="activeTab === 'posts'" @changed="loadDashboard" />
@@ -126,8 +138,6 @@ async function handleTabChange(tabKey: string) {
           <AdminHotTopicManagement v-if="activeTab === 'hotTopics'" @changed="loadDashboard" />
           <AdminTimelineManagement v-if="activeTab === 'timelines'" @changed="loadDashboard" />
           <AdminUserManagement v-if="activeTab === 'users'" @changed="loadDashboard" />
-          <AdminAIConfigManagement v-if="activeTab === 'aiConfig'" @changed="loadDashboard" />
-          <AdminSystemConfigManagement v-if="activeTab === 'config'" @changed="loadDashboard" />
           <AdminOpsManagement v-if="activeTab === 'ops'" />
         </section>
       </div>
@@ -213,13 +223,32 @@ async function handleTabChange(tabKey: string) {
   font-size: 14px;
 }
 
+.admin-menu :deep(.el-sub-menu__title) {
+  gap: 10px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  height: 42px;
+  line-height: 42px;
+  font-size: 14px;
+}
+
+.admin-menu :deep(.el-sub-menu .el-menu-item) {
+  padding-left: 42px !important;
+}
+
 .admin-menu :deep(.el-menu-item .menu-icon),
+.admin-menu :deep(.el-sub-menu__title .menu-icon),
 .admin-menu :deep(.el-menu-item svg),
+.admin-menu :deep(.el-sub-menu__title svg),
 .admin-menu :deep(.el-menu-item .el-icon) {
   width: 18px !important;
   height: 18px !important;
   flex: 0 0 18px !important;
   font-size: 18px !important;
+}
+
+.admin-menu :deep(.el-sub-menu__title .el-sub-menu__icon-arrow) {
+  margin-top: -1px;
 }
 
 .admin-main {
