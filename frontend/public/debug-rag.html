@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG 调试面板 — 智闻平台</title>
+<style>
+:root { --bg:#f8fafc; --card:#fff; --text:#334155; --muted:#94a3b8; --border:#e2e8f0; --red:#dc2626; --blue:#2563eb; --green:#16a34a; --purple:#7c3aed; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); padding:24px; }
+h1 { font-size:22px; margin-bottom:4px; }
+.subtitle { color:var(--muted); font-size:13px; margin-bottom:20px; }
+.top { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+.top button { border:1px solid var(--border); background:var(--card); color:var(--text); padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13px; }
+.top button:hover { border-color:var(--blue); }
+.top button.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+#status { font-size:13px; padding:6px 12px; border-radius:6px; display:inline-block; }
+#status.live { background:#dcfce7; color:#166534; }
+#status.dead { background:#fee2e2; color:#991b1b; }
+.pipeline { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media(max-width:1000px){ .pipeline{grid-template-columns:1fr;} }
+.stage { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:8px; }
+.stage-head { display:flex; align-items:center; gap:8px; }
+.stage-num { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; flex-shrink:0; }
+.s1{background:var(--blue)} .s2{background:var(--green)} .s3{background:var(--purple)}
+.stage-title { font-weight:600; font-size:15px; }
+.stage-meta { font-size:11px; color:var(--muted); margin-left:auto; }
+.code {
+  background:#1e293b; color:#e2e8f0; font-size:12px; line-height:1.5; padding:12px; border-radius:6px;
+  overflow-x:auto; white-space:pre-wrap; word-break:break-all; max-height:350px; overflow-y:auto;
+  font-family:'SF Mono',Consolas,monospace;
+}
+.article-item { border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:12px; }
+.article-item + .article-item { margin-top:6px; }
+.tag { display:inline-block; padding:2px 7px; border-radius:10px; font-size:11px; font-weight:500; }
+.tag-current{background:#fecaca;color:#991b1b}
+.tag-topic_match{background:#dbeafe;color:#1d4ed8}
+.tag-keyword_match{background:#f3e8ff;color:#7c3aed}
+.tag-news{background:#dbeafe;color:#1d4ed8}
+.tag-post{background:#f3e8ff;color:#7c3aed}
+.tag-comment{background:#fef3c7;color:#b45309}
+.stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.stat { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 18px; }
+.stat-val { font-size:22px; font-weight:700; }
+.stat-label { font-size:11px; color:var(--muted); }
+#err { background:#fee2e2; color:#991b1b; padding:10px 14px; border-radius:8px; margin-bottom:12px; display:none; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div>
+    <h1>🔍 RAG 调试面板</h1>
+    <p class="subtitle">实时展示 AI 助手提问全流程：前端请求 → 后端检索 → LLM 调用</p>
+  </div>
+  <div>
+    <span id="status" class="dead">⏳ 等待数据…</span>
+    <button class="primary" onclick="load()">🔄 刷新</button>
+    <button onclick="clearAll()">🗑 清空</button>
+    <label style="font-size:12px;color:var(--muted);margin-left:8px;cursor:pointer;">
+      <input type="checkbox" id="autoCb" checked> 自动刷新
+    </label>
+  </div>
+</div>
+<div id="err"></div>
+<div class="stats" id="stats"></div>
+<div class="pipeline" id="pipe"></div>
+<div id="empty" style="text-align:center;padding:60px;color:var(--muted);">
+  <p style="font-size:40px;margin-bottom:12px;">📭</p>
+  <p>还没有调试数据。请在智闻平台向 AI 助手提问，然后刷新此页面。</p>
+</div>
+
+<script>
+const KEY = 'llm-rag-debug-log';
+let timer = null;
+
+function load() {
+  const raw = localStorage.getItem(KEY);
+  document.getElementById('err').style.display = 'none';
+
+  if (!raw) {
+    document.getElementById('pipe').innerHTML = '';
+    document.getElementById('stats').innerHTML = '';
+    document.getElementById('empty').style.display = '';
+    document.getElementById('status').className = 'dead';
+    document.getElementById('status').textContent = '⏳ 无数据';
+    return;
+  }
+
+  let entries;
+  try { entries = JSON.parse(raw); } catch(e) {
+    document.getElementById('err').style.display = '';
+    document.getElementById('err').textContent = 'JSON 解析失败: ' + e.message;
+    return;
+  }
+
+  if (!Array.isArray(entries) || entries.length === 0) return;
+
+  const e = entries[entries.length - 1];
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('status').className = 'live';
+  document.getElementById('status').textContent = '✅ 已连接 · ' + entries.length + ' 条记录';
+
+  // Stats
+  const n = (e.retrievedArticles || []).length + (e.currentArticle ? 1 : 0);
+  const len = JSON.stringify(e.llmRequest?.messages || []).length;
+  document.getElementById('stats').innerHTML = [
+    {v:e.timestamp||'--',l:'时间'},
+    {v:(e.context?.page||'?'),l:'页面'},
+    {v:n+' 篇',l:'检索结果'},
+    {v:(len/1000).toFixed(1)+'k',l:'Prompt 大小'},
+    {v:e.llmResponseTimeMs?e.llmResponseTimeMs+'ms':'--',l:'LLM 耗时'},
+  ].map(s=>`<div class="stat"><div class="stat-val">${esc(s.v)}</div><div class="stat-label">${s.l}</div></div>`).join('');
+
+  // Pipeline
+  document.getElementById('pipe').innerHTML = stage1(e) + stage2(e) + stage3(e);
+}
+
+function stage1(e) {
+  const ctx = e.context || {};
+  const json = JSON.stringify({question:e.question, context:ctx}, null, 2);
+  return `<div class="stage">
+    <div class="stage-head"><span class="stage-num s1">1</span><span class="stage-title">前端 → 后端检索</span><span class="stage-meta">POST /api/assistant/search</span></div>
+    <div class="code">${esc(json)}</div>
+  </div>`;
+}
+
+function stage2(e) {
+  const articles = [];
+  if (e.currentArticle) articles.push({...e.currentArticle, _star:true});
+  articles.push(...(e.retrievedArticles||[]));
+
+  const ti = {news:'📰',community_post:'💬',news_comment:'💭',post_comment:'💭',news_topic:'🏷️'};
+  const rc = {current:'tag-current',topic_match:'tag-topic_match',keyword_match:'tag-keyword_match'};
+  const rl = {current:'当前浏览',topic_match:'话题关联',keyword_match:'关键词匹配'};
+  const tl = {news:'新闻',community_post:'帖子',news_comment:'新闻评论',post_comment:'帖子评论',news_topic:'话题'};
+
+  const items = articles.map(a => {
+    const title = a.title || (a.content||'').slice(0,40)+'…';
+    return `<div class="article-item">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+        <span class="tag ${rc[a.relevance]||''}">${tl[a.type]||a.type} · ${rl[a.relevance]||a.relevance}</span>
+        <strong>${esc(title)}</strong>
+      </div>
+      <div style="color:var(--muted);font-size:12px;">${esc((a.content||a.summary||'').slice(0,120))}…</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="stage">
+    <div class="stage-head"><span class="stage-num s2">2</span><span class="stage-title">后端检索结果</span><span class="stage-meta">${articles.length} 条</span></div>
+    <div style="max-height:380px;overflow-y:auto;">${items||'<span style="color:var(--muted)">（无）</span>'}</div>
+  </div>`;
+}
+
+function stage3(e) {
+  const req = e.llmRequest || {};
+  const msgs = req.messages || [];
+  const rl = {user:'👤 User',assistant:'🤖 Assistant',system:'⚙️ System'};
+
+  let html = '';
+  msgs.forEach((m,i) => {
+    const txt = m.content.length > 600 ? m.content.slice(0,600)+'\n…[截断]' : m.content;
+    html += `<div style="margin-bottom:6px;"><div style="font-size:11px;color:var(--muted);margin-bottom:1px;">${rl[m.role]||m.role} · #${i+1}</div><div class="code" style="max-height:200px;">${esc(txt)}</div></div>`;
+  });
+
+  const respInfo = e.llmResponse
+    ? `<div style="font-size:12px;color:var(--green);margin-top:4px;">✅ 响应: ${esc(e.llmResponse.slice(0,120))}…</div>`
+    : (e.llmError ? `<div style="font-size:12px;color:var(--red);margin-top:4px;">❌ ${esc(e.llmError)}</div>` : '');
+
+  return `<div class="stage">
+    <div class="stage-head"><span class="stage-num s3">3</span><span class="stage-title">发送给 LLM</span><span class="stage-meta">${esc(req.model||'?')} · ${msgs.length} 条</span></div>
+    ${html}
+    ${respInfo}
+  </div>`;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function clearAll() {
+  localStorage.removeItem(KEY);
+  load();
+}
+
+// Auto refresh
+function toggleAuto() {
+  const on = document.getElementById('autoCb').checked;
+  if (timer) { clearInterval(timer); timer = null; }
+  if (on) timer = setInterval(load, 1500);
+}
+document.getElementById('autoCb').addEventListener('change', toggleAuto);
+
+load();
+toggleAuto();
+</script>
+</body>
+</html>

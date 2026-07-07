@@ -28,6 +28,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页', requiresAuth: false },
       },
       {
+        path: 'search',
+        name: 'search',
+        component: () => import('@/views/search/SearchResultView.vue'),
+        meta: { title: '搜索', requiresAuth: false },
+      },
+      {
         path: 'news/:id',
         name: 'news-detail',
         component: () => import('@/views/news-detail/NewsDetailView.vue'),

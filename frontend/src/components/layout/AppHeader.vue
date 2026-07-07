@@ -19,7 +19,7 @@
       <el-menu-item v-if="userStore.isEditorOrAdmin" index="/admin">管理后台</el-menu-item>
     </el-menu>
 
-    <form v-if="isHomePage" class="app-header__search" @submit.prevent="handleSearch">
+    <form class="app-header__search" @submit.prevent="handleSearch">
       <el-input
         v-model="searchKeyword"
         class="app-header__search-input"
@@ -148,17 +148,15 @@ async function handleSearch() {
     return
   }
 
-  sessionStorage.setItem(searchStorageKey, keyword)
   await router.push({
-    path: '/home',
-    query: { keyword },
+    path: '/search',
+    query: { q: keyword },
   })
 }
 
 async function handleReset() {
   searchKeyword.value = ''
-  sessionStorage.removeItem(searchStorageKey)
-  await router.push({ path: '/home', query: {} })
+  await router.push({ path: '/search', query: {} })
 }
 
 async function handleUserCommand(command: string) {

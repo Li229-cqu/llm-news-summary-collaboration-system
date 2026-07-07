@@ -15,6 +15,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/llm-api': {
+        target: 'http://127.0.0.1:8025',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/llm-api/, ''),
+      },
     },
   },
 })
