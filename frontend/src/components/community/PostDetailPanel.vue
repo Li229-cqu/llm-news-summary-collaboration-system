@@ -104,14 +104,30 @@
 
         <!-- 发表评论 -->
         <div class="comment-composer">
-          <el-input v-model="newCommentText" type="textarea" :rows="3" placeholder="写下你的评论..." maxlength="1000" show-word-limit />
+          <el-input ref="textareaRef" v-model="newCommentText" type="textarea" :rows="3" placeholder="写下你的评论..." maxlength="1000" show-word-limit />
           <div class="composer-actions">
             <div class="composer-tools">
               <el-button text :loading="generatingComment" @click="handleGenerateComment">
                 <el-icon v-if="generatingComment" class="is-loading"><Loading /></el-icon>
                 <span v-else>🤖 AI辅助</span>
               </el-button>
-              <el-button text @click="toggleEmojiPicker"><el-icon><PictureFilled /></el-icon></el-button>
+              <!-- 表情按钮 -->
+              <el-popover
+                placement="bottom-start"
+                :width="360"
+                trigger="click"
+                :show-arrow="false"
+                :popper-style="{ maxHeight: '260px', overflow: 'auto' }"
+              >
+                <template #reference>
+                  <el-button text title="插入表情">
+                    😀 表情
+                  </el-button>
+                </template>
+                <div class="emoji-picker-wrapper" @emoji-click="onEmojiClick">
+                  <emoji-picker locale="zh"></emoji-picker>
+                </div>
+              </el-popover>
               <el-button text @click="triggerImageUpload"><el-icon><PictureFilled /></el-icon></el-button>
               <input ref="imageUploadRef" type="file" accept="image/*" style="display:none" @change="handleImageSelect" />
               <span v-if="selectedImageName" class="image-name">{{ selectedImageName }}</span>
@@ -173,6 +189,7 @@ import CommentItem, {
 } from '@/components/interaction/CommentItem.vue'
 import { markReplyForceVisible, scrollToComment } from '@/utils/commentVisibility'
 import { resolveImageUrl } from '@/utils/media'
+import 'emoji-picker-element'
 
 const props = defineProps<{
   postId: number | string
@@ -203,9 +220,13 @@ const replyingCommentId = ref<number | null>(null)
 const commentLikeLoadingId = ref<number | null>(null)
 const commentReplyLoadingId = ref<number | null>(null)
 const commentDeleteLoadingId = ref<number | null>(null)
+const textareaRef = ref<InstanceType<typeof import('element-plus').ElInput> | null>(null)
 const selectedImageFile = ref<File | null>(null)
 const selectedImageName = ref('')
 const imageUploadRef = ref<HTMLInputElement>()
+
+// emoji 收集
+const insertedEmojis = ref<string[]>([])
 
 // ─── AI Summary ──
 const commentsSummary = ref<CommentsSummaryResponse | null>(null)
@@ -274,14 +295,17 @@ async function handleCreateComment() {
   if (!post.value) return; const content = newCommentText.value.trim()
   if (!content && !selectedImageFile.value) return
   let mediaJson: CommentMediaJson | null = null
-  if (selectedImageFile.value) mediaJson = { images: [selectedImageFile.value.name] }
+  const mediaData: CommentMediaJson = {}
+  if (selectedImageFile.value) mediaData.images = [selectedImageFile.value.name]
+  if (insertedEmojis.value.length > 0) mediaData.emojis = [...insertedEmojis.value]
+  if (Object.keys(mediaData).length > 0) mediaJson = mediaData
   submittingComment.value = true
   try {
     const newComment = await createComment(post.value.id, { content: content || ' ', media_json: mediaJson })
     const item: RichCommentItemData = { ...newComment, replies: newComment.replies || [] }
     comments.value.unshift(item)
     post.value.comment_count = (post.value.comment_count || 0) + 1; post.value.comments = (post.value.comments || 0) + 1
-    newCommentText.value = ''; selectedImageFile.value = null; selectedImageName.value = ''
+    newCommentText.value = ''; selectedImageFile.value = null; selectedImageName.value = ''; insertedEmojis.value = []
     markReplyForceVisible(item.id); await nextTick(); scrollToComment(item.id); emit('updated')
   } catch { ElMessage.error('评论失败，请稍后重试') } finally { submittingComment.value = false }
 }
@@ -347,7 +371,25 @@ function handleRelatedNewsClick() {
 }
 
 // ─── Image / Emoji ──
-function toggleEmojiPicker() {}
+async function onEmojiClick(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (detail?.unicode) {
+    insertedEmojis.value.push(detail.unicode)
+    const textarea = textareaRef.value?.$el?.querySelector('textarea') as HTMLTextAreaElement | null
+    if (textarea) {
+      const start = textarea.selectionStart ?? newCommentText.value.length
+      const end = textarea.selectionEnd ?? start
+      const before = newCommentText.value.slice(0, start)
+      const after = newCommentText.value.slice(end)
+      const newContent = before + detail.unicode + after
+      newCommentText.value = newContent
+      await nextTick()
+      const pos = start + (detail.unicode as string).length
+      textarea.setSelectionRange(pos, pos)
+      textarea.focus()
+    }
+  }
+}
 function triggerImageUpload() { imageUploadRef.value?.click() }
 function handleImageSelect(e: Event) {
   const input = e.target as HTMLInputElement
@@ -427,6 +469,7 @@ import { nextTick } from 'vue'
 .comment-composer { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--color-border); }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
 .composer-tools { display: flex; align-items: center; gap: 4px; }
+.emoji-picker-wrapper { margin: -12px; }
 .image-name { font-size: 12px; color: var(--color-text-secondary); margin-left: 4px; }
 .loading-container { display: flex; justify-content: center; padding: 24px; }
 .empty-state { padding: 24px; }

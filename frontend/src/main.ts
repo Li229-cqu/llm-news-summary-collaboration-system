@@ -15,6 +15,8 @@ app.use(pinia)
 useThemeStore(pinia).initializeTheme()
 const userStore = useUserStore(pinia)
 userStore.loadFromStorage()
+// 启动时从服务器同步最新用户信息，解决跨设备头像/昵称不一致问题
+userStore.syncProfile()
 app.use(router)
 app.use(ElementPlus)
 app.mount('#app')

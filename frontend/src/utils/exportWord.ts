@@ -212,10 +212,6 @@ export async function exportRecordToWord(record: AIGenerateRecordDetail): Promis
       { bold: true, color: riskColor[c.risk_level] || COLOR_PRIMARY },
     ))
 
-    if (c.score !== undefined) {
-      children.push(para(`综合匹配度：${(c.score * 100).toFixed(0)}%`, { color: COLOR_SECONDARY }))
-    }
-
     if ((c.issues || []).length) {
       children.push(para('发现的问题：', { bold: true, size: FONT_SIZE_SM }))
       for (const iss of c.issues!) {

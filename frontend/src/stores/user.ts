@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { logoutApi } from '@/api/auth'
+import { getUserProfileApi } from '@/api/user'
 
 const TOKEN_STORAGE_KEY = 'llm_news_token'
 const USER_INFO_STORAGE_KEY = 'llm_news_user_info'
@@ -99,6 +100,20 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /**
+   * 从服务器同步最新用户信息（头像、昵称等）。
+   * 解决跨设备更新头像后其他设备仍显示旧头像的问题。
+   */
+  async function syncProfile() {
+    if (!token.value) return
+    try {
+      const profile = await getUserProfileApi()
+      setUserInfo(profile)
+    } catch {
+      // 请求失败时保留本地缓存数据
+    }
+  }
+
   return {
     token,
     userInfo,
@@ -113,5 +128,6 @@ export const useUserStore = defineStore('user', () => {
     clearUser,
     logout,
     loadFromStorage,
+    syncProfile,
   }
 })
