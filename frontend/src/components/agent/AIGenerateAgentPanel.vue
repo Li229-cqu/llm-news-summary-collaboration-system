@@ -523,7 +523,7 @@ const showLongSummary = computed(() => {
         <article class="wide-card">
           <div class="wide-card__head">
             <div>
-              <p class="wide-card__title">Step 8 编辑建议生成</p>
+              <p class="wide-card__title">Step 8 使用建议生成</p>
             </div>
             <el-tag effect="dark" :type="stepBadgeType(suggestionStep?.status || 'pending')" size="small">
               {{ stepStateText(suggestionStep?.status || 'pending') }}

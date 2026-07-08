@@ -117,7 +117,7 @@ export const MOCK_STEP_META = [
   { name: 'match_topic',        label: '话题匹配',     order: 5 },
   { name: 'judge_timeline',     label: '时间线适配',   order: 6 },
   { name: 'check_consistency',  label: '一致性检查',   order: 7 },
-  { name: 'edit_suggestions',   label: '编辑建议生成', order: 8 },
+  { name: 'edit_suggestions',   label: '使用建议生成', order: 8 },
 ] as const
 
 /** 每步 mock 输出（与后端 mock_api.py MOCK_STEP_OUTPUTS 一致） */

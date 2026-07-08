@@ -81,7 +81,7 @@ const LAYOUT: Record<string, NodeLayout> = {
   match_topic:         { col: 0, row: 3, label: '话题匹配' },
   judge_timeline:      { col: 2, row: 3, label: '时间线适配' },
   check_consistency:   { col: 1, row: 4, label: '一致性检查' },
-  edit_suggestions:    { col: 1, row: 5, label: '编辑建议生成' },
+  edit_suggestions:    { col: 1, row: 5, label: '使用建议生成' },
 }
 
 // ── SVG 画布计算（响应式网格）──

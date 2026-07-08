@@ -267,7 +267,7 @@ onUnmounted(() => {
                 </ul>
               </div>
               <div v-if="store.result.editSuggestions" class="result-block">
-                <h3 class="result-block__title">✏️ 编辑建议</h3>
+                <h3 class="result-block__title">✏️ 使用建议生成</h3>
                 <div v-if="store.result.editSuggestions.overall_score" class="result-row">
                   <span>综合评分: </span>
                   <el-tag type="warning" effect="dark">{{ store.result.editSuggestions.overall_score }} / 100</el-tag>
