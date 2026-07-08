@@ -433,7 +433,11 @@ function handleFavoriteClick(item: FavoriteItem) {
     ElMessage.info('帖子详情页暂未开放')
     return
   }
-  router.push(`/news/${item.news_id}`)
+  router.push(`/news/${favoriteTargetId(item)}`)
+}
+
+function favoriteTargetId(item: FavoriteItem): number {
+  return item.target_id ?? item.news_id
 }
 
 function clearBrowseSearch() {
@@ -695,9 +699,9 @@ async function handleRemoveFavorite(item: FavoriteItem, event: Event) {
   // 第二步：调用后端取消收藏 API
   try {
     if (item.target_type === 'post') {
-      await unfavoritePost(item.news_id)
+      await unfavoritePost(favoriteTargetId(item))
     } else {
-      await unfavoriteNews(item.news_id)
+      await unfavoriteNews(favoriteTargetId(item))
     }
     ElMessage.success('已取消收藏')
   } catch (error: any) {
@@ -1441,7 +1445,7 @@ onActivated(async () => {
             <div v-else class="record-list">
               <div
                 v-for="item in filteredFavorites"
-                :key="item.news_id"
+                :key="`${item.target_type || 'news'}-${favoriteTargetId(item)}-${item.favorited_at || item.publish_time}`"
                 class="record-item record-item-detailed"
                 @click="handleFavoriteClick(item)"
               >

@@ -133,7 +133,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CommentBox from './CommentBox.vue'
-import { isReplyForceVisible } from '@/utils/commentVisibility'
+import { clearReplyForceVisible, isReplyForceVisible } from '@/utils/commentVisibility'
 
 export interface LikeResult {
   comment_id: number
@@ -356,6 +356,7 @@ function expandReplies() {
 }
 
 function collapseReplies() {
+  clearReplyForceVisible(allReplies.value.map(reply => reply.id))
   setExpandedCount(0)
 }
 

@@ -13,6 +13,13 @@ export function isReplyForceVisible(replyId: number): boolean {
   return forceVisibleReplyIds.has(replyId)
 }
 
+/** 清除指定回复在当前会话中的强制可见标记。 */
+export function clearReplyForceVisible(replyIds: number[]) {
+  for (const replyId of replyIds) {
+    forceVisibleReplyIds.delete(replyId)
+  }
+}
+
 /** 滚动定位到指定评论/回复 */
 export async function scrollToComment(commentId: number) {
   await nextTick()

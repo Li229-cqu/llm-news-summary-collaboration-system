@@ -21,6 +21,7 @@ export interface BrowseHistoryItem {
 
 export interface FavoriteItem {
   news_id: number
+  target_id?: number | null
   title: string
   summary: string
   category_name: string

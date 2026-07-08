@@ -132,7 +132,7 @@
               <input ref="imageUploadRef" type="file" accept="image/*" style="display:none" @change="handleImageSelect" />
               <span v-if="selectedImageName" class="image-name">{{ selectedImageName }}</span>
             </div>
-            <el-button type="primary" :loading="submittingComment" :disabled="!newCommentText.trim() && !selectedImageFile" @click="handleCreateComment">
+            <el-button type="primary" :loading="submittingComment" :disabled="!canSubmitComment" @click="handleCreateComment">
               发表评论
             </el-button>
           </div>
@@ -182,6 +182,7 @@ import {
   type CommunityPost,
   type CommentsSummaryResponse,
 } from '@/api/community'
+import { uploadCommentMedia } from '@/api/interaction'
 import { useUserStore } from '@/stores/user'
 import CommentItem, {
   type CommentItemData as RichCommentItemData,
@@ -227,6 +228,9 @@ const imageUploadRef = ref<HTMLInputElement>()
 
 // emoji 收集
 const insertedEmojis = ref<string[]>([])
+const canSubmitComment = computed(() =>
+  Boolean(newCommentText.value.trim() || selectedImageFile.value || insertedEmojis.value.length > 0)
+)
 
 // ─── AI Summary ──
 const commentsSummary = ref<CommentsSummaryResponse | null>(null)
@@ -293,14 +297,17 @@ async function handleGenerateComment() {
 
 async function handleCreateComment() {
   if (!post.value) return; const content = newCommentText.value.trim()
-  if (!content && !selectedImageFile.value) return
+  if (!content && !selectedImageFile.value && insertedEmojis.value.length === 0) return
   let mediaJson: CommentMediaJson | null = null
   const mediaData: CommentMediaJson = {}
-  if (selectedImageFile.value) mediaData.images = [selectedImageFile.value.name]
-  if (insertedEmojis.value.length > 0) mediaData.emojis = [...insertedEmojis.value]
-  if (Object.keys(mediaData).length > 0) mediaJson = mediaData
   submittingComment.value = true
   try {
+    if (selectedImageFile.value) {
+      const uploaded = await uploadCommentMedia(selectedImageFile.value)
+      mediaData.images = [uploaded.url]
+    }
+    if (insertedEmojis.value.length > 0) mediaData.emojis = [...insertedEmojis.value]
+    if (Object.keys(mediaData).length > 0) mediaJson = mediaData
     const newComment = await createComment(post.value.id, { content: content || ' ', media_json: mediaJson })
     const item: RichCommentItemData = { ...newComment, replies: newComment.replies || [] }
     comments.value.unshift(item)
@@ -324,17 +331,13 @@ async function handleCommentReply(comment: RichCommentItemData, content: string,
     const newReply = await replyComment(comment.id, { content, media_json: mediaJson })
     replyingCommentId.value = null
     const item: RichCommentItemData = { ...newReply, replies: newReply.replies || [] }
-    const parent = findPostCommentById(comments.value, comment.id)
-    if (parent) { if (!parent.replies) parent.replies = []; parent.replies.push(item) }
-    else { comments.value.unshift(item) }
     if (post.value) { post.value.comment_count = (post.value.comment_count || 0) + 1; post.value.comments = (post.value.comments || 0) + 1 }
-    markReplyForceVisible(item.id); await nextTick(); scrollToComment(item.id); emit('updated')
+    markReplyForceVisible(item.id)
+    await loadComments()
+    await nextTick()
+    scrollToComment(item.id)
+    emit('updated')
   } catch { ElMessage.error('回复评论失败') } finally { commentReplyLoadingId.value = null }
-}
-
-function findPostCommentById(list: RichCommentItemData[], id: number): RichCommentItemData | null {
-  for (const item of list) { if (item.id === id) return item; if (item.replies) { const found = findPostCommentById(item.replies, id); if (found) return found } }
-  return null
 }
 
 async function handleCommentDelete(comment: RichCommentItemData) {

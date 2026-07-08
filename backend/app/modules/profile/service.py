@@ -1065,8 +1065,8 @@ def _db_favorites(
                 LEFT(p.content, 80) AS summary,
                 '' AS category_name,
                 '社区帖子' AS source,
-                COALESCE(p.created_at, p.create_time) AS publish_time,
-                COALESCE(f.created_at, f.create_time) AS favorited_at
+                p.created_at AS publish_time,
+                f.created_at AS favorited_at
             FROM favorite f
             LEFT JOIN community_post p ON p.id = f.target_id
             WHERE f.user_id = %s
@@ -1085,6 +1085,7 @@ def _db_favorites(
             favorite_items.append(
                 FavoriteItem(
                     news_id=int(row["post_id"]),
+                    target_id=int(row["post_id"]),
                     title=normalize_text(row["title"]),
                     summary=normalize_text(row["summary"]),
                     category_name=normalize_text(row["category_name"]),
@@ -1107,7 +1108,7 @@ def _db_favorites(
             COALESCE(nc.name, '未分类') AS category_name,
             n.source,
             n.publish_time,
-            COALESCE(f.created_at, f.create_time) AS favorited_at
+            f.created_at AS favorited_at
         FROM favorite f
         LEFT JOIN news n ON n.id = f.target_id
         LEFT JOIN news_category nc ON nc.id = n.category_id
@@ -1127,6 +1128,7 @@ def _db_favorites(
         favorite_items.append(
             FavoriteItem(
                 news_id=int(row["news_id"]),
+                target_id=int(row["news_id"]),
                 title=normalize_text(row["title"]),
                 summary=normalize_text(row["summary"]),
                 category_name=normalize_text(row["category_name"]),

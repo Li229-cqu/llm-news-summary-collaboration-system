@@ -410,19 +410,13 @@ async function handleReplyComment(comment: RichCommentItemData, content: string,
     const newReply = await replyComment(comment.id, { content, media_json: mediaJson ?? null })
     replyingId.value = null
     const item: RichCommentItemData = { ...newReply, replies: newReply.replies || [] }
-    const parent = findCommentById(comments.value, comment.id)
-    if (parent) {
-      if (!parent.replies) parent.replies = []
-      parent.replies.push(item)
-    } else {
-      comments.value.unshift(item)
-    }
     commentTotal.value += 1
     newsDetail.value = {
       ...newsDetail.value,
       comment_count: newsDetail.value.comment_count + 1,
     }
     markReplyForceVisible(item.id)
+    await loadComments()
     await nextTick()
     scrollToComment(item.id)
   } catch (requestError) {
@@ -430,17 +424,6 @@ async function handleReplyComment(comment: RichCommentItemData, content: string,
   } finally {
     submittingComment.value = false
   }
-}
-
-function findCommentById(list: RichCommentItemData[], id: number): RichCommentItemData | null {
-  for (const item of list) {
-    if (item.id === id) return item
-    if (item.replies) {
-      const found = findCommentById(item.replies, id)
-      if (found) return found
-    }
-  }
-  return null
 }
 
 async function handleLikeComment(comment: RichCommentItemData) {

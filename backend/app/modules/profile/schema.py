@@ -30,6 +30,7 @@ class BrowseHistoryItem(BaseModel):
 
 class FavoriteItem(BaseModel):
     news_id: int
+    target_id: Optional[int] = None
     title: str
     summary: str
     category_name: str
