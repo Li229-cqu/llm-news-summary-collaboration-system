@@ -115,28 +115,57 @@ async function handleScreenshot() {
     const canvas = await html2canvas(target, {
       backgroundColor: resolvedBg,
       useCORS: true,
-      scale: window.devicePixelRatio || 2,
+      allowTaint: true,
+      scale: Math.min(window.devicePixelRatio || 2, 2),
       logging: false,
       onclone: (clonedDoc) => {
-        const clonedTarget = clonedDoc.querySelector(selector) as HTMLElement | null
-        if (clonedTarget && clonedDoc.defaultView) {
-          sanitizeClonedStyles(clonedTarget, clonedDoc.defaultView)
+        try {
+          // html2canvas 不支持 CSS Color Level 4 的 color()/color-mix()，
+          // 必须从样式表和内联样式中移除，否则解析时直接抛错
+          clonedDoc.querySelectorAll('style').forEach((el) => {
+            if (el.textContent) {
+              el.textContent = el.textContent
+                .replace(/color-mix\(/gi, 'x-cm(')
+                .replace(/color\(/gi, 'x-c(')
+            }
+          })
+          clonedDoc.querySelectorAll('[style]').forEach((el) => {
+            const s = el.getAttribute('style') || ''
+            if (s.includes('color(') || s.includes('color-mix(')) {
+              el.setAttribute('style',
+                s.replace(/color-mix\(/gi, 'x-cm(').replace(/color\(/gi, 'x-c('),
+              )
+            }
+          })
+          const clonedTarget = clonedDoc.querySelector(selector) as HTMLElement | null
+          if (clonedTarget && clonedDoc.defaultView) {
+            sanitizeClonedStyles(clonedTarget, clonedDoc.defaultView)
+          }
+        } catch {
+          // 样式清洗失败不阻塞截图
         }
       },
     })
 
     const filename = sanitizeFilename(props.title || '') + '.png'
 
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        ElMessage.error('截图生成失败，请稍后重试')
-        return
-      }
-      const url = URL.createObjectURL(blob)
-      triggerDownload(url, filename)
-      URL.revokeObjectURL(url)
+    // 优先 toBlob（更小的文件），失败时回退到 toDataURL
+    if (typeof canvas.toBlob === 'function') {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          ElMessage.error('截图生成失败，请稍后重试')
+          return
+        }
+        const url = URL.createObjectURL(blob)
+        triggerDownload(url, filename)
+        URL.revokeObjectURL(url)
+        ElMessage.success('截图已下载')
+      }, 'image/png')
+    } else {
+      const dataUrl = canvas.toDataURL('image/png')
+      triggerDownload(dataUrl, filename)
       ElMessage.success('截图已下载')
-    }, 'image/png')
+    }
   } catch (error) {
     console.error('截图失败:', error)
     ElMessage.error('截图生成失败，请稍后重试')
