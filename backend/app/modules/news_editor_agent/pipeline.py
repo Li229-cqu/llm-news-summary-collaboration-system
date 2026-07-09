@@ -499,7 +499,7 @@ async def generate_step(ctx: AgentContext) -> StepResult:
     text = ctx.cleaned_text or ctx.raw_text
     params = ctx.pipeline_params or {}
     title_count = int(params.get("title_count", 3))
-    temperature = params.get("temperature", 0.7)
+    temperature = params.get("temperature", 0.2)
     title_style = params.get("title_style", "客观新闻型")
     summary_type = params.get("summary_type", "generate")
     summary_style = params.get("summary_style", "简明扼要")
@@ -558,35 +558,43 @@ async def generate_step(ctx: AgentContext) -> StepResult:
         kw_text = ", ".join(ctx.keywords[:5]) if ctx.keywords else "无"
         elements = ctx.news_elements or {}
         data, error = await llm_service.chat_json(
-            system_prompt=f"""你是一个专业的新闻编辑。你的任务是根据新闻文本生成标题和摘要。
+            system_prompt=f"""你是一个严谨的新闻编辑。你的唯一任务是根据给定的新闻原文生成标题和摘要。
+
+【核心原则 — 必须严格遵守】
+1. 禁止编造：不得添加原文中不存在的任何事实、数据、人名、地名、时间、数字、引语。
+2. 禁止推测：不得对原文未提及的背景、原因、影响、趋势进行推断或延伸。
+3. 禁止评价：不得加入主观评价、价值判断或情绪化表述。
+4. 忠于原文：摘要中的每一条信息都必须能在原文中找到明确依据。宁可少写，不可编造。
+5. 信息保真：不要改写原文数据的数值，不要替换专有名词，不要泛化具体信息。
 
 【标题要求】
 {title_instruction}
-必须生成恰好 {title_count} 个候选标题。
+必须生成恰好 {title_count} 个候选标题，每个标题之间应有角度差异。
 
 【摘要要求】
 {type_instruction}
 {style_instruction}
 {length_instruction}
 
-【重要】你必须严格返回合法的 JSON 格式，不要包含任何其他文字。""",
+【输出格式】
+你必须严格返回合法的 JSON，不要包含 markdown 代码块标记或任何其他文字。""",
             user_message=f"""请根据以下新闻文本生成标题和摘要。
 
-参考信息：
+参考信息（如与原文冲突，以原文为准）：
 - 关键词：{kw_text}
 - 六要素：{json.dumps(elements, ensure_ascii=False)}
 
-新闻文本：
+新闻原文：
 {text[:3000]}
 
 请生成：
-1. candidate_titles: 恰好 {title_count} 个候选标题
+1. candidate_titles: 恰好 {title_count} 个候选标题（字符串数组）
 2. {length_instruction}
 
-请严格返回 JSON 格式：
-{{{{candidate_titles: ["标题1", ...], {length_hint}}}}}""",
+返回 JSON 示例：
+{{"candidate_titles": ["标题1", "标题2", "标题3"], {length_hint}}}""",
             temperature=temperature,
-            max_tokens=2048,
+            max_tokens=4096,
             model=provider_model,
             provider=provider,
             timeout=120.0,

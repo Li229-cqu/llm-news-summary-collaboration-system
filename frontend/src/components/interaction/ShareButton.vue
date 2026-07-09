@@ -116,7 +116,7 @@ async function handleScreenshot() {
       backgroundColor: resolvedBg,
       useCORS: true,
       allowTaint: true,
-      scale: Math.min(window.devicePixelRatio || 2, 2),
+      scale: Math.max(window.devicePixelRatio || 1, 2),
       logging: false,
       onclone: (clonedDoc) => {
         try {
