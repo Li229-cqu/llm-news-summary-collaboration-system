@@ -551,7 +551,7 @@ def _query_pending_item_detail(item_type: str, item_id: int) -> Dict[str, Any]:
                 n.like_count,
                 n.comment_count,
                 n.favorite_count,
-                n.heat_score,
+                0 AS heat_score,
                 n.status,
                 n.tags,
                 n.publish_time,

@@ -1,33 +1,66 @@
 # 基于大语言模型的智能新闻摘要与协同互动系统
-第38组，组长：徐子涵
 
-本项目是一个前后端分离的新闻摘要与协同互动系统，包含新闻浏览、新闻互动、AI 标题摘要生成、社区互动、个人中心、管理后台、RSS 新闻爬虫、Timeline 事件脉络等模块。
+第 38 组，组长：徐子涵
 
-当前项目采用：
+本项目是一个前后端分离的智能新闻摘要与协同互动系统，覆盖新闻浏览、新闻互动、AI 标题摘要生成、新闻编辑 Agent、社区协同、事件脉络 Timeline、个人中心、管理后台、数据分析、RSS 新闻爬虫和系统运维等功能。
 
-- 前端：Vue 3 + Vite + TypeScript + Element Plus
-- 后端：FastAPI + MySQL + PyMySQL
-- AI 服务：FastAPI，默认支持 mock 结果，后续可切换真实大模型
-- 数据库：MySQL 8.0
-- 爬虫：光明网 RSS 新闻爬虫，支持增量抓取与正文解析
+## 技术栈
 
-## 一、项目目录
+| 层级 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、Vite、TypeScript、Element Plus、Pinia、Vue Router、Axios、ECharts |
+| 后端 | FastAPI、Uvicorn、PyMySQL、DBUtils、python-dotenv、httpx |
+| AI 服务 | FastAPI、OpenAI SDK、sentence-transformers、可配置 DeepSeek / 智谱等兼容模型 |
+| 数据库 | MySQL 8.0、schema.sql、seed.sql、migrations |
+| 工具脚本 | 光明网 RSS 爬虫、新华网 news.cn 爬虫、数据库迁移脚本、架构图生成脚本 |
+
+## 项目结构
 
 ```text
 llm-news-summary-collaboration-system/
-├─ frontend/            前端项目
-├─ backend/             后端 API 服务
-├─ ai-service/          AI 生成服务
-├─ database/            数据库 schema、seed、migrations
-├─ scripts/crawlers/    RSS 新闻爬虫
-├─ docs/                项目文档和接口文档
-├─ plan/                任务规划
-└─ README.md
+├── frontend/            # 前端应用，Vue 3 + Vite
+├── backend/             # 后端 API 服务，统一暴露 /api/*
+├── ai-service/          # 独立 AI 能力服务，统一暴露 /ai/*
+├── database/            # schema、seed、migrations、迁移执行脚本
+├── scripts/             # 辅助脚本
+│   └── crawlers/        # RSS 新闻爬虫
+├── docs/                # 接口、架构、阶段说明文档
+├── deploy/              # 部署说明
+├── plan/                # 阶段计划与分工
+└── README.md
 ```
 
-## 二、第一次运行完整流程
+## 功能模块
 
-第一次拉取项目后，建议按下面顺序执行。
+- 新闻门户：新闻分类、列表、搜索、详情、热门新闻、订阅新闻流、浏览记录。
+- 新闻互动：新闻点赞、收藏、评论、回复、评论点赞、评论媒体字段。
+- AI 生成：标题摘要生成、要素抽取、一致性检查、证据评估、多源冲突检测、AI 生成历史。
+- 新闻编辑 Agent：文本任务运行、SSE 任务流、步骤回放、解释面板、DAG 视图、可观测性面板。
+- 社区协同：发帖、帖子详情、评论/回复、点赞收藏、屏蔽用户、热门话题、AI 助手、社区 AI 会话和流式回复。
+- Timeline 事件脉络：话题列表、话题新闻、事件时间线生成、自动聚类、AI 生成失败时本地规则兜底。
+- 个人中心：资料、浏览历史、收藏、评论、AI 记录、订阅分类、推荐、阅读轨迹、阅读时间线、阅读热力图、周报。
+- 管理后台：仪表盘、待审核中心、新闻管理、帖子管理、评论审核、热榜/话题管理、Timeline 管理、用户权限、系统配置、AI 配置、Prompt 模板、AI 调用记录、系统运维、数据分析。
+- 数据采集：光明网 RSS 爬虫和新华网 news.cn 爬虫，支持增量抓取、正文解析、图片过滤、去重入库和 7 天历史测试。
+
+## 运行前准备
+
+需要本机已安装：
+
+- Python 3.10+，建议 3.11。
+- Node.js 18+。
+- MySQL 8.0。
+- Git。
+
+建议使用 Windows PowerShell。本文命令默认在项目根目录执行，数据库账号使用本地开发默认值：
+
+```text
+数据库名：llm_news_system
+数据库用户：llm_news_user
+数据库密码：123456
+数据库地址：127.0.0.1:3306
+```
+
+## 首次启动
 
 ### 1. 拉取代码
 
@@ -38,25 +71,16 @@ git checkout develop
 git pull origin develop
 ```
 
-如果已经有本地仓库，只需要：
+已有本地仓库时：
 
 ```powershell
 git checkout develop
 git pull origin develop
 ```
 
-### 2. 准备 MySQL 数据库
+### 2. 创建 MySQL 数据库和用户
 
-先确认本机已经安装 MySQL 8.0，并且已经创建项目数据库用户：
-
-```text
-数据库名：llm_news_system
-数据库用户：llm_news_user
-数据库密码：123456
-数据库地址：127.0.0.1:3306
-```
-
-如果还没有创建数据库和用户，请先用 root 登录 MySQL 后执行：
+用 root 登录 MySQL 后执行：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS llm_news_system
@@ -70,106 +94,90 @@ GRANT ALL PRIVILEGES ON llm_news_system.* TO 'llm_news_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-注意：不要把 root 密码写进项目文件。
+### 3. 初始化数据库
 
-### 3. 导入数据库表结构和基础数据
-
-PowerShell 不能直接使用 `< database/schema.sql` 这种写法，请使用 `cmd /c`。
-
-如果是第一次初始化，或者本地数据库可以清空重建，建议先重建数据库。当前表结构已经统一使用 `created_at / updated_at`，不再使用 `create_time / update_time` 作为数据库字段。
-
-```powershell
-cmd /c "mysql --default-character-set=utf8mb4 -u root -p -e ""DROP DATABASE IF EXISTS llm_news_system; CREATE DATABASE llm_news_system DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON llm_news_system.* TO 'llm_news_user'@'localhost'; FLUSH PRIVILEGES;"""
-```
-
-在项目根目录执行：
+全新环境建议先导入最新表结构和基础数据：
 
 ```powershell
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
-```
-
-输入密码：
-
-```text
-123456
-```
-
-然后导入基础数据：
-
-```powershell
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\seed.sql"
 ```
 
-输入密码：
-
-```text
-123456
-```
-
-### 4. 执行数据库迁移
-
-如果你已经按当前最新版 `schema.sql` 重新建库并导入了 `seed.sql`，通常不需要再执行 migrations。
-
-只有在保留旧数据库、不想清空重建时，才需要按编号执行 migrations。当前项目已将时间字段统一为 `created_at / updated_at`，旧库如果还保留 `create_time / update_time`，建议优先重建数据库，避免字段不一致。
-
-按编号依次执行：
+保留旧库升级时，执行全部迁移：
 
 ```powershell
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\001_add_news_source_url_and_crawl_log.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\002_add_ai_generate_record_source_fields.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\003_add_community_post_tags.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\005_create_user_category_subscription.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\006_add_fulltext_index.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\007_add_news_editor_column.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\008_add_hot_topic_status.sql"
-cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\migrations\010_add_post_comment_media_json.sql"
+cd database
+python run_migrations.py
+cd ..
 ```
 
-每条命令提示输入密码时，输入：
+`database/run_migrations.py` 会按文件名顺序执行 `database/migrations/*.sql`，并跳过可忽略的重复字段、重复索引、重复数据等错误。
 
-```text
-123456
-```
+### 4. 配置环境变量
 
-### 5. 配置后端环境变量
+项目根目录已有 `.env.example`。开发时可以复制为 `.env`，后端会读取 `backend/.env`，AI 服务会读取 `ai-service/.env`。如果只想快速本地运行，分别创建以下文件即可。
 
-检查是否存在：
-
-```text
-backend/.env
-```
-
-如果没有，创建 `backend/.env`：
+`backend/.env`：
 
 ```env
+PROJECT_NAME=基于大语言模型的智能新闻摘要与协同互动系统
+API_PREFIX=/api
+BACKEND_HOST=127.0.0.1
+BACKEND_PORT=8000
+FRONTEND_URL=http://localhost:5173
+AI_SERVICE_URL=http://localhost:8001
+SECRET_KEY=dev_secret_key
+
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_NAME=llm_news_system
 DB_USER=llm_news_user
 DB_PASSWORD=123456
-
-AI_SERVICE_URL=http://127.0.0.1:8001
 ```
 
-确认 `.env` 不要提交到 Git。
+`ai-service/.env`：
 
-### 6. 安装并启动 backend
+```env
+PROJECT_NAME=基于大语言模型的智能新闻摘要与协同互动系统
+SERVICE_NAME=ai-service
+AI_API_PREFIX=/ai
+AI_SERVICE_HOST=127.0.0.1
+AI_SERVICE_PORT=8001
+BACKEND_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:5173
+AI_MODE=mock
 
-打开第一个 PowerShell 窗口：
+SUMMARY_LLM_ENABLED=false
+SUMMARY_LLM_PROVIDER=deepseek
+SUMMARY_LLM_API_KEY=
+SUMMARY_LLM_BASE_URL=https://api.deepseek.com/v1
+SUMMARY_LLM_MODEL=deepseek-chat
+SUMMARY_LLM_TIMEOUT=60
+SUMMARY_LLM_TEMPERATURE=0.3
+SUMMARY_LLM_MAX_TOKENS=2048
+
+EVIDENCE_LLM_ENABLED=false
+EVIDENCE_LLM_PROVIDER=zhipu
+EVIDENCE_LLM_API_KEY=
+EVIDENCE_LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
+EVIDENCE_LLM_MODEL=GLM-5.2
+EVIDENCE_LLM_TIMEOUT=45
+EVIDENCE_LLM_TEMPERATURE=0.1
+EVIDENCE_LLM_MAX_TOKENS=4096
+LLM_THINKING_TYPE=disabled
+```
+
+不要提交真实数据库密码、模型 API Key 或生产密钥。
+
+### 5. 启动后端
+
+打开第一个 PowerShell：
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-如果虚拟环境已经创建过，以后只需要：
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -177,32 +185,18 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 ```text
 http://127.0.0.1:8000
-```
-
-后端 Swagger：
-
-```text
 http://127.0.0.1:8000/docs
 ```
 
-### 7. 安装并启动 ai-service
+### 6. 启动 AI 服务
 
-打开第二个 PowerShell 窗口：
+打开第二个 PowerShell：
 
 ```powershell
 cd ai-service
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-copy .env.example .env
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
-```
-
-如果虚拟环境已经创建过，以后只需要：
-
-```powershell
-cd ai-service
-.\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
@@ -210,19 +204,14 @@ AI 服务地址：
 
 ```text
 http://127.0.0.1:8001
-```
-
-AI 服务 Swagger：
-
-```text
 http://127.0.0.1:8001/docs
 ```
 
-默认 `.env.example` 中 `LLM_ENABLED=false`，表示使用 mock AI 结果，方便本地演示。
+默认关闭真实大模型，使用 mock 或规则兜底结果。要启用真实模型，将对应 `SUMMARY_LLM_ENABLED` 或 `EVIDENCE_LLM_ENABLED` 改为 `true`，并填写 API Key、Base URL 和模型名。
 
-### 8. 安装并启动 frontend
+### 7. 启动前端
 
-打开第三个 PowerShell 窗口：
+打开第三个 PowerShell：
 
 ```powershell
 cd frontend
@@ -236,42 +225,33 @@ npm.cmd run dev
 http://localhost:5173
 ```
 
-如果 5173 被占用，Vite 可能会自动切到 5174，请看终端输出的实际地址。
+如果 5173 被占用，Vite 会自动切到 5174、5175 等端口，请以终端输出为准。
 
-## 三、以后常规运行流程
+## 日常启动
 
-如果你已经完成过第一次初始化，以后每天启动只需要开三个终端。
-
-### 终端 1：启动 backend
+数据库已初始化、依赖已安装后，每次只需要分别启动三个服务：
 
 ```powershell
+# 终端 1：backend
 cd backend
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 终端 2：启动 ai-service
-
 ```powershell
+# 终端 2：ai-service
 cd ai-service
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-### 终端 3：启动 frontend
-
 ```powershell
+# 终端 3：frontend
 cd frontend
 npm.cmd run dev
 ```
 
-然后访问：
-
-```text
-http://localhost:5173
-```
-
-## 四、常用测试账号
+## 常用测试账号
 
 | 角色 | 用户名 | 密码 |
 | --- | --- | --- |
@@ -279,82 +259,213 @@ http://localhost:5173
 | 审核编辑 | `editor` | `123456` |
 | 管理员 | `admin` | `123456` |
 
-## 五、新闻爬虫（光明网专用）
+## 主要访问地址
 
-爬虫脚本位置：
+| 服务 | 地址 |
+| --- | --- |
+| 前端 | `http://localhost:5173` |
+| 后端 | `http://127.0.0.1:8000` |
+| 后端 Swagger | `http://127.0.0.1:8000/docs` |
+| AI 服务 | `http://127.0.0.1:8001` |
+| AI Swagger | `http://127.0.0.1:8001/docs` |
+| 后端健康检查 | `http://127.0.0.1:8000/api/health` |
+| AI 健康检查 | `http://127.0.0.1:8001/ai/health` |
 
-```text
-scripts/crawlers/rss_news_crawler.py          # 正式爬虫（写入 news 表）
-scripts/crawlers/gmw_7days_test_crawler.py    # 7 天历史测试（写入测试表）
-```
+## 前端页面
 
-当前爬虫只支持**光明网** 7 个频道：
-时政、国际、财经、社会、娱乐、科技、体育。
+| 路径 | 说明 |
+| --- | --- |
+| `/home` | 首页新闻流 |
+| `/news/:id` | 新闻详情 |
+| `/ai-generate` | AI 新闻智能编辑 |
+| `/ai/news-editor` | 新闻编辑 Agent |
+| `/ai/agent-observability` | Agent 可观测性面板 |
+| `/ai-generate/history` | AI 生成历史 |
+| `/community` | 社区 |
+| `/community/create` | 发布帖子 |
+| `/community/posts/:id` | 帖子详情 |
+| `/timeline` | 事件脉络列表 |
+| `/timeline/:topicId` | 事件脉络详情 |
+| `/profile` | 个人中心 |
+| `/admin` | 管理后台，需 editor/admin |
+| `/login` | 登录 |
 
-### 正式爬虫
+## 后端接口概览
 
-预览，不入库：
+后端统一由前端调用，前端不直接访问数据库或 AI 服务。
+
+| 模块 | 前缀 | 说明 |
+| --- | --- | --- |
+| 认证 | `/api/auth` | 登录、注册、退出、当前用户、权限检查 |
+| 用户 | `/api/user` | 用户资料、修改资料、修改密码、头像上传 |
+| 新闻 | `/api/news` | 分类、列表、热门、搜索、订阅、详情、浏览 |
+| 互动 | `/api/news/*`、`/api/comments/*` | 新闻点赞收藏、评论、回复、评论点赞 |
+| AI 网关 | `/api/ai` | AI 健康检查、文件上传、生成记录查询和删除 |
+| 新闻编辑 Agent | `/api/news-editor-agent` | 任务运行、任务详情、SSE 流 |
+| Agent 分析 | `/api/agent-analysis` | 回放、解释、步骤、DAG、可观测性 |
+| Timeline | `/api/timeline` | 话题、话题新闻、时间线生成、自动聚类 |
+| 社区 | `/api/community` | 帖子、评论、互动、热搜、AI 助手、AI 会话 |
+| 个人中心 | `/api/profile` | 概览、历史、收藏、评论、AI 记录、订阅、推荐、阅读统计 |
+| 管理后台 | `/api/admin` | 审核、内容、用户、热榜、配置、运维、分析 |
+
+管理后台细分能力包括：
+
+- 待审核中心：`/pending-items`。
+- 新闻管理：`/news`、新闻审核、话题绑定、置顶/推荐占位能力。
+- 帖子管理：`/posts`、帖子审核。
+- 评论审核：`/comments`。
+- 热榜和话题：`/rankings/*`、`/hot-topics`、`/topics`。
+- Timeline 管理：`/timelines`。
+- 用户权限：`/users`。
+- 系统配置和 AI 配置：`/system-config`、`/ai-config`。
+- Prompt 模板和 AI 调用记录：`/prompt-templates`、`/ai-call-records`。
+- 运维：`/ops/status`、`/ops/database`、`/ops/backups`、`/ops/storage`、`/ops/logs`。
+- 数据分析：`/analytics/overview`、`/analytics/trends`、`/analytics/top-content`、`/analytics/ai-risk`、`/analytics/review-summary`、`/analytics/content-overview`。
+
+## AI 服务接口概览
+
+AI 服务默认监听 `http://127.0.0.1:8001`，由 backend 统一转发或编排调用。
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /ai/health` | 健康检查 |
+| `POST /ai/config/reload` | 重新加载 AI 配置 |
+| `POST /ai/generate-title-summary` | 标题摘要生成 |
+| `POST /ai/extract-elements` | 关键词和新闻要素抽取 |
+| `POST /ai/check-consistency` | 一致性校验 |
+| `POST /ai/evaluate-evidence` | 证据评估 |
+| `POST /ai/evaluate-multisource-evidence` | 多源证据评估 |
+| `POST /ai/detect-conflicts` | 多源冲突检测 |
+| `POST /ai/match-topic` | 新闻话题匹配 |
+| `POST /ai/judge-timeline-fit` | 时间线适配判断 |
+| `POST /ai/edit-suggestions` | 使用建议生成 |
+| `POST /ai/chat` | AI 对话 |
+| `POST /ai/chat/stream` | AI 流式对话 |
+| `POST /ai/generate-comment` | 评论生成 |
+| `POST /ai/comment-summary` | 评论总结 |
+| `POST /ai/profile-weekly-report` | 个人阅读周报 |
+| `POST /ai/generate-timeline` | 事件时间线生成 |
+| `POST /ai/polish-timeline-topic` | Timeline 话题润色 |
+| `POST /ai/task/create`、`GET /ai/task/{task_id}` | AI 任务管理 |
+
+## 数据库和迁移
+
+全新环境优先导入：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --dry-run
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
+cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\seed.sql"
 ```
 
-抓取并写入数据库（每个源 30 条）：
+旧库升级执行：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content
+cd database
+python run_migrations.py
 ```
 
-### 7 天历史测试
+当前迁移覆盖新闻来源、AI 生成记录、社区标签、订阅、全文索引、编辑字段、热榜状态、评论媒体字段、浏览历史目标字段、个人周报缓存、系统配置、Prompt 模板、操作日志、备份记录、社区 AI 会话、证据与风险字段、事件表、Agent 表、多模型配置和敏感配置清理等。
 
-预览：
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 50
-```
-
-写入测试表：
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 100 --apply --reset
-```
-
-详细使用说明见 `docs/gmw_crawler_usage.md`。
-
-## 六、验证数据库是否有数据
-
-PowerShell 中执行：
+验证核心表是否有数据：
 
 ```powershell
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system -e ""SELECT COUNT(*) AS user_count FROM user; SELECT COUNT(*) AS news_count FROM news; SELECT COUNT(*) AS post_count FROM community_post; SELECT COUNT(*) AS comment_count FROM post_comment;"""
 ```
 
-输入密码：
+## 新闻爬虫
+
+爬虫脚本位于：
 
 ```text
-123456
+scripts/crawlers/rss_news_crawler.py          # 光明网 RSS 爬虫
+scripts/crawlers/news_cn_crawler.py           # 新华网 news.cn 频道页爬虫
+scripts/crawlers/gmw_7days_test_crawler.py    # 光明网 7 天历史测试爬虫
 ```
 
-也可以进入 MySQL 后执行：
+当前主要抓取两个新闻网站：
+
+| 网站 | 脚本 | 抓取方式 | 覆盖频道 |
+| --- | --- | --- | --- |
+| 光明网 `gmw.cn` | `rss_news_crawler.py` | RSS 源 + 详情页正文解析 | 时政、国际、财经、社会、文化/娱乐、科技、体育 |
+| 新华网 `news.cn` | `news_cn_crawler.py` | 频道首页提取文章链接 + 详情页正文解析 | 时政、国际、财经、科技、健康、娱乐、地方、法治、评论 |
+
+两个正式爬虫都会读取 `backend/.env` 中的数据库配置，写入 `news` 表，并优先使用 `source_url` 去重。光明网爬虫使用 RSS 源，新华网爬虫使用频道页静态 HTML 提取文章链接；部分 JS 动态渲染频道可能抓不到文章链接，脚本中已跳过这类频道。
+
+光明网预览抓取，不入库：
 
 ```powershell
-mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --dry-run
 ```
 
-然后输入：
+光明网抓取并写入数据库：
 
-```sql
-SELECT COUNT(*) FROM user;
-SELECT COUNT(*) FROM news;
-SELECT COUNT(*) FROM community_post;
-SELECT COUNT(*) FROM post_comment;
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content
 ```
 
-## 七、常见问题
+新华网预览抓取，不入库：
 
-### 1. PowerShell 提示 `<` 运算符不可用
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10 --dry-run
+```
 
-不要在 PowerShell 里直接写：
+新华网抓取并写入数据库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10
+```
+
+更新已有新闻的正文和图片：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --update-existing
+backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10 --update-existing
+```
+
+7 天历史测试预览：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 50
+```
+
+写入 7 天历史测试数据：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 100 --apply --reset
+```
+
+光明网详细说明见 `docs/gmw_crawler_usage.md`。`scripts/crawlers/README.md` 中的部分旧参数说明已经落后，当前以脚本 `--help` 输出和本 README 为准。
+
+## 架构关系
+
+```text
+frontend  ->  backend  ->  ai-service
+   |             |
+   |             └── MySQL
+   |
+   └── 只访问 /api/*，不直连 AI 服务或数据库
+```
+
+- frontend 负责页面、路由、状态管理和 API 封装。
+- backend 负责认证、业务接口、数据库访问、文件上传、AI 调用编排、mock fallback。
+- ai-service 负责独立 AI 能力，默认可 mock/规则兜底，也可配置真实大模型。
+- database 保存用户、新闻、互动、社区、AI 记录、系统配置、事件脉络、操作日志等数据。
+- scripts/crawlers 作为离线或定时任务从光明网、新华网抓取新闻并写入 MySQL。
+
+## 开发约定
+
+- 前端只调用 backend 的 `/api/*` 接口。
+- backend 可以调用 ai-service 的 `/ai/*` 接口，但前端不直接调用 ai-service。
+- `.env`、真实 API Key、生产数据库密码不要提交到 Git。
+- 全新建库优先使用 `schema.sql` + `seed.sql`；旧库升级使用 `database/run_migrations.py`。
+- 数据库不可用时，部分模块保留 mock fallback 以便演示；新闻真实数据接口在无数据时可能返回空列表或 404。
+- 管理后台接口按角色鉴权：`admin` 权限最高，`editor` 可访问部分审核和内容管理，普通用户不可访问后台。
+
+## 常见问题
+
+### PowerShell 提示 `<` 运算符不可用
+
+PowerShell 不适合直接执行：
 
 ```powershell
 mysql -u llm_news_user -p llm_news_system < database/schema.sql
@@ -366,50 +477,50 @@ mysql -u llm_news_user -p llm_news_system < database/schema.sql
 cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_system < database\schema.sql"
 ```
 
-### 2. 页面仍然显示 mock 数据
+### 页面没有真实数据
 
-优先检查：
+依次检查：
 
 1. MySQL 是否启动。
 2. `backend/.env` 是否存在。
-3. `backend/.env` 中数据库账号密码是否正确。
-4. 是否已经按当前最新版 `schema.sql` 重新建库并导入 `seed.sql`。
-5. backend 是否重新启动。
+3. 数据库账号、密码、库名是否正确。
+4. 是否导入了 `database/schema.sql` 和 `database/seed.sql`。
+5. 是否执行了最新 migrations。
+6. backend 是否已重启。
 
-当前新建库表结构已经包含主要字段和社区富媒体评论字段；如果是全新重建库，通常不需要再额外执行 migrations。
+### AI 结果一直是 mock
 
-### 3. 前端端口变成 5174
+检查 `ai-service/.env`：
 
-说明 5173 被占用。可以关闭占用 5173 的旧前端进程，或者直接访问终端显示的新地址。
+- `SUMMARY_LLM_ENABLED` 或 `EVIDENCE_LLM_ENABLED` 是否为 `true`。
+- API Key、Base URL、模型名是否正确。
+- 是否重启了 ai-service，或调用了 `POST /ai/config/reload`。
+- backend 管理后台 AI 配置是否覆盖了本地配置。
 
-### 4. `npm run build` 出现 `.vite-temp` 权限错误
+### 前端端口变成 5174
 
-这是 Windows 下 Vite 缓存文件偶发权限问题。可以先关闭正在运行的前端服务，再删除：
+说明 5173 已被占用。直接访问 Vite 终端输出的新地址即可。
+
+### `npm run build` 遇到 `.vite-temp` 权限问题
+
+先关闭正在运行的前端服务，删除：
 
 ```text
 frontend/node_modules/.vite-temp
 ```
 
-然后重新执行：
+再重新执行：
 
 ```powershell
 npm.cmd run dev
 ```
 
-## 八、主要访问地址
+## 相关文档
 
-| 服务 | 地址 |
-| --- | --- |
-| 前端 | `http://localhost:5173` |
-| 后端 | `http://127.0.0.1:8000` |
-| 后端 Swagger | `http://127.0.0.1:8000/docs` |
-| AI 服务 | `http://127.0.0.1:8001` |
-| AI Swagger | `http://127.0.0.1:8001/docs` |
-
-## 九、开发说明
-
-- 前端只调用 backend，不直接调用 ai-service。
-- backend 优先读取数据库，数据库异常时保留 mock fallback。
-- ai-service 默认使用 mock 结果，便于本地演示。
-- `.env` 文件不要提交到 Git。
-- 不要把 MySQL root 密码或真实 API Key 写进 README、代码或示例配置。
+- `docs/api.md`：接口文档。
+- `docs/api_offline.html`：离线接口文档。
+- `docs/project_architecture.md`、`docs/project_architecture.png`：项目架构图。
+- `docs/gmw_crawler_usage.md`：光明网爬虫说明。
+- `docs/ai_module_guide.md`：AI 模块说明。
+- `docs/development_standard.md`：开发规范。
+- `deploy/README.md`：部署说明。
