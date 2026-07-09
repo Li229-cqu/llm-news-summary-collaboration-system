@@ -1,93 +1,129 @@
-﻿# scripts/crawlers
+# scripts/crawlers
 
-这里放项目本地新闻爬虫脚本。当前第一版使用 RSS 源抓取新闻，不做网页深度正文解析。
+本目录包含项目本地新闻爬虫脚本，从多个新闻网站抓取文章并写入 MySQL `news` 表。所有爬虫统一读取 `backend/.env` 中的数据库配置，优先使用 `source_url` 去重。
 
-## 当前说明
+## 脚本一览
 
-- 使用公开 RSS 源获取新闻标题、摘要、链接、发布时间、来源和分类。
-- 当前会优先抓取原文页面正文，抓不到时回退到 RSS 摘要或描述。
-- 运行前请先执行 `database/schema.sql` 和 `database/seed.sql`。
-- 爬虫会从 `backend/.env` 读取数据库连接配置。
-- 当前脚本支持：
-  - `--dry-run` 仅预览，不写数据库
-  - `--max-items` 控制每个 RSS 源最多抓取多少条
-  - `--source` 选择 `china_news` 或 `all`
-  - `--cleanup-days` 将多少天前的新闻置为归档状态（`status = 0`）
+| 脚本 | 目标网站 | 抓取方式 | 覆盖频道 |
+| --- | --- | --- | --- |
+| `rss_news_crawler.py` | 光明网 `gmw.cn` | RSS 源 + 详情页正文解析 | 时政、国际、财经、社会、文化/娱乐、科技、体育 |
+| `news_cn_crawler.py` | 新华网 `news.cn` | RSS 源 + 详情页正文解析 | 时政、国际、财经、科技、健康、娱乐、地方、法治、评论 |
+| `people_cn_crawler.py` | 人民网 `people.com.cn` | RSS 源 + 详情页正文解析 | 时政、社会、财经、科技、体育、文娱、国际 |
+| `gmw_7days_test_crawler.py` | 光明网 7 天历史测试 | RSS 源，可回填近 7 天新闻 | — |
 
-## 脚本位置
+## 通用命令行参数
 
-- `scripts/crawlers/rss_news_crawler.py`
+所有正式爬虫（`rss_news_crawler.py`、`news_cn_crawler.py`、`people_cn_crawler.py`）支持相同的命令行参数：
 
-## 运行命令
+| 参数 | 说明 |
+| --- | --- |
+| `--limit-per-source N` | 每个频道最多抓取篇数（默认各脚本不同，通常 10-30） |
+| `--since-days N` | 仅保留最近 N 天内的新闻，0 表示不过滤 |
+| `--dry-run` | 预览不写库 |
+| `--fetch-content` | 抓取文章详情页正文（默认启用） |
+| `--update-existing` | 更新已有新闻的正文和 cover_image（不重置点赞、收藏等互动数据） |
 
-预览解析结果，不写数据库：
+## 人民网爬虫（people_cn_crawler.py）
+
+从人民网各频道 RSS 源抓取新闻，覆盖时政、社会、财经、科技、体育、文娱、国际 7 个频道。
+
+### 特点
+
+- 自动检测页面编码（UTF-8 / GBK / GB2312 / GB18030），兼容人民网各子站的不同编码。
+- 正文解析：优先定位 `.rm_txt_con` → `.text_con` → `#articleContent` 容器，提取 `<p>` 标签长文本。
+- 图片过滤：自动排除 logo、icon、二维码、微信/微博分享图、GIF 动图等非内容图片。
+- 封面图去重：入库前检查图片是否已被其他不同文章使用，避免重复封面。
+- 时间解析：优先使用页面 `<meta name="publishdate">` 和可见时间标签，兜底从 URL 提取日期。
+- `--since-days` 过滤基于文章发布时间，不是抓取时间。
+
+### 运行命令
+
+预览抓取，不入库：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run --max-items 3
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --dry-run
+```
+
+正式入库（每个频道最多 10 篇）：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10
+```
+
+仅保留最近 3 天的新闻：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --since-days 3
+```
+
+更新已有新闻的正文和图片：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --update-existing
+```
+
+## 光明网爬虫（rss_news_crawler.py）
+
+预览抓取，不入库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --dry-run
 ```
 
 正式入库：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content
 ```
 
-归档 30 天前的旧新闻：
+更新已有新闻的正文和图片：
 
 ```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --cleanup-days 30
+backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --update-existing
+```
+
+## 新华网爬虫（news_cn_crawler.py）
+
+预览抓取，不入库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10 --dry-run
+```
+
+正式入库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10
 ```
 
 ## 定时执行建议
 
 ### 方案一：Windows 任务计划程序（推荐）
 
-建议每 15 分钟执行一次：
+建议每 15-30 分钟执行一次。以人民网爬虫为例：
 
-```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5
-```
+- 程序/脚本：`<项目根>\backend\.venv\Scripts\python.exe`
+- 参数：`scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --since-days 1`
+- 起始于：`<项目根>`
 
-建议配置：
-
-- 程序/脚本：
-  `D:\自用\学习\大三下\项目实训\llm-news-summary-collaboration-system\backend\.venv\Scripts\python.exe`
-- 参数：
-  `scripts\crawlers\rss_news_crawler.py --max-items 5`
-- 起始于：
-  `D:\自用\学习\大三下\项目实训\llm-news-summary-collaboration-system`
+其他爬虫类似替换脚本名和参数即可。
 
 ### 方案二：PowerShell 循环（仅开发测试）
 
 ```powershell
 while ($true) {
-  backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5
+  backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 10
+  backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10
+  backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10
   Start-Sleep -Seconds 900
 }
 ```
 
-## 当前限制
+## 注意事项
 
-- 第一版会尝试抓取原文页面正文，但如果原文页结构复杂或无法访问，`content` 仍可能回退到摘要加链接。
-- 脚本优先按 `source_url` 去重；如果没有 `source_url`，则按标题去重。
-- 为了演示稳定性，建议每次抓取条数不要太大，通常每源 5 到 10 条即可。
-- 不建议把无限循环写进 FastAPI 服务里。
-- 后续如需扩展，可以增加人民网、新华网等更多 RSS 源。
-
-## DB12 真实新闻展示修复说明
-
-- 爬虫会清洗 `source_url`，只保留合法的 `http` / `https` 原文链接。
-- 使用 `--fetch-content` 时，爬虫会尝试解析新闻详情页正文，并过滤侧边栏、推荐阅读、广告、上一篇/下一篇等噪声内容。
-- 正文解析失败时会使用 RSS 摘要兜底，不再把“原文链接：xxx”拼进 `content`。
-- 爬虫只会从新闻正文容器内提取 `cover_image`；正文无有效图片时保存为空，不再使用 RSS 媒体字段或 `og:image` 补图。
-- 当前只保存图片 URL，不下载图片文件到本地。
-- 使用 `--update-existing-content` 时，会重新解析已有新闻的正文和正文图；如果正文没有有效图片，会清空旧的错误 `cover_image`，不会重置点赞、收藏、评论、浏览量。
-
-常用命令：
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --dry-run --max-items 3 --fetch-content
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 5 --fetch-content
-backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --max-items 20 --fetch-content --update-existing-content
-```
-
+- 运行前请确保 `database/schema.sql` 和 `database/seed.sql` 已导入，`backend/.env` 中的数据库配置正确。
+- 各爬虫按 `source_url` 去重，相同 URL 的文章不会重复入库。
+- 建议每次抓取条数不要太大，通常每源 5-10 条即可，避免触发反爬。
+- 不建议把无限循环写进 FastAPI 服务里，爬虫应作为独立离线任务运行。
+- 部分频道使用 JS 动态渲染，RSS 可能覆盖不到所有文章。
+- 封面图只保存 URL，不下载文件到本地。入库时会检查图片是否已被其他文章用作封面，避免多篇文章共用同一张图。

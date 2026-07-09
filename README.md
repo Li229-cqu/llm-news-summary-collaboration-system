@@ -17,7 +17,7 @@
 | 后端 | FastAPI、Uvicorn、PyMySQL、DBUtils、python-dotenv、httpx |
 | AI 服务 | FastAPI、OpenAI SDK、sentence-transformers、可配置 DeepSeek / 智谱等兼容模型 |
 | 数据库 | MySQL 8.0、schema.sql、seed.sql、migrations |
-| 工具脚本 | 光明网 RSS 爬虫、新华网 news.cn 爬虫、数据库迁移脚本、架构图生成脚本 |
+| 工具脚本 | 光明网 RSS 爬虫、新华网 RSS 爬虫、人民网 RSS 爬虫、数据库迁移脚本、架构图生成脚本 |
 
 ## 项目结构
 
@@ -45,7 +45,7 @@ llm-news-summary-collaboration-system/
 - Timeline 事件脉络：话题列表、话题新闻、事件时间线生成、自动聚类、AI 生成失败时本地规则兜底。
 - 个人中心：资料、浏览历史、收藏、评论、AI 记录、订阅分类、推荐、阅读轨迹、阅读时间线、阅读热力图、周报。
 - 管理后台：仪表盘、待审核中心、新闻管理、帖子管理、评论审核、热榜/话题管理、Timeline 管理、用户权限、系统配置、AI 配置、Prompt 模板、AI 调用记录、系统运维、数据分析。
-- 数据采集：光明网 RSS 爬虫和新华网 news.cn 爬虫，支持增量抓取、正文解析、图片过滤、去重入库和 7 天历史测试。
+- 数据采集：光明网、新华网、人民网 RSS 爬虫，支持增量抓取、正文解析、图片过滤、去重入库和 7 天历史测试。
 
 ## 运行前准备
 
@@ -383,18 +383,20 @@ cmd /c "mysql --default-character-set=utf8mb4 -u llm_news_user -p llm_news_syste
 
 ```text
 scripts/crawlers/rss_news_crawler.py          # 光明网 RSS 爬虫
-scripts/crawlers/news_cn_crawler.py           # 新华网 news.cn 频道页爬虫
+scripts/crawlers/news_cn_crawler.py           # 新华网 news.cn RSS 爬虫
+scripts/crawlers/people_cn_crawler.py         # 人民网 people.com.cn RSS 爬虫
 scripts/crawlers/gmw_7days_test_crawler.py    # 光明网 7 天历史测试爬虫
 ```
 
-当前主要抓取两个新闻网站：
+当前主要抓取三个新闻网站：
 
 | 网站 | 脚本 | 抓取方式 | 覆盖频道 |
 | --- | --- | --- | --- |
 | 光明网 `gmw.cn` | `rss_news_crawler.py` | RSS 源 + 详情页正文解析 | 时政、国际、财经、社会、文化/娱乐、科技、体育 |
-| 新华网 `news.cn` | `news_cn_crawler.py` | 频道首页提取文章链接 + 详情页正文解析 | 时政、国际、财经、科技、健康、娱乐、地方、法治、评论 |
+| 新华网 `news.cn` | `news_cn_crawler.py` | RSS 源 + 详情页正文解析 | 时政、国际、财经、科技、健康、娱乐、地方、法治、评论 |
+| 人民网 `people.com.cn` | `people_cn_crawler.py` | RSS 源 + 详情页正文解析 | 时政、社会、财经、科技、体育、文娱、国际 |
 
-两个正式爬虫都会读取 `backend/.env` 中的数据库配置，写入 `news` 表，并优先使用 `source_url` 去重。光明网爬虫使用 RSS 源，新华网爬虫使用频道页静态 HTML 提取文章链接；部分 JS 动态渲染频道可能抓不到文章链接，脚本中已跳过这类频道。
+三个正式爬虫都会读取 `backend/.env` 中的数据库配置，写入 `news` 表，并优先使用 `source_url` 去重。三个爬虫均使用 RSS 源获取新闻标题、摘要和链接，并进一步抓取详情页解析正文。
 
 光明网预览抓取，不入库：
 
@@ -420,11 +422,24 @@ backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per
 backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10
 ```
 
+人民网预览抓取，不入库：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --dry-run
+```
+
+人民网抓取并写入数据库（仅保留最近 3 天）：
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --since-days 3
+```
+
 更新已有新闻的正文和图片：
 
 ```powershell
 backend\.venv\Scripts\python.exe scripts\crawlers\rss_news_crawler.py --limit-per-source 30 --fetch-content --update-existing
 backend\.venv\Scripts\python.exe scripts\crawlers\news_cn_crawler.py --limit-per-source 10 --update-existing
+backend\.venv\Scripts\python.exe scripts\crawlers\people_cn_crawler.py --limit-per-source 10 --update-existing
 ```
 
 7 天历史测试预览：
@@ -439,7 +454,7 @@ backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --li
 backend\.venv\Scripts\python.exe scripts\crawlers\gmw_7days_test_crawler.py --limit 100 --apply --reset
 ```
 
-光明网详细说明见 `docs/gmw_crawler_usage.md`。`scripts/crawlers/README.md` 中的部分旧参数说明已经落后，当前以脚本 `--help` 输出和本 README 为准。
+光明网详细说明见 `docs/gmw_crawler_usage.md`。各爬虫的详细用法见 `scripts/crawlers/README.md`，参数说明以脚本 `--help` 输出和本 README 为准。
 
 ## 架构关系
 
@@ -455,7 +470,7 @@ frontend  ->  backend  ->  ai-service
 - backend 负责认证、业务接口、数据库访问、文件上传、AI 调用编排、mock fallback。
 - ai-service 负责独立 AI 能力，默认可 mock/规则兜底，也可配置真实大模型。
 - database 保存用户、新闻、互动、社区、AI 记录、系统配置、事件脉络、操作日志等数据。
-- scripts/crawlers 作为离线或定时任务从光明网、新华网抓取新闻并写入 MySQL。
+- scripts/crawlers 作为离线或定时任务从光明网、新华网、人民网抓取新闻并写入 MySQL。
 
 ## 开发约定
 
